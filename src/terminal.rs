@@ -1,26 +1,27 @@
 use crossterm::{
     cursor::{Hide, MoveTo, Show},
     event::{poll, read, Event, KeyCode},
-    execute,
+    queue,
     style::{Color, Print, ResetColor, SetForegroundColor, Attribute, SetAttribute},
     terminal::{
         disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen,
         LeaveAlternateScreen, size,
     },
 };
-use std::io::{self, Write, stdout};
+use std::io::{self, Write, stdout, BufWriter};
 use std::time::Duration;
 
 /// Terminal abstraction for rendering
 pub struct Terminal {
     width: u16,
     height: u16,
-    buffer: Vec<Vec<Cell>>,
+    front_buffer: Vec<Vec<Cell>>,
+    back_buffer: Vec<Vec<Cell>>,
     alternate_screen: bool,
 }
 
 /// A single cell in the terminal buffer
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Cell {
     pub ch: char,
     pub fg: Option<Color>,
@@ -37,6 +38,12 @@ impl Default for Cell {
     }
 }
 
+impl Cell {
+    pub fn new(ch: char, fg: Option<Color>, bold: bool) -> Self {
+        Self { ch, fg, bold }
+    }
+}
+
 impl Terminal {
     /// Initialize the terminal for drawing
     pub fn new(alternate_screen: bool) -> io::Result<Self> {
@@ -44,15 +51,19 @@ impl Terminal {
 
         if alternate_screen {
             enable_raw_mode()?;
-            execute!(stdout(), EnterAlternateScreen, Hide)?;
+            let mut stdout = stdout();
+            queue!(stdout, EnterAlternateScreen, Hide)?;
+            stdout.flush()?;
         }
 
-        let buffer = vec![vec![Cell::default(); width as usize]; height as usize];
+        let front_buffer = vec![vec![Cell::default(); width as usize]; height as usize];
+        let back_buffer = vec![vec![Cell::default(); width as usize]; height as usize];
 
         Ok(Self {
             width,
             height,
-            buffer,
+            front_buffer,
+            back_buffer,
             alternate_screen,
         })
     }
@@ -62,86 +73,167 @@ impl Terminal {
         (self.width, self.height)
     }
 
-    /// Clear the buffer
+    /// Resize buffers to match new terminal size
+    pub fn resize(&mut self, width: u16, height: u16) {
+        if width != self.width || height != self.height {
+            self.width = width;
+            self.height = height;
+            self.front_buffer = vec![vec![Cell::default(); width as usize]; height as usize];
+            self.back_buffer = vec![vec![Cell::default(); width as usize]; height as usize];
+        }
+    }
+
+    /// Clear the back buffer
     pub fn clear(&mut self) {
-        for row in &mut self.buffer {
+        for row in &mut self.back_buffer {
             for cell in row {
                 *cell = Cell::default();
             }
         }
     }
 
-    /// Clear the actual terminal
-    pub fn clear_screen(&self) -> io::Result<()> {
-        execute!(stdout(), Clear(ClearType::All))?;
+    /// Clear the actual terminal and both buffers
+    pub fn clear_screen(&mut self) -> io::Result<()> {
+        let mut stdout = stdout();
+        queue!(stdout, Clear(ClearType::All))?;
+        stdout.flush()?;
+        // Reset both buffers to force full redraw
+        for row in &mut self.front_buffer {
+            for cell in row {
+                *cell = Cell::default();
+            }
+        }
+        for row in &mut self.back_buffer {
+            for cell in row {
+                *cell = Cell::default();
+            }
+        }
         Ok(())
     }
 
-    /// Set a character at position with optional color
+    /// Set a character in the back buffer
     pub fn set(&mut self, x: i32, y: i32, ch: char, fg: Option<Color>, bold: bool) {
         if x >= 0 && x < self.width as i32 && y >= 0 && y < self.height as i32 {
-            self.buffer[y as usize][x as usize] = Cell { ch, fg, bold };
+            self.back_buffer[y as usize][x as usize] = Cell { ch, fg, bold };
         }
     }
 
-    /// Set a string starting at position
+    /// Set a string starting at position in the back buffer
     pub fn set_str(&mut self, x: i32, y: i32, s: &str, fg: Option<Color>, bold: bool) {
         for (i, ch) in s.chars().enumerate() {
             self.set(x + i as i32, y, ch, fg, bold);
         }
     }
 
-    /// Draw a single cell immediately (for live mode)
-    pub fn draw_cell(&self, x: i32, y: i32, ch: char, fg: Option<Color>, bold: bool) -> io::Result<()> {
-        if x >= 0 && x < self.width as i32 && y >= 0 && y < self.height as i32 {
-            let mut stdout = stdout();
-            execute!(stdout, MoveTo(x as u16, y as u16))?;
-
-            if bold {
-                execute!(stdout, SetAttribute(Attribute::Bold))?;
-            }
-
-            if let Some(color) = fg {
-                execute!(stdout, SetForegroundColor(color), Print(ch), ResetColor)?;
-            } else {
-                execute!(stdout, Print(ch))?;
-            }
-
-            if bold {
-                execute!(stdout, SetAttribute(Attribute::Reset))?;
-            }
-
-            stdout.flush()?;
-        }
+    /// Legacy: Draw a single cell immediately (bypasses buffering - avoid in hot paths)
+    pub fn draw_cell(&mut self, x: i32, y: i32, ch: char, fg: Option<Color>, bold: bool) -> io::Result<()> {
+        self.set(x, y, ch, fg, bold);
         Ok(())
     }
 
-    /// Render the entire buffer to screen
-    pub fn render(&self) -> io::Result<()> {
-        let mut stdout = stdout();
-        execute!(stdout, MoveTo(0, 0))?;
+    /// Render only changed cells (differential update) with single flush
+    pub fn present(&mut self) -> io::Result<()> {
+        let mut stdout = BufWriter::with_capacity(32 * 1024, stdout());
+        let mut last_color: Option<Color> = None;
+        let mut last_bold = false;
 
-        for (y, row) in self.buffer.iter().enumerate() {
-            execute!(stdout, MoveTo(0, y as u16))?;
+        for y in 0..self.height as usize {
+            for x in 0..self.width as usize {
+                let back = &self.back_buffer[y][x];
+                let front = &self.front_buffer[y][x];
 
-            for cell in row {
-                if cell.bold {
-                    execute!(stdout, SetAttribute(Attribute::Bold))?;
+                // Skip unchanged cells
+                if back == front {
+                    continue;
                 }
 
-                if let Some(color) = cell.fg {
-                    execute!(stdout, SetForegroundColor(color), Print(cell.ch), ResetColor)?;
-                } else {
-                    execute!(stdout, Print(cell.ch))?;
+                // Move cursor
+                queue!(stdout, MoveTo(x as u16, y as u16))?;
+
+                // Handle bold attribute changes
+                if back.bold != last_bold {
+                    if back.bold {
+                        queue!(stdout, SetAttribute(Attribute::Bold))?;
+                    } else {
+                        queue!(stdout, SetAttribute(Attribute::Reset))?;
+                        last_color = None; // Reset clears color too
+                    }
+                    last_bold = back.bold;
                 }
 
-                if cell.bold {
-                    execute!(stdout, SetAttribute(Attribute::Reset))?;
+                // Handle color changes
+                if back.fg != last_color {
+                    if let Some(color) = back.fg {
+                        queue!(stdout, SetForegroundColor(color))?;
+                    } else {
+                        queue!(stdout, ResetColor)?;
+                    }
+                    last_color = back.fg;
                 }
+
+                queue!(stdout, Print(back.ch))?;
+
+                // Update front buffer
+                self.front_buffer[y][x] = back.clone();
             }
         }
 
+        // Reset attributes at end of frame
+        if last_bold || last_color.is_some() {
+            queue!(stdout, SetAttribute(Attribute::Reset), ResetColor)?;
+        }
+
         stdout.flush()?;
+        Ok(())
+    }
+
+    /// Render the entire back buffer to screen (full redraw, single flush)
+    pub fn render(&mut self) -> io::Result<()> {
+        let mut stdout = BufWriter::with_capacity(32 * 1024, stdout());
+        let mut last_color: Option<Color> = None;
+        let mut last_bold = false;
+
+        queue!(stdout, MoveTo(0, 0))?;
+
+        for (y, row) in self.back_buffer.iter().enumerate() {
+            queue!(stdout, MoveTo(0, y as u16))?;
+
+            for cell in row {
+                // Handle bold
+                if cell.bold != last_bold {
+                    if cell.bold {
+                        queue!(stdout, SetAttribute(Attribute::Bold))?;
+                    } else {
+                        queue!(stdout, SetAttribute(Attribute::Reset))?;
+                        last_color = None;
+                    }
+                    last_bold = cell.bold;
+                }
+
+                // Handle color
+                if cell.fg != last_color {
+                    if let Some(color) = cell.fg {
+                        queue!(stdout, SetForegroundColor(color))?;
+                    } else {
+                        queue!(stdout, ResetColor)?;
+                    }
+                    last_color = cell.fg;
+                }
+
+                queue!(stdout, Print(cell.ch))?;
+            }
+        }
+
+        queue!(stdout, SetAttribute(Attribute::Reset), ResetColor)?;
+        stdout.flush()?;
+
+        // Sync front buffer
+        for y in 0..self.height as usize {
+            for x in 0..self.width as usize {
+                self.front_buffer[y][x] = self.back_buffer[y][x].clone();
+            }
+        }
+
         Ok(())
     }
 
@@ -172,7 +264,7 @@ impl Terminal {
 
     /// Print buffer to stdout with ANSI colors (for print mode)
     pub fn print_to_stdout(&self) {
-        for row in &self.buffer {
+        for row in &self.back_buffer {
             for cell in row {
                 if cell.ch == ' ' {
                     print!(" ");
@@ -224,7 +316,9 @@ impl Terminal {
 impl Drop for Terminal {
     fn drop(&mut self) {
         if self.alternate_screen {
-            let _ = execute!(stdout(), Show, LeaveAlternateScreen);
+            let mut stdout = stdout();
+            let _ = queue!(stdout, Show, LeaveAlternateScreen);
+            let _ = stdout.flush();
             let _ = disable_raw_mode();
         }
     }

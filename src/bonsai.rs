@@ -321,11 +321,10 @@ fn grow_tree(
             );
 
             // Draw
+            term.set(task.x, task.y, branch_char, Some(color), bold);
             if live {
-                term.draw_cell(task.x, task.y, branch_char, Some(color), bold)?;
+                term.present()?;
                 term.sleep(config.time_step);
-            } else {
-                term.set(task.x, task.y, branch_char, Some(color), bold);
             }
 
             // Branching logic - add new branches to the stack
