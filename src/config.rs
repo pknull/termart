@@ -26,19 +26,19 @@ pub enum FractalType {
     Cube,     // 3D rotating cube with braille
     Pipes,    // Classic pipes screensaver
     Donut,    // Rotating 3D torus (donut)
+    Globe,    // Rotating 3D globe with network activity
+    Hex,      // Hexagon grid with wave animations
+    Keyboard, // On-screen keyboard with key highlighting
 }
 
 /// Configuration for fractal generation
 #[derive(Clone)]
 pub struct FractalConfig {
     pub fractal_type: FractalType,
-    pub live: bool,
     pub time_step: f32,
-    pub depth: u32,
     pub seed: Option<u64>,
     pub draw_char: char,
-    pub infinite: bool,
-    pub time_wait: f64,
+    pub debug: bool,
 }
 
 /// Branch types for bonsai tree
@@ -49,26 +49,6 @@ pub enum BranchType {
     ShootRight,
     Dying,
     Dead,
-}
-
-/// Color scheme for rendering
-#[derive(Clone, Copy)]
-pub struct ColorScheme {
-    pub wood_dark: (u8, u8, u8),
-    pub wood_light: (u8, u8, u8),
-    pub leaf_dark: (u8, u8, u8),
-    pub leaf_light: (u8, u8, u8),
-}
-
-impl Default for ColorScheme {
-    fn default() -> Self {
-        Self {
-            wood_dark: (101, 67, 33),      // Brown
-            wood_light: (139, 90, 43),     // Lighter brown
-            leaf_dark: (34, 139, 34),      // Forest green
-            leaf_light: (50, 205, 50),     // Lime green
-        }
-    }
 }
 
 /// Counters for tracking generation progress

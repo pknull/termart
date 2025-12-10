@@ -150,6 +150,9 @@ pub fn run(config: FractalConfig) -> io::Result<()> {
         crate::config::FractalType::Cube => run_cube(&mut term, &config),
         crate::config::FractalType::Pipes => run_pipes(&mut term, &config, &mut rng),
         crate::config::FractalType::Donut => run_donut(&mut term, &config),
+        crate::config::FractalType::Globe => run_globe(&mut term, &config, &mut rng),
+        crate::config::FractalType::Hex => run_hex(&mut term, &config, &mut rng),
+        crate::config::FractalType::Keyboard => run_keyboard(&mut term, &config),
     }
 }
 
@@ -217,8 +220,7 @@ fn run_matrix(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> 
         term.clear();
 
         // Populate back buffer with all drops
-        for x in 0..w {
-            let drop = &drops[x];
+        for (x, drop) in drops.iter().enumerate() {
             let head_y = drop.y as i32;
             let len = drop.length;
             let half_len = len / 2;
@@ -242,8 +244,7 @@ fn run_matrix(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> 
         term.present()?;
 
         // Update drop positions
-        for x in 0..w {
-            let drop = &mut drops[x];
+        for drop in &mut drops {
             drop.y += drop.speed;
 
             // Reset drop when it goes off screen
@@ -309,18 +310,16 @@ fn run_life(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io
         }
 
         // Compute neighbor counts
-        for y in 0..h {
-            for x in 0..w {
-                neighbor_counts[y][x] = count_neighbors(&grid, x, y, w, h);
+        for (y, row) in neighbor_counts.iter_mut().enumerate() {
+            for (x, count) in row.iter_mut().enumerate() {
+                *count = count_neighbors(&grid, x, y, w, h);
             }
         }
 
         // Clear and populate back buffer
         term.clear();
-        for y in 0..h {
-            for x in 0..w {
-                let neighbors = neighbor_counts[y][x];
-                let alive = grid[y][x];
+        for (y, (grid_row, count_row)) in grid.iter().zip(neighbor_counts.iter()).enumerate() {
+            for (x, (&alive, &neighbors)) in grid_row.iter().zip(count_row.iter()).enumerate() {
 
                 if alive {
                     let intensity = match neighbors { 2 => 1, 3 => 2, _ => 0 };
@@ -328,11 +327,7 @@ fn run_life(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io
                     term.set(x as i32, y as i32, config.draw_char, Some(color), bold);
                 }
 
-                next_grid[y][x] = match (alive, neighbors) {
-                    (true, 2) | (true, 3) => true,
-                    (false, 3) => true,
-                    _ => false,
-                };
+                next_grid[y][x] = matches!((alive, neighbors), (true, 2) | (true, 3) | (false, 3));
             }
         }
 
@@ -510,12 +505,11 @@ fn run_fire(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io
         }
 
         // Draw to back buffer
-        for y in 0..h {
-            for x in 0..w {
-                let heat = fire[y][x];
+        for (y, row) in fire.iter().enumerate() {
+            for (x, &heat) in row.iter().enumerate() {
                 let char_idx = (heat as usize * (fire_chars.len() - 1)) / 255;
                 let ch = fire_chars[char_idx.min(fire_chars.len() - 1)];
-                let intensity = (heat / 64).min(3) as u8;
+                let intensity = (heat / 64).min(3);
                 let (color, bold) = scheme_color(state.color_scheme, intensity, heat > 200);
                 term.set(x as i32, y as i32, ch, Some(color), bold);
             }
@@ -610,9 +604,8 @@ fn run_rain(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io
         splashes = new_splashes;
 
         term.clear();
-        for y in 0..h {
-            for x in 0..w {
-                let ch = screen[y][x];
+        for (y, row) in screen.iter().enumerate() {
+            for (x, &ch) in row.iter().enumerate() {
                 if ch != ' ' {
                     let intensity = match ch { '|' | '/' => 2, '~' => 1, _ => 0 };
                     let (color, bold) = scheme_color(state.color_scheme, intensity, ch == '|' || ch == '/');
@@ -707,19 +700,6 @@ fn run_waves(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     }
 
     Ok(())
-}
-
-/// Convert hue (0-360) to ANSI color
-fn hue_to_ansi(hue: f64) -> Color {
-    let h = hue % 360.0;
-    match h as u32 {
-        0..=59 => Color::Red,
-        60..=119 => Color::Yellow,
-        120..=179 => Color::Green,
-        180..=239 => Color::Cyan,
-        240..=299 => Color::Blue,
-        _ => Color::Magenta,
-    }
 }
 
 /// 3D rotating cube effect using braille characters
@@ -887,12 +867,7 @@ fn run_pipes(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> i
         ['└', '─', '┌', '─'],
     ];
 
-    let pipe_colors = [
-        Color::Red, Color::Green, Color::Yellow, Color::Blue,
-        Color::Magenta, Color::Cyan, Color::White,
-    ];
-
-    struct Pipe { x: i32, y: i32, dir: u8, color: Color, steps: u32 }
+    struct Pipe { x: i32, y: i32, dir: u8, steps: u32 }
 
     let (init_w, init_h) = term.size();
     let mut w = init_w as usize;
@@ -901,7 +876,7 @@ fn run_pipes(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> i
     let mut pipes: Vec<Pipe> = Vec::new();
     let mut fill_count: usize = 0;
 
-    let spawn_pipe = |rng: &mut StdRng, w: usize, h: usize, pipe_colors: &[Color]| -> Pipe {
+    let spawn_pipe = |rng: &mut StdRng, w: usize, h: usize| -> Pipe {
         let dir = rng.gen_range(0..4);
         let (x, y) = match dir {
             0 => (rng.gen_range(0..w as i32), h as i32 - 1),
@@ -909,11 +884,11 @@ fn run_pipes(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> i
             2 => (rng.gen_range(0..w as i32), 0),
             _ => (w as i32 - 1, rng.gen_range(0..h as i32)),
         };
-        Pipe { x, y, dir, color: pipe_colors[rng.gen_range(0..pipe_colors.len())], steps: 0 }
+        Pipe { x, y, dir, steps: 0 }
     };
 
     for _ in 0..5 {
-        pipes.push(spawn_pipe(rng, w, h, &pipe_colors));
+        pipes.push(spawn_pipe(rng, w, h));
     }
 
     loop {
@@ -925,7 +900,7 @@ fn run_pipes(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> i
             term.clear_screen()?;
             fill_count = 0;
             pipes.clear();
-            for _ in 0..5 { pipes.push(spawn_pipe(rng, w, h, &pipe_colors)); }
+            for _ in 0..5 { pipes.push(spawn_pipe(rng, w, h)); }
         }
 
         if let Some((code, mods)) = term.check_key()? {
@@ -941,7 +916,7 @@ fn run_pipes(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> i
             term.clear_screen()?;
             fill_count = 0;
             pipes.clear();
-            for _ in 0..5 { pipes.push(spawn_pipe(rng, w, h, &pipe_colors)); }
+            for _ in 0..5 { pipes.push(spawn_pipe(rng, w, h)); }
         }
 
         for pipe in &mut pipes {
@@ -968,7 +943,7 @@ fn run_pipes(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> i
             pipe.steps += 1;
 
             if pipe.x < 0 || pipe.x >= w as i32 || pipe.y < 0 || pipe.y >= h as i32 {
-                *pipe = spawn_pipe(rng, w, h, &pipe_colors);
+                *pipe = spawn_pipe(rng, w, h);
             }
         }
 
@@ -1104,6 +1079,913 @@ fn run_donut(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         a += 0.04 * (state.speed / 0.03);
         b += 0.02 * (state.speed / 0.03);
         term.sleep(state.speed);
+    }
+
+    Ok(())
+}
+
+/// Fetch user's location from IP geolocation service
+fn fetch_user_location() -> Option<(f32, f32)> {
+    // Try ip-api.com (free, no key required)
+    let resp = ureq::get("http://ip-api.com/json/?fields=lat,lon")
+        .timeout(std::time::Duration::from_secs(3))
+        .call()
+        .ok()?;
+
+    let body = resp.into_string().ok()?;
+
+    // Simple JSON parsing without serde
+    let lat = body.split("\"lat\":").nth(1)?
+        .split(&[',', '}'][..]).next()?
+        .trim().parse::<f32>().ok()?;
+    let lon = body.split("\"lon\":").nth(1)?
+        .split(&[',', '}'][..]).next()?
+        .trim().parse::<f32>().ok()?;
+
+    Some((lat.to_radians(), lon.to_radians()))
+}
+
+/// Rotating 3D globe with network activity (eDEX-UI style)
+fn run_globe(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
+    let mut state = VizState::new(config.time_step);
+    state.color_scheme = 5; // Default to electric (cyan/white)
+
+    let mut rotation: f32 = 0.0;
+    let tilt: f32 = 0.15; // Slight tilt for better equatorial view
+
+    // Fetch user's location (non-blocking, falls back to None)
+    let user_location: Option<(f32, f32)> = fetch_user_location();
+
+    let (init_w, init_h) = term.size();
+    let mut prev_w = init_w;
+    let mut prev_h = init_h;
+
+    let mut braille_w = init_w as usize * 2;
+    let mut braille_h = init_h as usize * 4;
+    let mut braille_dots: Vec<Vec<u8>> = vec![vec![0; braille_w]; braille_h];
+
+    // Network activity blips
+    struct Blip {
+        lat: f32,
+        lon: f32,
+        age: f32,
+        max_age: f32,
+    }
+
+    // Connection arcs between points
+    struct Arc {
+        lat1: f32, lon1: f32,
+        lat2: f32, lon2: f32,
+        progress: f32,
+    }
+
+    let mut blips: Vec<Blip> = Vec::new();
+    let mut arcs: Vec<Arc> = Vec::new();
+
+    // Pulsing animation for user marker
+    let mut user_pulse: f32 = 0.0;
+
+    // Precompute trig tables
+    const TRIG_SIZE: usize = 360;
+    let sin_table: Vec<f32> = (0..TRIG_SIZE)
+        .map(|i| ((i as f32 / TRIG_SIZE as f32) * std::f32::consts::TAU).sin())
+        .collect();
+    let cos_table: Vec<f32> = (0..TRIG_SIZE)
+        .map(|i| ((i as f32 / TRIG_SIZE as f32) * std::f32::consts::TAU).cos())
+        .collect();
+
+    let fast_sin = |x: f32| -> f32 {
+        let normalized = x.rem_euclid(std::f32::consts::TAU) / std::f32::consts::TAU;
+        let idx = (normalized * TRIG_SIZE as f32) as usize;
+        sin_table[idx.min(TRIG_SIZE - 1)]
+    };
+    let fast_cos = |x: f32| -> f32 {
+        let normalized = x.rem_euclid(std::f32::consts::TAU) / std::f32::consts::TAU;
+        let idx = (normalized * TRIG_SIZE as f32) as usize;
+        cos_table[idx.min(TRIG_SIZE - 1)]
+    };
+
+    // Continent outlines - coordinates in degrees, converted to radians
+    // Format: (latitude, longitude) - lat: -90 to 90, lon: -180 to 180
+    let deg_to_rad = |lat: f32, lon: f32| -> (f32, f32) {
+        (lat.to_radians(), lon.to_radians())
+    };
+
+    let continents: Vec<Vec<(f32, f32)>> = vec![
+        // North America
+        vec![
+            deg_to_rad(49.0, -125.0), deg_to_rad(54.0, -130.0), deg_to_rad(60.0, -140.0),
+            deg_to_rad(65.0, -168.0), deg_to_rad(71.0, -157.0), deg_to_rad(70.0, -140.0),
+            deg_to_rad(68.0, -110.0), deg_to_rad(62.0, -77.0), deg_to_rad(52.0, -56.0),
+            deg_to_rad(47.0, -53.0), deg_to_rad(45.0, -64.0), deg_to_rad(43.0, -70.0),
+            deg_to_rad(35.0, -75.0), deg_to_rad(30.0, -81.0), deg_to_rad(25.0, -80.0),
+            deg_to_rad(25.0, -97.0), deg_to_rad(20.0, -105.0), deg_to_rad(23.0, -110.0),
+            deg_to_rad(31.0, -117.0), deg_to_rad(34.0, -120.0), deg_to_rad(40.0, -124.0),
+            deg_to_rad(46.0, -124.0),
+        ],
+        // South America
+        vec![
+            deg_to_rad(12.0, -72.0), deg_to_rad(10.0, -62.0), deg_to_rad(5.0, -52.0),
+            deg_to_rad(-5.0, -35.0), deg_to_rad(-15.0, -39.0), deg_to_rad(-23.0, -43.0),
+            deg_to_rad(-34.0, -54.0), deg_to_rad(-42.0, -63.0), deg_to_rad(-52.0, -68.0),
+            deg_to_rad(-56.0, -68.0), deg_to_rad(-54.0, -72.0), deg_to_rad(-46.0, -75.0),
+            deg_to_rad(-37.0, -73.0), deg_to_rad(-30.0, -72.0), deg_to_rad(-20.0, -70.0),
+            deg_to_rad(-5.0, -81.0), deg_to_rad(2.0, -80.0), deg_to_rad(9.0, -77.0),
+        ],
+        // Europe (connected to Asia via land bridge shown separately)
+        vec![
+            deg_to_rad(36.0, -6.0), deg_to_rad(43.0, -9.0), deg_to_rad(44.0, -1.0),
+            deg_to_rad(48.0, -5.0), deg_to_rad(51.0, 2.0), deg_to_rad(54.0, 8.0),
+            deg_to_rad(56.0, 8.0), deg_to_rad(58.0, 6.0), deg_to_rad(63.0, 5.0),
+            deg_to_rad(71.0, 26.0), deg_to_rad(70.0, 32.0), deg_to_rad(65.0, 30.0),
+            deg_to_rad(60.0, 30.0), deg_to_rad(55.0, 21.0), deg_to_rad(54.0, 14.0),
+            deg_to_rad(51.0, 7.0), deg_to_rad(47.0, 7.0), deg_to_rad(44.0, 8.0),
+            deg_to_rad(41.0, 9.0), deg_to_rad(38.0, -4.0),
+        ],
+        // Africa
+        vec![
+            deg_to_rad(37.0, -6.0), deg_to_rad(35.0, 0.0), deg_to_rad(37.0, 10.0),
+            deg_to_rad(32.0, 32.0), deg_to_rad(22.0, 37.0), deg_to_rad(12.0, 44.0),
+            deg_to_rad(5.0, 50.0), deg_to_rad(-10.0, 40.0), deg_to_rad(-26.0, 33.0),
+            deg_to_rad(-34.0, 26.0), deg_to_rad(-34.0, 18.0), deg_to_rad(-30.0, 17.0),
+            deg_to_rad(-17.0, 12.0), deg_to_rad(-5.0, 9.0), deg_to_rad(4.0, 8.0),
+            deg_to_rad(5.0, -5.0), deg_to_rad(10.0, -15.0), deg_to_rad(15.0, -17.0),
+            deg_to_rad(21.0, -17.0), deg_to_rad(28.0, -13.0), deg_to_rad(35.0, -6.0),
+        ],
+        // Asia (simplified major outline)
+        vec![
+            deg_to_rad(42.0, 27.0), deg_to_rad(45.0, 38.0), deg_to_rad(42.0, 52.0),
+            deg_to_rad(47.0, 55.0), deg_to_rad(55.0, 60.0), deg_to_rad(55.0, 72.0),
+            deg_to_rad(52.0, 90.0), deg_to_rad(50.0, 100.0), deg_to_rad(53.0, 110.0),
+            deg_to_rad(58.0, 125.0), deg_to_rad(62.0, 150.0), deg_to_rad(66.0, 170.0),
+            deg_to_rad(70.0, 180.0), deg_to_rad(65.0, 180.0), deg_to_rad(60.0, 165.0),
+            deg_to_rad(52.0, 155.0), deg_to_rad(45.0, 143.0), deg_to_rad(35.0, 130.0),
+            deg_to_rad(22.0, 120.0), deg_to_rad(10.0, 105.0), deg_to_rad(1.0, 104.0),
+            deg_to_rad(-8.0, 115.0), deg_to_rad(-8.0, 110.0), deg_to_rad(5.0, 95.0),
+            deg_to_rad(16.0, 82.0), deg_to_rad(22.0, 72.0), deg_to_rad(24.0, 68.0),
+            deg_to_rad(25.0, 62.0), deg_to_rad(27.0, 51.0), deg_to_rad(30.0, 48.0),
+            deg_to_rad(36.0, 36.0), deg_to_rad(37.0, 27.0),
+        ],
+        // Australia
+        vec![
+            deg_to_rad(-12.0, 130.0), deg_to_rad(-12.0, 142.0), deg_to_rad(-18.0, 146.0),
+            deg_to_rad(-24.0, 153.0), deg_to_rad(-28.0, 153.0), deg_to_rad(-38.0, 150.0),
+            deg_to_rad(-39.0, 144.0), deg_to_rad(-35.0, 136.0), deg_to_rad(-32.0, 133.0),
+            deg_to_rad(-35.0, 117.0), deg_to_rad(-31.0, 115.0), deg_to_rad(-22.0, 114.0),
+            deg_to_rad(-15.0, 124.0), deg_to_rad(-14.0, 129.0),
+        ],
+        // Greenland
+        vec![
+            deg_to_rad(83.0, -35.0), deg_to_rad(82.0, -20.0), deg_to_rad(76.0, -18.0),
+            deg_to_rad(70.0, -22.0), deg_to_rad(60.0, -43.0), deg_to_rad(60.0, -49.0),
+            deg_to_rad(66.0, -54.0), deg_to_rad(72.0, -55.0), deg_to_rad(78.0, -68.0),
+            deg_to_rad(81.0, -62.0), deg_to_rad(83.0, -42.0),
+        ],
+        // Japan (simplified)
+        vec![
+            deg_to_rad(31.0, 131.0), deg_to_rad(33.0, 136.0), deg_to_rad(35.0, 140.0),
+            deg_to_rad(41.0, 141.0), deg_to_rad(45.0, 142.0), deg_to_rad(43.0, 145.0),
+            deg_to_rad(40.0, 140.0), deg_to_rad(35.0, 139.0), deg_to_rad(33.0, 130.0),
+        ],
+        // UK/Ireland
+        vec![
+            deg_to_rad(50.0, -5.0), deg_to_rad(52.0, 2.0), deg_to_rad(56.0, -3.0),
+            deg_to_rad(59.0, -3.0), deg_to_rad(58.0, -7.0), deg_to_rad(54.0, -10.0),
+            deg_to_rad(52.0, -10.0), deg_to_rad(51.0, -6.0),
+        ],
+    ];
+
+    loop {
+        let (width, height) = crossterm::terminal::size().unwrap_or(term.size());
+
+        if width != prev_w || height != prev_h {
+            term.resize(width, height);
+            term.clear_screen()?;
+            prev_w = width;
+            prev_h = height;
+            braille_w = width as usize * 2;
+            braille_h = height as usize * 4;
+            braille_dots = vec![vec![0; braille_w]; braille_h];
+        }
+
+        let w = width as f32;
+        let h = height as f32;
+        let half_w = w / 2.0;
+        let half_h = h / 2.0;
+        let radius = (h * 1.8).min(w * 0.8) * 0.4;
+
+        if let Some((code, mods)) = term.check_key()? {
+            if state.handle_key(code, mods) {
+                break;
+            }
+        }
+
+        if state.paused {
+            term.sleep(0.1);
+            continue;
+        }
+
+        // Clear braille buffer (0 = empty, 1 = grid, 2 = continent, 3 = blip)
+        for row in &mut braille_dots {
+            for cell in row {
+                *cell = 0;
+            }
+        }
+
+        let (cos_tilt, sin_tilt) = (fast_cos(tilt), fast_sin(tilt));
+
+        // Helper: convert lat/lon to screen coords
+        let lat_lon_to_screen = |lat: f32, lon: f32| -> Option<(i32, i32, f32)> {
+            // Sphere coordinates (standard spherical to cartesian)
+            // x = right, y = into screen, z = up
+            let cos_lat = fast_cos(lat);
+            let sin_lat = fast_sin(lat);
+            let cos_lon = fast_cos(lon + rotation); // Apply rotation to longitude
+            let sin_lon = fast_sin(lon + rotation);
+
+            let x = cos_lat * sin_lon;  // right/left
+            let y = cos_lat * cos_lon;  // depth (into screen)
+            let z = sin_lat;            // up/down
+
+            // Apply tilt around X axis (tips the globe forward/back)
+            let y2 = y * cos_tilt - z * sin_tilt;
+            let z2 = y * sin_tilt + z * cos_tilt;
+
+            // Only draw front-facing points (y2 > 0 means facing viewer)
+            if y2 < -0.1 {
+                return None;
+            }
+
+            let screen_x = half_w + x * radius;
+            let screen_y = half_h - z2 * radius * 0.5; // Aspect correction
+
+            let bx = (screen_x * 2.0) as i32;
+            let by = (screen_y * 4.0) as i32;
+
+            Some((bx, by, y2))
+        };
+
+        // Draw latitude lines (every 30 degrees)
+        for lat_deg in (-60..=60).step_by(30) {
+            let lat = (lat_deg as f32).to_radians();
+            for lon_deg in 0..360 {
+                let lon = (lon_deg as f32).to_radians() - std::f32::consts::PI;
+                if let Some((bx, by, _)) = lat_lon_to_screen(lat, lon) {
+                    if bx >= 0 && bx < braille_w as i32 && by >= 0 && by < braille_h as i32
+                        && braille_dots[by as usize][bx as usize] == 0 {
+                        braille_dots[by as usize][bx as usize] = 1;
+                    }
+                }
+            }
+        }
+
+        // Draw longitude lines (every 30 degrees)
+        for lon_deg in (0..360).step_by(30) {
+            let lon = (lon_deg as f32).to_radians() - std::f32::consts::PI;
+            for lat_deg in -90..=90 {
+                let lat = (lat_deg as f32).to_radians();
+                if let Some((bx, by, _)) = lat_lon_to_screen(lat, lon) {
+                    if bx >= 0 && bx < braille_w as i32 && by >= 0 && by < braille_h as i32
+                        && braille_dots[by as usize][bx as usize] == 0 {
+                        braille_dots[by as usize][bx as usize] = 1;
+                    }
+                }
+            }
+        }
+
+        // Draw continents
+        for continent in &continents {
+            // Draw points along the continent outline
+            for i in 0..continent.len() {
+                let (lat1, lon1) = continent[i];
+                let (lat2, lon2) = continent[(i + 1) % continent.len()];
+
+                // Interpolate between points
+                for t in 0..20 {
+                    let frac = t as f32 / 20.0;
+                    let lat = lat1 + (lat2 - lat1) * frac;
+                    let lon = lon1 + (lon2 - lon1) * frac;
+
+                    if let Some((bx, by, _)) = lat_lon_to_screen(lat, lon) {
+                        if bx >= 0 && bx < braille_w as i32 && by >= 0 && by < braille_h as i32 {
+                            braille_dots[by as usize][bx as usize] = 2;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Spawn new blips randomly
+        if rng.gen_bool(0.15) {
+            blips.push(Blip {
+                lat: rng.gen_range(-1.2..1.2),
+                lon: rng.gen_range(-std::f32::consts::PI..std::f32::consts::PI),
+                age: 0.0,
+                max_age: rng.gen_range(0.5..2.0),
+            });
+        }
+
+        // Spawn connection arcs occasionally
+        if rng.gen_bool(0.03) && blips.len() >= 2 {
+            let i1 = rng.gen_range(0..blips.len());
+            let i2 = rng.gen_range(0..blips.len());
+            if i1 != i2 {
+                arcs.push(Arc {
+                    lat1: blips[i1].lat,
+                    lon1: blips[i1].lon,
+                    lat2: blips[i2].lat,
+                    lon2: blips[i2].lon,
+                    progress: 0.0,
+                });
+            }
+        }
+
+        // Draw and update blips
+        let mut new_blips = Vec::new();
+        for mut blip in blips {
+            blip.age += state.speed * 2.0;
+            if blip.age < blip.max_age {
+                // Draw blip with pulsing size based on age
+                let pulse = (blip.age / blip.max_age * std::f32::consts::PI).sin();
+                let size = (pulse * 3.0) as i32;
+
+                if let Some((bx, by, _)) = lat_lon_to_screen(blip.lat, blip.lon) {
+                    for dy in -size..=size {
+                        for dx in -size..=size {
+                            let px = bx + dx;
+                            let py = by + dy;
+                            if px >= 0 && px < braille_w as i32 && py >= 0 && py < braille_h as i32 {
+                                braille_dots[py as usize][px as usize] = 3;
+                            }
+                        }
+                    }
+                }
+                new_blips.push(blip);
+            }
+        }
+        blips = new_blips;
+
+        // Draw and update arcs
+        let mut new_arcs = Vec::new();
+        for mut arc in arcs {
+            arc.progress += state.speed * 1.5;
+            if arc.progress < 1.0 {
+                // Draw arc as great circle approximation
+                let steps = (arc.progress * 30.0) as i32;
+                for t in 0..=steps {
+                    let frac = t as f32 / 30.0;
+                    let lat = arc.lat1 + (arc.lat2 - arc.lat1) * frac;
+                    let lon = arc.lon1 + (arc.lon2 - arc.lon1) * frac;
+                    // Add slight arc height
+                    let arc_height = (frac * std::f32::consts::PI).sin() * 0.1;
+                    let lat_adj = lat + arc_height;
+
+                    if let Some((bx, by, _)) = lat_lon_to_screen(lat_adj, lon) {
+                        if bx >= 0 && bx < braille_w as i32 && by >= 0 && by < braille_h as i32 {
+                            braille_dots[by as usize][bx as usize] = 3;
+                        }
+                    }
+                }
+                new_arcs.push(arc);
+            }
+        }
+        arcs = new_arcs;
+
+        // Draw user location marker (pulsing, always visible when on front side)
+        if let Some((user_lat, user_lon)) = user_location {
+            user_pulse += state.speed * 3.0;
+            let pulse_size = ((user_pulse.sin() + 1.0) * 2.0 + 2.0) as i32; // 2-6 size
+
+            if let Some((bx, by, _)) = lat_lon_to_screen(user_lat, user_lon) {
+                // Draw a larger, distinct marker (intensity 4 = user)
+                for dy in -pulse_size..=pulse_size {
+                    for dx in -pulse_size..=pulse_size {
+                        // Diamond shape
+                        if dx.abs() + dy.abs() <= pulse_size {
+                            let px = bx + dx;
+                            let py = by + dy;
+                            if px >= 0 && px < braille_w as i32 && py >= 0 && py < braille_h as i32 {
+                                braille_dots[py as usize][px as usize] = 4; // User marker
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Render braille to terminal
+        term.clear();
+        for cy in 0..height as usize {
+            let by = cy * 4;
+            if by + 3 >= braille_h {
+                continue;
+            }
+            for cx in 0..width as usize {
+                let bx = cx * 2;
+                if bx + 1 >= braille_w {
+                    continue;
+                }
+
+                let mut dots: u8 = 0;
+                let mut max_intensity: u8 = 0;
+
+                // Check each dot position and track max intensity
+                let positions = [
+                    (by, bx), (by + 1, bx), (by + 2, bx),
+                    (by, bx + 1), (by + 1, bx + 1), (by + 2, bx + 1),
+                    (by + 3, bx), (by + 3, bx + 1),
+                ];
+                let dot_bits = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80];
+
+                for (i, &(py, px)) in positions.iter().enumerate() {
+                    let val = braille_dots[py][px];
+                    if val > 0 {
+                        dots |= dot_bits[i];
+                        max_intensity = max_intensity.max(val);
+                    }
+                }
+
+                if dots > 0 {
+                    let ch = char::from_u32(0x2800 + dots as u32).unwrap_or(' ');
+                    // User marker (4) gets special orange color, others use scheme
+                    let (color, bold) = if max_intensity == 4 {
+                        (Color::Rgb { r: 255, g: 165, b: 0 }, true) // Orange for user
+                    } else {
+                        let intensity = match max_intensity {
+                            1 => 0, // Grid lines - dim
+                            2 => 2, // Continents - bright
+                            _ => 3, // Blips/arcs - brightest
+                        };
+                        scheme_color(state.color_scheme, intensity, max_intensity >= 3)
+                    };
+                    term.set(cx as i32, cy as i32, ch, Some(color), bold);
+                }
+            }
+        }
+
+        term.present()?;
+        rotation += 0.02 * (state.speed / 0.03);
+        term.sleep(state.speed);
+    }
+
+    Ok(())
+}
+
+/// Hexagon grid with wave/pulse animations (eDEX-UI style)
+fn run_hex(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
+    let mut state = VizState::new(config.time_step);
+    state.color_scheme = 5; // Default to electric (cyan/white)
+
+    let mut time: f32 = 0.0;
+
+    let (init_w, init_h) = term.size();
+    let mut prev_w = init_w;
+    let mut prev_h = init_h;
+
+    // Hex cell dimensions (in characters)
+    // Using flat-top hexagons:  / \
+    //                          |   |
+    //                           \ /
+    let hex_width: usize = 6;  // Width of one hex cell
+    let hex_height: usize = 3; // Height of one hex cell
+
+    // Pulse origins (random points that emit waves)
+    struct Pulse {
+        x: f32,
+        y: f32,
+        birth_time: f32,
+        speed: f32,
+        max_radius: f32,
+    }
+
+    let mut pulses: Vec<Pulse> = Vec::new();
+
+    // Precompute sin table
+    const SIN_TABLE_SIZE: usize = 1024;
+    let sin_table: Vec<f32> = (0..SIN_TABLE_SIZE)
+        .map(|i| ((i as f32 / SIN_TABLE_SIZE as f32) * std::f32::consts::TAU).sin())
+        .collect();
+
+    let fast_sin = |x: f32| -> f32 {
+        let normalized = x.rem_euclid(std::f32::consts::TAU) / std::f32::consts::TAU;
+        let idx = (normalized * SIN_TABLE_SIZE as f32) as usize;
+        sin_table[idx.min(SIN_TABLE_SIZE - 1)]
+    };
+
+    loop {
+        let (width, height) = crossterm::terminal::size().unwrap_or(term.size());
+
+        if width != prev_w || height != prev_h {
+            term.resize(width, height);
+            term.clear_screen()?;
+            prev_w = width;
+            prev_h = height;
+            pulses.clear();
+        }
+
+        let w = width as usize;
+        let h = height as usize;
+
+        if let Some((code, mods)) = term.check_key()? {
+            if state.handle_key(code, mods) {
+                break;
+            }
+        }
+
+        if state.paused {
+            term.sleep(0.1);
+            continue;
+        }
+
+        // Spawn new pulses randomly
+        if rng.gen_bool(0.08) {
+            pulses.push(Pulse {
+                x: rng.gen_range(0.0..w as f32),
+                y: rng.gen_range(0.0..h as f32),
+                birth_time: time,
+                speed: rng.gen_range(15.0..35.0),
+                max_radius: rng.gen_range(30.0..80.0),
+            });
+        }
+
+        // Remove old pulses
+        pulses.retain(|p| {
+            let age = time - p.birth_time;
+            age * p.speed < p.max_radius + 10.0
+        });
+
+        term.clear();
+
+        // Calculate hex grid dimensions - extend beyond screen for edge hexes
+        let cols = (w / hex_width) + 3;
+        let rows = (h / hex_height) + 3;
+
+        // Helper to safely set a character (clips to screen bounds)
+        let set_if_visible = |term: &mut Terminal, x: i32, y: i32, ch: char, color: Color, bold: bool| {
+            if x >= 0 && x < w as i32 && y >= 0 && y < h as i32 {
+                term.set(x, y, ch, Some(color), bold);
+            }
+        };
+
+        // Draw hexagon grid - start before screen to catch partial hexes
+        for row in 0..rows {
+            for col in 0..cols {
+                // Offset every other row for honeycomb pattern
+                let x_offset: i32 = if row % 2 == 1 { (hex_width / 2) as i32 } else { 0 };
+                let cx = (col as i32 * hex_width as i32) + x_offset - (hex_width as i32);
+                let cy = (row as i32 * hex_height as i32) - (hex_height as i32);
+
+                // Calculate intensity from pulses and ambient waves
+                let mut intensity: f32 = 0.0;
+
+                // Use center for wave calculations (clamp to valid range for visual continuity)
+                let wave_x = cx.max(0) as f32;
+                let wave_y = cy.max(0) as f32;
+
+                // Ambient wave pattern
+                let wave1 = fast_sin((wave_x * 0.1) + time * 2.0) * 0.3;
+                let wave2 = fast_sin((wave_y * 0.15) + time * 1.5) * 0.2;
+                let wave3 = fast_sin(((wave_x + wave_y) * 0.08) - time * 1.2) * 0.2;
+                intensity += (wave1 + wave2 + wave3 + 0.7).max(0.0);
+
+                // Pulse contributions
+                for pulse in &pulses {
+                    let dx = cx as f32 - pulse.x;
+                    let dy = (cy as f32 - pulse.y) * 2.0; // Adjust for terminal aspect
+                    let dist = (dx * dx + dy * dy).sqrt();
+                    let age = time - pulse.birth_time;
+                    let ring_pos = age * pulse.speed;
+
+                    // Ring wave effect
+                    let ring_dist = (dist - ring_pos).abs();
+                    if ring_dist < 5.0 && dist < pulse.max_radius {
+                        let ring_intensity = (1.0 - ring_dist / 5.0) * (1.0 - dist / pulse.max_radius);
+                        intensity += ring_intensity * 1.5;
+                    }
+                }
+
+                intensity = intensity.clamp(0.0, 1.5);
+
+                // Draw hex based on intensity
+                if intensity > 0.1 {
+                    let level = ((intensity * 4.0) as u8).min(3);
+                    let (color, bold) = scheme_color(state.color_scheme, level, intensity > 0.8);
+
+                    // Draw hexagon shape - let set_if_visible handle clipping
+                    // Top:    /_\
+                    // Mid:   |   |
+                    // Bot:    \_/
+                    let x = cx - 2;
+                    let y = cy - 1;
+
+                    if intensity > 0.3 {
+                        // Full hex - no top underscore to avoid doubling
+                        //  / \
+                        // |   |
+                        //  \_/
+                        set_if_visible(term, x + 1, y, '/', color, bold);
+                        set_if_visible(term, x + 3, y, '\\', color, bold);
+                        set_if_visible(term, x, y + 1, '|', color, bold);
+                        set_if_visible(term, x + 4, y + 1, '|', color, bold);
+                        set_if_visible(term, x + 1, y + 2, '\\', color, bold);
+                        set_if_visible(term, x + 2, y + 2, '_', color, bold);
+                        set_if_visible(term, x + 3, y + 2, '/', color, bold);
+                    } else {
+                        // Dim hex - just corners
+                        set_if_visible(term, x + 1, y, '.', color, bold);
+                        set_if_visible(term, x + 3, y, '.', color, bold);
+                        set_if_visible(term, x + 1, y + 2, '.', color, bold);
+                        set_if_visible(term, x + 3, y + 2, '.', color, bold);
+                    }
+                }
+            }
+        }
+
+        term.present()?;
+        time += state.speed * 2.0;
+        term.sleep(state.speed);
+    }
+
+    Ok(())
+}
+
+/// Find keyboard input devices via evdev
+fn find_keyboard_devices() -> Vec<evdev::Device> {
+    let mut keyboards = Vec::new();
+    if let Ok(entries) = std::fs::read_dir("/dev/input") {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                if name.starts_with("event") {
+                    if let Ok(device) = evdev::Device::open(&path) {
+                        // Check if device has key events (is a keyboard)
+                        if device.supported_keys().is_some_and(|keys| {
+                            keys.contains(evdev::Key::KEY_A) && keys.contains(evdev::Key::KEY_SPACE)
+                        }) {
+                            keyboards.push(device);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    keyboards
+}
+
+/// Map evdev key code to display label
+fn evdev_key_to_label(key: evdev::Key) -> Option<&'static str> {
+    use evdev::Key;
+    Some(match key {
+        Key::KEY_ESC => "Esc",
+        Key::KEY_1 => "1", Key::KEY_2 => "2", Key::KEY_3 => "3", Key::KEY_4 => "4", Key::KEY_5 => "5",
+        Key::KEY_6 => "6", Key::KEY_7 => "7", Key::KEY_8 => "8", Key::KEY_9 => "9", Key::KEY_0 => "0",
+        Key::KEY_MINUS => "-", Key::KEY_EQUAL => "=", Key::KEY_BACKSPACE => "Bksp",
+        Key::KEY_TAB => "Tab",
+        Key::KEY_Q => "Q", Key::KEY_W => "W", Key::KEY_E => "E", Key::KEY_R => "R", Key::KEY_T => "T",
+        Key::KEY_Y => "Y", Key::KEY_U => "U", Key::KEY_I => "I", Key::KEY_O => "O", Key::KEY_P => "P",
+        Key::KEY_LEFTBRACE => "[", Key::KEY_RIGHTBRACE => "]", Key::KEY_BACKSLASH => "\\",
+        Key::KEY_CAPSLOCK => "Caps",
+        Key::KEY_A => "A", Key::KEY_S => "S", Key::KEY_D => "D", Key::KEY_F => "F", Key::KEY_G => "G",
+        Key::KEY_H => "H", Key::KEY_J => "J", Key::KEY_K => "K", Key::KEY_L => "L",
+        Key::KEY_SEMICOLON => ";", Key::KEY_APOSTROPHE => "'", Key::KEY_ENTER => "Enter",
+        Key::KEY_LEFTSHIFT | Key::KEY_RIGHTSHIFT => "Shift",
+        Key::KEY_Z => "Z", Key::KEY_X => "X", Key::KEY_C => "C", Key::KEY_V => "V", Key::KEY_B => "B",
+        Key::KEY_N => "N", Key::KEY_M => "M",
+        Key::KEY_COMMA => ",", Key::KEY_DOT => ".", Key::KEY_SLASH => "/",
+        Key::KEY_LEFTCTRL | Key::KEY_RIGHTCTRL => "Ctrl",
+        Key::KEY_LEFTMETA | Key::KEY_RIGHTMETA => "Meta",
+        Key::KEY_LEFTALT | Key::KEY_RIGHTALT => "Alt",
+        Key::KEY_SPACE => "Space",
+        Key::KEY_GRAVE => "`",
+        Key::KEY_F1 => "F1", Key::KEY_F2 => "F2", Key::KEY_F3 => "F3", Key::KEY_F4 => "F4",
+        Key::KEY_F5 => "F5", Key::KEY_F6 => "F6", Key::KEY_F7 => "F7", Key::KEY_F8 => "F8",
+        Key::KEY_F9 => "F9", Key::KEY_F10 => "F10", Key::KEY_F11 => "F11", Key::KEY_F12 => "F12",
+        Key::KEY_COMPOSE => "Menu",
+        _ => return None,
+    })
+}
+
+/// On-screen keyboard visualization with global key monitoring via evdev
+fn run_keyboard(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
+    let mut state = VizState::new(config.time_step);
+    state.color_scheme = 5; // Default to electric (cyan/white)
+
+    let (init_w, init_h) = term.size();
+    let mut prev_w = init_w;
+    let mut prev_h = init_h;
+
+    // Key press tracking with fade-out
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let key_heat: Arc<Mutex<HashMap<String, f32>>> = Arc::new(Mutex::new(HashMap::new()));
+    let shift_held = Arc::new(AtomicBool::new(false));
+    let running = Arc::new(AtomicBool::new(true));
+
+    // Find keyboard devices
+    let keyboards = find_keyboard_devices();
+    let has_evdev = !keyboards.is_empty();
+
+    // Spawn evdev listener threads for each keyboard
+    let mut handles = Vec::new();
+    for mut device in keyboards {
+        let heat_clone = Arc::clone(&key_heat);
+        let shift_clone = Arc::clone(&shift_held);
+        let running_clone = Arc::clone(&running);
+
+        let handle = std::thread::spawn(move || {
+            // Get raw fd and set non-blocking via nix
+            use std::os::unix::io::AsRawFd;
+            let fd = device.as_raw_fd();
+            unsafe {
+                let flags = libc::fcntl(fd, libc::F_GETFL);
+                libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+            }
+
+            while running_clone.load(Ordering::Relaxed) {
+                if let Ok(events) = device.fetch_events() {
+                    for ev in events {
+                        if let evdev::InputEventKind::Key(key) = ev.kind() {
+                            // Track shift state
+                            if matches!(key, evdev::Key::KEY_LEFTSHIFT | evdev::Key::KEY_RIGHTSHIFT) {
+                                shift_clone.store(ev.value() != 0, Ordering::Relaxed);
+                            }
+                            // Value 1 = press, 0 = release, 2 = repeat
+                            if ev.value() == 1 || ev.value() == 2 {
+                                if let Some(label) = evdev_key_to_label(key) {
+                                    if let Ok(mut heat) = heat_clone.lock() {
+                                        heat.insert(label.to_string(), 1.0);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        });
+        handles.push(handle);
+    }
+
+    // Keyboard layout (US QWERTY) - (normal_label, shifted_label, width)
+    // F-keys row only shown in debug mode
+    let f_row: Vec<(&str, &str, f32)> = vec![
+        ("Esc", "Esc", 1.0), ("", "", 0.5), ("F1", "F1", 1.0), ("F2", "F2", 1.0), ("F3", "F3", 1.0), ("F4", "F4", 1.0),
+        ("", "", 0.25), ("F5", "F5", 1.0), ("F6", "F6", 1.0), ("F7", "F7", 1.0), ("F8", "F8", 1.0),
+        ("", "", 0.25), ("F9", "F9", 1.0), ("F10", "F10", 1.0), ("F11", "F11", 1.0), ("F12", "F12", 1.0),
+    ];
+
+    let mut rows: Vec<Vec<(&str, &str, f32)>> = Vec::new();
+    if config.debug {
+        rows.push(f_row);
+    }
+    // Row 1: Numbers
+    rows.push(vec![
+        ("`", "~", 1.0), ("1", "!", 1.0), ("2", "@", 1.0), ("3", "#", 1.0), ("4", "$", 1.0), ("5", "%", 1.0),
+        ("6", "^", 1.0), ("7", "&", 1.0), ("8", "*", 1.0), ("9", "(", 1.0), ("0", ")", 1.0),
+        ("-", "_", 1.0), ("=", "+", 1.0), ("Bksp", "Bksp", 1.5),
+    ]);
+    // Row 2: QWERTY top
+    rows.push(vec![
+        ("Tab", "Tab", 1.5), ("q", "Q", 1.0), ("w", "W", 1.0), ("e", "E", 1.0), ("r", "R", 1.0), ("t", "T", 1.0),
+        ("y", "Y", 1.0), ("u", "U", 1.0), ("i", "I", 1.0), ("o", "O", 1.0), ("p", "P", 1.0),
+        ("[", "{", 1.0), ("]", "}", 1.0), ("\\", "|", 1.5),
+    ]);
+    // Row 3: Home row
+    rows.push(vec![
+        ("Caps", "Caps", 1.75), ("a", "A", 1.0), ("s", "S", 1.0), ("d", "D", 1.0), ("f", "F", 1.0), ("g", "G", 1.0),
+        ("h", "H", 1.0), ("j", "J", 1.0), ("k", "K", 1.0), ("l", "L", 1.0), (";", ":", 1.0),
+        ("'", "\"", 1.0), ("Enter", "Enter", 2.25),
+    ]);
+    // Row 4: Shift row
+    rows.push(vec![
+        ("Shift", "Shift", 2.25), ("z", "Z", 1.0), ("x", "X", 1.0), ("c", "C", 1.0), ("v", "V", 1.0), ("b", "B", 1.0),
+        ("n", "N", 1.0), ("m", "M", 1.0), (",", "<", 1.0), (".", ">", 1.0), ("/", "?", 1.0), ("Shift", "Shift", 2.75),
+    ]);
+    // Row 5: Bottom row (Meta key displays as "M")
+    rows.push(vec![
+        ("Ctrl", "Ctrl", 1.5), ("Meta", "Meta", 1.0), ("Alt", "Alt", 1.25), ("Space", "Space", 6.25),
+        ("Alt", "Alt", 1.25), ("Meta", "Meta", 1.0), ("Menu", "Menu", 1.0), ("Ctrl", "Ctrl", 1.5),
+    ]);
+
+    // Key dimensions (compact mode)
+    let key_width: f32 = 3.0;
+    let key_height: usize = 1;
+
+    loop {
+        let (width, height) = crossterm::terminal::size().unwrap_or(term.size());
+
+        if width != prev_w || height != prev_h {
+            term.resize(width, height);
+            term.clear_screen()?;
+            prev_w = width;
+            prev_h = height;
+        }
+
+        let w = width as usize;
+        let h = height as usize;
+
+        // Handle input (color scheme changes, speed, quit)
+        if let Some((code, mods)) = term.check_key()? {
+            if state.handle_key(code, mods) {
+                break;
+            }
+        }
+
+        // Decay heat values
+        if let Ok(mut heat) = key_heat.lock() {
+            for v in heat.values_mut() {
+                *v = (*v - state.speed * 3.0).max(0.0);
+            }
+            heat.retain(|_, v| *v > 0.0);
+        }
+
+        term.clear();
+
+        // Calculate keyboard vertical position (centered)
+        let total_height = rows.len() * key_height + rows.len();
+        let start_y = ((h - total_height) / 2).max(1);
+
+        // Draw keyboard
+        let heat_snapshot: HashMap<String, f32> = key_heat.lock().map(|h| h.clone()).unwrap_or_default();
+        let is_shifted = shift_held.load(Ordering::Relaxed);
+
+        for (row_idx, row) in rows.iter().enumerate() {
+            let y = start_y + row_idx * (key_height + 1);
+
+            // Calculate this row's total width for centering
+            let row_key_count = row.iter().filter(|(l, _, _)| !l.is_empty()).count();
+            let row_width_units: f32 = row.iter().map(|(_, _, w)| w).sum();
+            let row_total_width = (row_width_units * key_width) as usize + row_key_count.saturating_sub(1);
+            let mut x = ((w.saturating_sub(row_total_width)) / 2).max(1);
+
+            for (normal_label, shifted_label, width_mult) in row {
+                if normal_label.is_empty() {
+                    x += (key_width * width_mult) as usize;
+                    continue;
+                }
+
+                let key_w = (key_width * width_mult) as usize;
+                // Heat lookup - evdev labels match exactly for special keys, uppercase for letters
+                let heat_key = match *normal_label {
+                    "Ctrl" | "Alt" | "Meta" | "Shift" | "Caps" | "Tab" | "Enter" | "Bksp" |
+                    "Esc" | "Space" | "Menu" | "F1" | "F2" | "F3" | "F4" | "F5" | "F6" |
+                    "F7" | "F8" | "F9" | "F10" | "F11" | "F12" => normal_label.to_string(),
+                    _ => normal_label.to_uppercase(),
+                };
+                let heat = heat_snapshot.get(&heat_key).copied().unwrap_or(0.0);
+
+                // Choose label based on shift state, with display overrides
+                let base_label = if is_shifted { *shifted_label } else { *normal_label };
+                let display_label = match base_label {
+                    "Meta" => "M",  // Display Meta key as just "M"
+                    other => other,
+                };
+
+                let (color, bold) = if heat > 0.7 {
+                    (Color::Rgb { r: 255, g: 255, b: 255 }, true)
+                } else if heat > 0.3 {
+                    scheme_color(state.color_scheme, 3, true)
+                } else if heat > 0.0 {
+                    scheme_color(state.color_scheme, 2, false)
+                } else {
+                    scheme_color(state.color_scheme, 0, false)
+                };
+
+                // Draw compact key (label with padding, no brackets)
+                if y < h {
+                    // Center the label within the key width
+                    let truncated: String = display_label.chars().take(key_w).collect();
+                    let label_start = x + (key_w.saturating_sub(truncated.len())) / 2;
+                    for (i, ch) in truncated.chars().enumerate() {
+                        term.set((label_start + i) as i32, y as i32, ch, Some(color), bold);
+                    }
+                }
+
+                x += key_w + 1;  // Add 1 char padding between keys
+            }
+        }
+
+        // Debug status bar (only in debug mode)
+        if config.debug {
+            let status = if has_evdev { "[GLOBAL]" } else { "[LOCAL]" };
+            let status_text = format!("{} (q to quit)", status);
+            let status_x = ((w as f32 - status_text.len() as f32) / 2.0).max(0.0) as usize;
+            let (status_color, _) = scheme_color(state.color_scheme, 1, false);
+            for (i, ch) in status_text.chars().enumerate() {
+                term.set((status_x + i) as i32, 0, ch, Some(status_color), false);
+            }
+        }
+
+        term.present()?;
+        term.sleep(state.speed);
+    }
+
+    // Signal threads to stop and wait for them
+    running.store(false, Ordering::Relaxed);
+    for handle in handles {
+        let _ = handle.join();
     }
 
     Ok(())

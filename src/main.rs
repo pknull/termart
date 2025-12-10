@@ -66,9 +66,9 @@ enum Commands {
         message: Option<String>,
     },
 
-    /// Run an animated visualization (matrix, life, plasma, fire, rain, waves, cube, pipes, donut)
+    /// Run an animated visualization (matrix, life, plasma, fire, rain, waves, cube, pipes, donut, globe, hex, keyboard)
     Viz {
-        /// Type of visualization: matrix, life, plasma, fire, rain, waves, cube, pipes, donut
+        /// Type of visualization: matrix, life, plasma, fire, rain, waves, cube, pipes, donut, globe, hex, keyboard
         #[arg(short = 'T', long, default_value = "matrix")]
         viz_type: String,
 
@@ -83,6 +83,10 @@ enum Commands {
         /// Character to use for drawing (life mode)
         #[arg(short, long, default_value = "#")]
         char: String,
+
+        /// Show debug info (keyboard: shows F-keys and global/local status)
+        #[arg(short, long)]
+        debug: bool,
     },
 }
 
@@ -124,6 +128,7 @@ fn main() -> io::Result<()> {
             time,
             seed,
             char: draw_char,
+            debug,
         } => {
             let ftype = match viz_type.to_lowercase().as_str() {
                 "matrix" | "cmatrix" => FractalType::Matrix,
@@ -135,21 +140,21 @@ fn main() -> io::Result<()> {
                 "cube" | "3d" => FractalType::Cube,
                 "pipes" | "pipe" => FractalType::Pipes,
                 "donut" | "torus" | "doughnut" => FractalType::Donut,
+                "globe" | "earth" | "network" => FractalType::Globe,
+                "hex" | "hexagon" | "honeycomb" => FractalType::Hex,
+                "keyboard" | "keys" | "kb" => FractalType::Keyboard,
                 _ => {
                     eprintln!("Unknown viz type: {}. Using matrix.", viz_type);
-                    eprintln!("Available: matrix, life, plasma, fire, rain, waves, cube, pipes, donut");
+                    eprintln!("Available: matrix, life, plasma, fire, rain, waves, cube, pipes, donut, globe, hex, keyboard");
                     FractalType::Matrix
                 }
             };
             let config = FractalConfig {
                 fractal_type: ftype,
-                live: true,  // Always live for visualizations
                 time_step: time,
-                depth: 0,    // Not used
                 seed,
                 draw_char: draw_char.chars().next().unwrap_or('#'),
-                infinite: false,
-                time_wait: 0.0,
+                debug,
             };
             fractal::run(config)?;
         }

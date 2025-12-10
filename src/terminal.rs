@@ -38,12 +38,6 @@ impl Default for Cell {
     }
 }
 
-impl Cell {
-    pub fn new(ch: char, fg: Option<Color>, bold: bool) -> Self {
-        Self { ch, fg, bold }
-    }
-}
-
 impl Terminal {
     /// Initialize the terminal for drawing
     pub fn new(alternate_screen: bool) -> io::Result<Self> {
@@ -123,12 +117,6 @@ impl Terminal {
         for (i, ch) in s.chars().enumerate() {
             self.set(x + i as i32, y, ch, fg, bold);
         }
-    }
-
-    /// Legacy: Draw a single cell immediately (bypasses buffering - avoid in hot paths)
-    pub fn draw_cell(&mut self, x: i32, y: i32, ch: char, fg: Option<Color>, bold: bool) -> io::Result<()> {
-        self.set(x, y, ch, fg, bold);
-        Ok(())
     }
 
     /// Render only changed cells (differential update) with single flush
@@ -324,11 +312,6 @@ impl Drop for Terminal {
     }
 }
 
-/// Helper to create RGB colors
-pub fn rgb(r: u8, g: u8, b: u8) -> Color {
-    Color::Rgb { r, g, b }
-}
-
 /// Predefined colors for bonsai (using standard terminal colors)
 pub mod colors {
     use crossterm::style::Color;
@@ -341,12 +324,6 @@ pub mod colors {
     pub const LEAF_DARK: Color = Color::DarkGreen;
     pub const LEAF_LIGHT: Color = Color::Green;
 
-    // Pot colors
+    // Pot color
     pub const POT: Color = Color::DarkYellow;
-    pub const POT_DARK: Color = Color::DarkRed;
-
-    // Fractal colors
-    pub const FRACTAL_PRIMARY: Color = Color::Cyan;
-    pub const FRACTAL_SECONDARY: Color = Color::Magenta;
-    pub const FRACTAL_TERTIARY: Color = Color::Yellow;
 }
