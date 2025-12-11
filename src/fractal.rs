@@ -1171,88 +1171,183 @@ fn run_globe(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> i
         (lat.to_radians(), lon.to_radians())
     };
 
+    // Natural Earth 110m simplified continent outlines (238 points total)
     let continents: Vec<Vec<(f32, f32)>> = vec![
+        // North America (41 points)
+        vec![
+            deg_to_rad(69.5, -90.5), deg_to_rad(67.1, -81.4), deg_to_rad(58.9, -94.7),
+            deg_to_rad(51.2, -79.9), deg_to_rad(62.6, -77.4), deg_to_rad(58.2, -67.6),
+            deg_to_rad(60.3, -64.6), deg_to_rad(53.3, -55.8), deg_to_rad(46.8, -71.1),
+            deg_to_rad(49.2, -65.1), deg_to_rad(45.9, -59.8), deg_to_rad(39.2, -76.3),
+            deg_to_rad(31.4, -81.3), deg_to_rad(25.2, -80.4), deg_to_rad(30.1, -84.1),
+            deg_to_rad(27.8, -97.1), deg_to_rad(18.8, -95.9), deg_to_rad(21.5, -87.1),
+            deg_to_rad(15.9, -88.9), deg_to_rad(15.3, -83.4), deg_to_rad(9.0, -82.2),
+            deg_to_rad(11.1, -74.9), deg_to_rad(7.2, -80.9), deg_to_rad(19.3, -105.0),
+            deg_to_rad(31.2, -113.1), deg_to_rad(23.4, -109.4), deg_to_rad(24.7, -112.2),
+            deg_to_rad(40.3, -124.4), deg_to_rad(49.0, -122.8), deg_to_rad(58.1, -134.1),
+            deg_to_rad(61.3, -150.6), deg_to_rad(54.4, -164.8), deg_to_rad(58.9, -157.0),
+            deg_to_rad(61.5, -166.1), deg_to_rad(64.8, -160.8), deg_to_rad(65.7, -168.1),
+            deg_to_rad(71.4, -156.6), deg_to_rad(67.4, -108.9), deg_to_rad(67.3, -96.1),
+            deg_to_rad(71.9, -95.2), deg_to_rad(69.5, -90.5),
+        ],
+        // South America (22 points)
+        vec![
+            deg_to_rad(11.1, -74.9), deg_to_rad(10.7, -61.9), deg_to_rad(4.2, -51.3),
+            deg_to_rad(-0.1, -50.4), deg_to_rad(-7.3, -34.7), deg_to_rad(-21.9, -40.9),
+            deg_to_rad(-24.9, -47.6), deg_to_rad(-34.4, -53.8), deg_to_rad(-33.9, -58.4),
+            deg_to_rad(-36.9, -56.8), deg_to_rad(-41.1, -65.1), deg_to_rad(-48.1, -66.0),
+            deg_to_rad(-53.8, -71.0), deg_to_rad(-52.3, -74.9), deg_to_rad(-46.6, -75.6),
+            deg_to_rad(-42.4, -72.7), deg_to_rad(-18.3, -70.4), deg_to_rad(-14.6, -76.0),
+            deg_to_rad(-4.7, -81.4), deg_to_rad(3.8, -77.1), deg_to_rad(9.0, -79.1),
+            deg_to_rad(11.1, -74.9),
+        ],
+        // Europe (39 points)
+        vec![
+            deg_to_rad(31.2, 29.7), deg_to_rad(31.2, 34.3), deg_to_rad(36.7, 36.2),
+            deg_to_rad(36.7, 27.6), deg_to_rad(39.5, 26.2), deg_to_rad(41.5, 41.6),
+            deg_to_rad(45.2, 36.7), deg_to_rad(47.3, 39.1), deg_to_rad(44.4, 33.9),
+            deg_to_rad(46.6, 30.7), deg_to_rad(41.1, 28.8), deg_to_rad(40.3, 22.6),
+            deg_to_rad(36.4, 23.2), deg_to_rad(45.6, 13.9), deg_to_rad(40.2, 18.5),
+            deg_to_rad(37.9, 15.7), deg_to_rad(44.4, 8.9), deg_to_rad(36.0, -5.9),
+            deg_to_rad(36.9, -8.9), deg_to_rad(43.0, -9.4), deg_to_rad(43.4, -1.9),
+            deg_to_rad(48.7, -4.6), deg_to_rad(53.5, 8.1), deg_to_rad(57.1, 8.5),
+            deg_to_rad(54.0, 10.9), deg_to_rad(54.4, 19.7), deg_to_rad(59.2, 23.3),
+            deg_to_rad(60.0, 29.1), deg_to_rad(60.7, 21.3), deg_to_rad(65.1, 25.4),
+            deg_to_rad(65.7, 22.2), deg_to_rad(55.4, 12.9), deg_to_rad(59.5, 10.4),
+            deg_to_rad(58.6, 5.7), deg_to_rad(62.6, 5.9), deg_to_rad(69.8, 19.2),
+            deg_to_rad(70.5, 31.3), deg_to_rad(69.3, 33.8), deg_to_rad(31.2, 29.7),
+        ],
+        // Africa (16 points)
+        vec![
+            deg_to_rad(29.9, 32.4), deg_to_rad(11.7, 42.7), deg_to_rad(10.6, 51.0),
+            deg_to_rad(-4.7, 39.2), deg_to_rad(-14.7, 40.8), deg_to_rad(-19.8, 34.8),
+            deg_to_rad(-24.1, 35.5), deg_to_rad(-32.8, 28.2), deg_to_rad(-34.8, 19.6),
+            deg_to_rad(-18.1, 11.8), deg_to_rad(-10.7, 13.7), deg_to_rad(3.7, 9.4),
+            deg_to_rad(6.3, 4.3), deg_to_rad(4.4, -8.0), deg_to_rad(14.7, -17.6),
+            deg_to_rad(29.9, 32.4),
+        ],
+        // Asia (43 points)
+        vec![
+            deg_to_rad(77.0, 107.0), deg_to_rad(70.8, 131.3), deg_to_rad(69.4, 178.6),
+            deg_to_rad(62.3, 179.2), deg_to_rad(59.9, 163.5), deg_to_rad(51.0, 156.8),
+            deg_to_rad(56.8, 155.9), deg_to_rad(62.6, 164.5), deg_to_rad(54.7, 135.1),
+            deg_to_rad(52.2, 141.4), deg_to_rad(39.8, 127.5), deg_to_rad(35.1, 129.1),
+            deg_to_rad(40.9, 121.6), deg_to_rad(39.2, 118.0), deg_to_rad(37.5, 122.4),
+            deg_to_rad(34.9, 119.2), deg_to_rad(28.2, 121.7), deg_to_rad(19.8, 105.9),
+            deg_to_rad(13.4, 109.3), deg_to_rad(8.6, 105.2), deg_to_rad(13.4, 100.1),
+            deg_to_rad(1.3, 104.2), deg_to_rad(22.8, 91.4), deg_to_rad(15.9, 80.3),
+            deg_to_rad(8.0, 77.5), deg_to_rad(21.4, 72.6), deg_to_rad(30.3, 48.9),
+            deg_to_rad(24.0, 51.8), deg_to_rad(26.4, 56.4), deg_to_rad(22.3, 59.8),
+            deg_to_rad(12.6, 43.5), deg_to_rad(21.3, 39.1), deg_to_rad(69.3, 33.8),
+            deg_to_rad(67.5, 41.1), deg_to_rad(66.6, 33.2), deg_to_rad(63.8, 37.0),
+            deg_to_rad(68.6, 43.5), deg_to_rad(68.1, 68.5), deg_to_rad(71.0, 66.7),
+            deg_to_rad(73.0, 69.9), deg_to_rad(66.2, 72.4), deg_to_rad(72.8, 74.7),
+            deg_to_rad(77.0, 107.0),
+        ],
+        // Australia (20 points)
+        vec![
+            deg_to_rad(-13.8, 143.6), deg_to_rad(-26.1, 153.1), deg_to_rad(-37.4, 150.0),
+            deg_to_rad(-38.0, 140.6), deg_to_rad(-34.4, 138.2), deg_to_rad(-35.3, 136.8),
+            deg_to_rad(-32.9, 137.8), deg_to_rad(-34.9, 136.0), deg_to_rad(-31.5, 131.3),
+            deg_to_rad(-34.2, 115.0), deg_to_rad(-21.8, 114.1), deg_to_rad(-19.7, 120.9),
+            deg_to_rad(-14.2, 125.7), deg_to_rad(-15.0, 129.6), deg_to_rad(-11.1, 132.4),
+            deg_to_rad(-11.9, 136.5), deg_to_rad(-15.0, 135.5), deg_to_rad(-17.7, 140.2),
+            deg_to_rad(-11.0, 142.1), deg_to_rad(-13.8, 143.6),
+        ],
+        // Greenland (21 points)
+        vec![
+            deg_to_rad(83.5, -27.1), deg_to_rad(82.7, -20.8), deg_to_rad(82.0, -31.4),
+            deg_to_rad(81.3, -12.2), deg_to_rad(80.2, -20.0), deg_to_rad(80.1, -17.7),
+            deg_to_rad(76.6, -21.7), deg_to_rad(74.3, -19.4), deg_to_rad(70.2, -26.4),
+            deg_to_rad(70.1, -22.3), deg_to_rad(65.5, -39.8), deg_to_rad(60.1, -43.4),
+            deg_to_rad(63.6, -51.6), deg_to_rad(67.2, -54.0), deg_to_rad(69.9, -50.9),
+            deg_to_rad(69.6, -54.7), deg_to_rad(70.6, -51.4), deg_to_rad(75.5, -58.6),
+            deg_to_rad(78.0, -73.3), deg_to_rad(81.8, -62.7), deg_to_rad(83.5, -27.1),
+        ],
+        // Japan (8 points)
+        vec![
+            deg_to_rad(37.1, 141.0), deg_to_rad(33.5, 135.8), deg_to_rad(33.9, 131.0),
+            deg_to_rad(31.4, 130.2), deg_to_rad(33.3, 129.4), deg_to_rad(38.2, 139.4),
+            deg_to_rad(41.2, 140.3), deg_to_rad(37.1, 141.0),
+        ],
+        // UK/Ireland (6 points)
+        vec![
+            deg_to_rad(58.6, -3.0), deg_to_rad(51.3, 1.4), deg_to_rad(50.0, -5.2),
+            deg_to_rad(54.0, -2.9), deg_to_rad(56.8, -6.1), deg_to_rad(58.6, -3.0),
+        ],
+        // Antarctica (22 points)
+        vec![
+            deg_to_rad(-64.2, -58.6), deg_to_rad(-68.0, -65.7), deg_to_rad(-73.7, -60.8),
+            deg_to_rad(-79.2, -78.0), deg_to_rad(-83.2, -58.2), deg_to_rad(-80.3, -28.5),
+            deg_to_rad(-78.1, -35.3), deg_to_rad(-70.9, -6.9), deg_to_rad(-65.8, 54.5),
+            deg_to_rad(-72.3, 69.9), deg_to_rad(-66.2, 88.0), deg_to_rad(-65.3, 135.1),
+            deg_to_rad(-71.7, 171.2), deg_to_rad(-80.9, 159.8), deg_to_rad(-84.7, 180.0),
+            deg_to_rad(-90.0, 180.0), deg_to_rad(-90.0, -180.0), deg_to_rad(-84.1, -179.1),
+            deg_to_rad(-85.0, -143.1), deg_to_rad(-76.9, -158.4), deg_to_rad(-73.9, -74.9),
+            deg_to_rad(-64.2, -58.6),
+        ],
+    ];
+
+    // Major world cities (lat, lon in radians) - for network activity blips
+    let major_cities: Vec<(f32, f32)> = vec![
         // North America
-        vec![
-            deg_to_rad(49.0, -125.0), deg_to_rad(54.0, -130.0), deg_to_rad(60.0, -140.0),
-            deg_to_rad(65.0, -168.0), deg_to_rad(71.0, -157.0), deg_to_rad(70.0, -140.0),
-            deg_to_rad(68.0, -110.0), deg_to_rad(62.0, -77.0), deg_to_rad(52.0, -56.0),
-            deg_to_rad(47.0, -53.0), deg_to_rad(45.0, -64.0), deg_to_rad(43.0, -70.0),
-            deg_to_rad(35.0, -75.0), deg_to_rad(30.0, -81.0), deg_to_rad(25.0, -80.0),
-            deg_to_rad(25.0, -97.0), deg_to_rad(20.0, -105.0), deg_to_rad(23.0, -110.0),
-            deg_to_rad(31.0, -117.0), deg_to_rad(34.0, -120.0), deg_to_rad(40.0, -124.0),
-            deg_to_rad(46.0, -124.0),
-        ],
+        deg_to_rad(40.7, -74.0),   // New York
+        deg_to_rad(34.1, -118.2),  // Los Angeles
+        deg_to_rad(41.9, -87.6),   // Chicago
+        deg_to_rad(29.8, -95.4),   // Houston
+        deg_to_rad(33.4, -112.1),  // Phoenix
+        deg_to_rad(37.8, -122.4),  // San Francisco
+        deg_to_rad(47.6, -122.3),  // Seattle
+        deg_to_rad(43.7, -79.4),   // Toronto
+        deg_to_rad(45.5, -73.6),   // Montreal
+        deg_to_rad(19.4, -99.1),   // Mexico City
         // South America
-        vec![
-            deg_to_rad(12.0, -72.0), deg_to_rad(10.0, -62.0), deg_to_rad(5.0, -52.0),
-            deg_to_rad(-5.0, -35.0), deg_to_rad(-15.0, -39.0), deg_to_rad(-23.0, -43.0),
-            deg_to_rad(-34.0, -54.0), deg_to_rad(-42.0, -63.0), deg_to_rad(-52.0, -68.0),
-            deg_to_rad(-56.0, -68.0), deg_to_rad(-54.0, -72.0), deg_to_rad(-46.0, -75.0),
-            deg_to_rad(-37.0, -73.0), deg_to_rad(-30.0, -72.0), deg_to_rad(-20.0, -70.0),
-            deg_to_rad(-5.0, -81.0), deg_to_rad(2.0, -80.0), deg_to_rad(9.0, -77.0),
-        ],
-        // Europe (connected to Asia via land bridge shown separately)
-        vec![
-            deg_to_rad(36.0, -6.0), deg_to_rad(43.0, -9.0), deg_to_rad(44.0, -1.0),
-            deg_to_rad(48.0, -5.0), deg_to_rad(51.0, 2.0), deg_to_rad(54.0, 8.0),
-            deg_to_rad(56.0, 8.0), deg_to_rad(58.0, 6.0), deg_to_rad(63.0, 5.0),
-            deg_to_rad(71.0, 26.0), deg_to_rad(70.0, 32.0), deg_to_rad(65.0, 30.0),
-            deg_to_rad(60.0, 30.0), deg_to_rad(55.0, 21.0), deg_to_rad(54.0, 14.0),
-            deg_to_rad(51.0, 7.0), deg_to_rad(47.0, 7.0), deg_to_rad(44.0, 8.0),
-            deg_to_rad(41.0, 9.0), deg_to_rad(38.0, -4.0),
-        ],
+        deg_to_rad(-23.5, -46.6),  // São Paulo
+        deg_to_rad(-22.9, -43.2),  // Rio de Janeiro
+        deg_to_rad(-34.6, -58.4),  // Buenos Aires
+        deg_to_rad(-33.4, -70.6),  // Santiago
+        deg_to_rad(-12.0, -77.0),  // Lima
+        deg_to_rad(4.7, -74.1),    // Bogotá
+        // Europe
+        deg_to_rad(51.5, -0.1),    // London
+        deg_to_rad(48.9, 2.3),     // Paris
+        deg_to_rad(52.5, 13.4),    // Berlin
+        deg_to_rad(41.9, 12.5),    // Rome
+        deg_to_rad(40.4, -3.7),    // Madrid
+        deg_to_rad(52.4, 4.9),     // Amsterdam
+        deg_to_rad(59.9, 10.8),    // Oslo
+        deg_to_rad(59.3, 18.1),    // Stockholm
+        deg_to_rad(55.8, 37.6),    // Moscow
+        deg_to_rad(50.1, 14.4),    // Prague
+        deg_to_rad(48.2, 16.4),    // Vienna
+        deg_to_rad(41.0, 29.0),    // Istanbul
         // Africa
-        vec![
-            deg_to_rad(37.0, -6.0), deg_to_rad(35.0, 0.0), deg_to_rad(37.0, 10.0),
-            deg_to_rad(32.0, 32.0), deg_to_rad(22.0, 37.0), deg_to_rad(12.0, 44.0),
-            deg_to_rad(5.0, 50.0), deg_to_rad(-10.0, 40.0), deg_to_rad(-26.0, 33.0),
-            deg_to_rad(-34.0, 26.0), deg_to_rad(-34.0, 18.0), deg_to_rad(-30.0, 17.0),
-            deg_to_rad(-17.0, 12.0), deg_to_rad(-5.0, 9.0), deg_to_rad(4.0, 8.0),
-            deg_to_rad(5.0, -5.0), deg_to_rad(10.0, -15.0), deg_to_rad(15.0, -17.0),
-            deg_to_rad(21.0, -17.0), deg_to_rad(28.0, -13.0), deg_to_rad(35.0, -6.0),
-        ],
-        // Asia (simplified major outline)
-        vec![
-            deg_to_rad(42.0, 27.0), deg_to_rad(45.0, 38.0), deg_to_rad(42.0, 52.0),
-            deg_to_rad(47.0, 55.0), deg_to_rad(55.0, 60.0), deg_to_rad(55.0, 72.0),
-            deg_to_rad(52.0, 90.0), deg_to_rad(50.0, 100.0), deg_to_rad(53.0, 110.0),
-            deg_to_rad(58.0, 125.0), deg_to_rad(62.0, 150.0), deg_to_rad(66.0, 170.0),
-            deg_to_rad(70.0, 180.0), deg_to_rad(65.0, 180.0), deg_to_rad(60.0, 165.0),
-            deg_to_rad(52.0, 155.0), deg_to_rad(45.0, 143.0), deg_to_rad(35.0, 130.0),
-            deg_to_rad(22.0, 120.0), deg_to_rad(10.0, 105.0), deg_to_rad(1.0, 104.0),
-            deg_to_rad(-8.0, 115.0), deg_to_rad(-8.0, 110.0), deg_to_rad(5.0, 95.0),
-            deg_to_rad(16.0, 82.0), deg_to_rad(22.0, 72.0), deg_to_rad(24.0, 68.0),
-            deg_to_rad(25.0, 62.0), deg_to_rad(27.0, 51.0), deg_to_rad(30.0, 48.0),
-            deg_to_rad(36.0, 36.0), deg_to_rad(37.0, 27.0),
-        ],
-        // Australia
-        vec![
-            deg_to_rad(-12.0, 130.0), deg_to_rad(-12.0, 142.0), deg_to_rad(-18.0, 146.0),
-            deg_to_rad(-24.0, 153.0), deg_to_rad(-28.0, 153.0), deg_to_rad(-38.0, 150.0),
-            deg_to_rad(-39.0, 144.0), deg_to_rad(-35.0, 136.0), deg_to_rad(-32.0, 133.0),
-            deg_to_rad(-35.0, 117.0), deg_to_rad(-31.0, 115.0), deg_to_rad(-22.0, 114.0),
-            deg_to_rad(-15.0, 124.0), deg_to_rad(-14.0, 129.0),
-        ],
-        // Greenland
-        vec![
-            deg_to_rad(83.0, -35.0), deg_to_rad(82.0, -20.0), deg_to_rad(76.0, -18.0),
-            deg_to_rad(70.0, -22.0), deg_to_rad(60.0, -43.0), deg_to_rad(60.0, -49.0),
-            deg_to_rad(66.0, -54.0), deg_to_rad(72.0, -55.0), deg_to_rad(78.0, -68.0),
-            deg_to_rad(81.0, -62.0), deg_to_rad(83.0, -42.0),
-        ],
-        // Japan (simplified)
-        vec![
-            deg_to_rad(31.0, 131.0), deg_to_rad(33.0, 136.0), deg_to_rad(35.0, 140.0),
-            deg_to_rad(41.0, 141.0), deg_to_rad(45.0, 142.0), deg_to_rad(43.0, 145.0),
-            deg_to_rad(40.0, 140.0), deg_to_rad(35.0, 139.0), deg_to_rad(33.0, 130.0),
-        ],
-        // UK/Ireland
-        vec![
-            deg_to_rad(50.0, -5.0), deg_to_rad(52.0, 2.0), deg_to_rad(56.0, -3.0),
-            deg_to_rad(59.0, -3.0), deg_to_rad(58.0, -7.0), deg_to_rad(54.0, -10.0),
-            deg_to_rad(52.0, -10.0), deg_to_rad(51.0, -6.0),
-        ],
+        deg_to_rad(30.0, 31.2),    // Cairo
+        deg_to_rad(-33.9, 18.4),   // Cape Town
+        deg_to_rad(-1.3, 36.8),    // Nairobi
+        deg_to_rad(6.5, 3.4),      // Lagos
+        deg_to_rad(33.6, -7.6),    // Casablanca
+        deg_to_rad(-26.2, 28.0),   // Johannesburg
+        // Asia
+        deg_to_rad(35.7, 139.7),   // Tokyo
+        deg_to_rad(31.2, 121.5),   // Shanghai
+        deg_to_rad(39.9, 116.4),   // Beijing
+        deg_to_rad(22.3, 114.2),   // Hong Kong
+        deg_to_rad(1.4, 103.8),    // Singapore
+        deg_to_rad(37.6, 127.0),   // Seoul
+        deg_to_rad(13.8, 100.5),   // Bangkok
+        deg_to_rad(28.6, 77.2),    // Delhi
+        deg_to_rad(19.1, 72.9),    // Mumbai
+        deg_to_rad(25.0, 121.5),   // Taipei
+        deg_to_rad(14.6, 121.0),   // Manila
+        deg_to_rad(-6.2, 106.8),   // Jakarta
+        deg_to_rad(25.3, 55.3),    // Dubai
+        deg_to_rad(32.1, 34.8),    // Tel Aviv
+        // Oceania
+        deg_to_rad(-33.9, 151.2),  // Sydney
+        deg_to_rad(-37.8, 145.0),  // Melbourne
+        deg_to_rad(-36.8, 174.8),  // Auckland
+        deg_to_rad(-27.5, 153.0),  // Brisbane
     ];
 
     loop {
@@ -1375,11 +1470,13 @@ fn run_globe(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> i
             }
         }
 
-        // Spawn new blips randomly
+        // Spawn new blips at major cities
         if rng.gen_bool(0.15) {
+            let city_idx = rng.gen_range(0..major_cities.len());
+            let (lat, lon) = major_cities[city_idx];
             blips.push(Blip {
-                lat: rng.gen_range(-1.2..1.2),
-                lon: rng.gen_range(-std::f32::consts::PI..std::f32::consts::PI),
+                lat,
+                lon,
                 age: 0.0,
                 max_age: rng.gen_range(0.5..2.0),
             });
