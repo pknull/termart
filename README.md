@@ -17,6 +17,9 @@ Terminal-based generative art: bonsai trees and animated visualizations.
 - **3D Cube**: Rotating wireframe cube using braille characters
 - **Pipes**: Classic pipes screensaver
 - **Donut**: Rotating 3D torus (donut.c style)
+- **Globe**: Rotating 3D globe with network activity nodes (eDEX-UI style), auto-detects user location
+- **Hex Grid**: Hexagon grid with animated wave/pulse effects (eDEX-UI style)
+- **Keyboard**: On-screen keyboard visualization with real-time global key monitoring via evdev
 
 All visualizations support:
 - Interactive speed control (1-9 keys)
@@ -80,15 +83,21 @@ termart bonsai --message "Happy Birthday!"
 termart viz
 
 # Specify visualization type
-termart viz -T matrix
-termart viz -T life
-termart viz -T plasma
-termart viz -T fire
-termart viz -T rain
-termart viz -T waves
-termart viz -T cube
-termart viz -T pipes
-termart viz -T donut
+termart viz -T matrix    # Classic falling characters
+termart viz -T life      # Conway's Game of Life
+termart viz -T plasma    # Sine wave plasma effect
+termart viz -T fire      # Doom-style fire simulation
+termart viz -T rain      # Raindrops with splashes
+termart viz -T waves     # Ocean wave animation
+termart viz -T cube      # Rotating 3D wireframe cube
+termart viz -T pipes     # Classic pipes screensaver
+termart viz -T donut     # Rotating 3D torus
+termart viz -T globe     # Rotating globe with network nodes
+termart viz -T hex       # Hexagon grid with wave pulses
+termart viz -T keyboard  # On-screen keyboard (requires evdev access)
+
+# Keyboard with debug info (shows F-keys row)
+termart viz -T keyboard --debug
 ```
 
 **Visualization Options:**
@@ -96,6 +105,7 @@ termart viz -T donut
 - `-t, --time <SECONDS>`: Animation speed (default: 0.03)
 - `-s, --seed <NUMBER>`: Random seed
 - `-c, --char <CHAR>`: Character for drawing (life mode)
+- `-d, --debug`: Show debug info (keyboard: displays F-keys and status)
 
 ### Interactive Controls
 
@@ -132,7 +142,25 @@ termart viz -T waves
 
 # Classic donut
 termart viz -T donut
+
+# eDEX-UI style globe with network activity
+termart viz -T globe
+
+# Hexagon honeycomb grid
+termart viz -T hex
+
+# Live keyboard heatmap (requires input group access)
+termart viz -T keyboard
 ```
+
+## Notes
+
+### Keyboard Visualization
+
+The keyboard visualization uses Linux evdev to monitor global key events. This requires:
+- Read access to `/dev/input/event*` devices
+- Usually requires membership in the `input` group: `sudo usermod -aG input $USER`
+- Log out and back in after adding yourself to the group
 
 ## License
 
