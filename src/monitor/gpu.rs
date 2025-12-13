@@ -1,6 +1,10 @@
+use crate::colors::ColorState;
 use crate::terminal::Terminal;
 use crate::monitor::{MonitorConfig, MonitorState};
-use crate::monitor::layout::{Box, draw_meter_btop, cpu_gradient_color, format_bytes};
+use crate::monitor::layout::{
+    Box, draw_meter_btop_scheme, cpu_gradient_color_scheme, format_bytes,
+    muted_color_scheme, header_color_scheme, temp_gradient_color_scheme,
+};
 use crossterm::style::Color;
 use crossterm::terminal::size;
 use std::fs;
@@ -262,19 +266,20 @@ impl GpuMonitor {
         Ok(())
     }
 
-    pub fn render(&self, term: &mut Terminal, bx: &Box) {
+    #[allow(dead_code)]
+    pub fn render(&self, term: &mut Terminal, bx: &Box, colors: &ColorState) {
         let x = bx.inner_x();
         let y = bx.inner_y();
         let w = bx.inner_width() as usize;
         let h = bx.inner_height() as usize;
-        self.render_at(term, x, y, w, h);
+        self.render_at(term, x, y, w, h, colors);
     }
 
-    pub fn render_fullscreen(&self, term: &mut Terminal, w: usize, h: usize) {
-        self.render_at(term, 0, 0, w, h);
+    pub fn render_fullscreen(&self, term: &mut Terminal, w: usize, h: usize, colors: &ColorState) {
+        self.render_at(term, 0, 0, w, h, colors);
     }
 
-    fn render_at(&self, term: &mut Terminal, x: i32, y: i32, w: usize, h: usize) {
+    fn render_at(&self, term: &mut Terminal, x: i32, y: i32, w: usize, h: usize, colors: &ColorState) {
         if h < 4 || w < 30 { return; }
 
         if let Some(ref err) = self.error_msg {
@@ -312,40 +317,41 @@ impl GpuMonitor {
                 gpu.name.clone()
             };
 
-            term.set_str(x, cy, &name_display, Some(Color::Cyan), true);
+            term.set_str(x, cy, &name_display, Some(header_color_scheme(colors)), true);
             if let Some(temp) = gpu.temperature {
-                let temp_color = if temp >= 80 { Color::Red } else if temp >= 70 { Color::Yellow } else { Color::Green };
+                let temp_pct = ((temp as f32 - 20.0) / 80.0 * 100.0).clamp(0.0, 100.0);
+                let temp_color = temp_gradient_color_scheme(temp_pct, colors);
                 let ts = format!("{:4}°C", temp);
                 term.set_str(x + w as i32 - ts.len() as i32, cy, &ts, Some(temp_color), false);
             }
             cy += 1;
 
             // GPU utilization
-            self.draw_gpu_row(term, x, cy, w, "GPU", gpu.utilization, None, cpu_gradient_color(gpu.utilization));
+            self.draw_gpu_row(term, x, cy, w, "GPU", gpu.utilization, None, colors, true);
             cy += 1;
 
             // VRAM
             let mem_pct = gpu.memory_percent();
             let mem_str = format!("{}/{}", format_bytes(gpu.memory_used), format_bytes(gpu.memory_total));
-            self.draw_gpu_row(term, x, cy, w, "VRAM", mem_pct, Some(&mem_str), Color::AnsiValue(12));
+            self.draw_gpu_row(term, x, cy, w, "VRAM", mem_pct, Some(&mem_str), colors, false);
             cy += 1;
 
             // Power
             if let (Some(draw), Some(limit)) = (gpu.power_draw, gpu.power_limit) {
                 let power_pct = (draw / limit * 100.0).min(100.0);
                 let power_str = format!("{:.0}W/{:.0}W", draw, limit);
-                self.draw_gpu_row(term, x, cy, w, "Power", power_pct, Some(&power_str), Color::AnsiValue(13));
+                self.draw_gpu_row(term, x, cy, w, "Power", power_pct, Some(&power_str), colors, false);
             } else {
-                term.set_str(x, cy, "Power   N/A", Some(Color::DarkGrey), false);
+                term.set_str(x, cy, "Power   N/A", Some(muted_color_scheme(colors)), false);
             }
             cy += 1;
 
             // Fan
             if let Some(fan_pct) = gpu.fan_percent() {
                 let fan_str = gpu.fan_speed.map(|rpm| format!("{}RPM", rpm));
-                self.draw_gpu_row(term, x, cy, w, "Fan", fan_pct, fan_str.as_deref(), Color::AnsiValue(14));
+                self.draw_gpu_row(term, x, cy, w, "Fan", fan_pct, fan_str.as_deref(), colors, false);
             } else {
-                term.set_str(x, cy, "Fan     N/A", Some(Color::DarkGrey), false);
+                term.set_str(x, cy, "Fan     N/A", Some(muted_color_scheme(colors)), false);
             }
             cy += 1;
 
@@ -356,7 +362,7 @@ impl GpuMonitor {
         }
     }
 
-    fn draw_gpu_row(&self, term: &mut Terminal, x: i32, y: i32, width: usize, label: &str, percent: f32, value_str: Option<&str>, color: Color) {
+    fn draw_gpu_row(&self, term: &mut Terminal, x: i32, y: i32, width: usize, label: &str, percent: f32, value_str: Option<&str>, colors: &ColorState, is_util: bool) {
         // Layout: Label(8) + Meter(dynamic) + Pct(6) + Value(16) - always reserve value space
         let label_w = 8;
         let pct_w = 6;
@@ -367,12 +373,21 @@ impl GpuMonitor {
 
         // Label
         let label_str = format!("{:<8}", label);
-        term.set_str(pos, y, &label_str, Some(Color::Grey), false);
+        term.set_str(pos, y, &label_str, Some(muted_color_scheme(colors)), false);
         pos += label_w as i32;
+
+        // Color based on scheme
+        let color = if is_util {
+            cpu_gradient_color_scheme(percent, colors)
+        } else if colors.is_mono() {
+            Color::AnsiValue(12)  // Blue for non-util items in mono
+        } else {
+            cpu_gradient_color_scheme(50.0, colors)  // Mid-intensity for non-util
+        };
 
         // Meter
         if meter_w > 0 {
-            draw_meter_btop(term, pos, y, meter_w, percent, color);
+            draw_meter_btop_scheme(term, pos, y, meter_w, percent, colors);
             pos += meter_w as i32;
         }
 
@@ -384,7 +399,7 @@ impl GpuMonitor {
         // Value (right-aligned in fixed space)
         if let Some(val) = value_str {
             let val_pad = value_w.saturating_sub(val.len());
-            term.set_str(pos + val_pad as i32, y, val, Some(Color::DarkGrey), false);
+            term.set_str(pos + val_pad as i32, y, val, Some(muted_color_scheme(colors)), false);
         }
     }
 }
@@ -418,7 +433,7 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
         term.clear();
 
         let (w, h) = term.size();
-        monitor.render_fullscreen(&mut term, w as usize, h as usize);
+        monitor.render_fullscreen(&mut term, w as usize, h as usize, &state.colors);
 
         term.present()?;
         term.sleep(state.speed);

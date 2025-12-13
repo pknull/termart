@@ -1,6 +1,10 @@
+use crate::colors::ColorState;
 use crate::terminal::Terminal;
 use crate::monitor::{MonitorConfig, MonitorState};
-use crate::monitor::layout::{draw_meter_btop, format_bytes, cpu_gradient_color, Box};
+use crate::monitor::layout::{
+    draw_meter_btop_scheme, format_bytes,
+    cpu_gradient_color_scheme, text_color_scheme, muted_color_scheme, Box,
+};
 use crossterm::style::Color;
 use crossterm::terminal::size;
 use std::fs;
@@ -95,19 +99,20 @@ impl MemMonitor {
         Ok(())
     }
 
-    pub fn render_fullscreen(&self, term: &mut Terminal, w: usize, h: usize) {
-        self.render_at(term, 0, 0, w, h);
+    pub fn render_fullscreen(&self, term: &mut Terminal, w: usize, h: usize, colors: &ColorState) {
+        self.render_at(term, 0, 0, w, h, colors);
     }
 
-    pub fn render(&self, term: &mut Terminal, bx: &Box) {
+    #[allow(dead_code)]
+    pub fn render(&self, term: &mut Terminal, bx: &Box, colors: &ColorState) {
         let x = bx.inner_x();
         let y = bx.inner_y();
         let w = bx.inner_width() as usize;
         let h = bx.inner_height() as usize;
-        self.render_at(term, x, y, w, h);
+        self.render_at(term, x, y, w, h, colors);
     }
 
-    fn render_at(&self, term: &mut Terminal, x: i32, y: i32, w: usize, h: usize) {
+    fn render_at(&self, term: &mut Terminal, x: i32, y: i32, w: usize, h: usize, colors: &ColorState) {
         if h < 4 || w < 30 { return; }
 
         // Use full width
@@ -125,50 +130,50 @@ impl MemMonitor {
         let mut cy = info_y;
 
         // Memory title with total right-aligned
-        term.set_str(panel_x, cy, "Memory", Some(Color::White), true);
+        term.set_str(panel_x, cy, "Memory", Some(text_color_scheme(colors)), true);
         let total_str = format_bytes(self.info.mem_total);
-        term.set_str(panel_x + panel_w as i32 - total_str.len() as i32, cy, &total_str, Some(Color::DarkGrey), false);
+        term.set_str(panel_x + panel_w as i32 - total_str.len() as i32, cy, &total_str, Some(muted_color_scheme(colors)), false);
         cy += 1;
 
         // Used memory with meter
         let used_pct = self.info.mem_percent();
-        self.draw_mem_row(term, panel_x, cy, panel_w, "Used", self.info.mem_used(), used_pct, cpu_gradient_color(used_pct));
+        self.draw_mem_row(term, panel_x, cy, panel_w, "Used", self.info.mem_used(), used_pct, colors, true);
         cy += 1;
 
         // Cached
         let cached_pct = self.info.cached_percent();
-        self.draw_mem_row(term, panel_x, cy, panel_w, "Cached", self.info.cached, cached_pct, Color::AnsiValue(12));
+        self.draw_mem_row(term, panel_x, cy, panel_w, "Cached", self.info.cached, cached_pct, colors, false);
         cy += 1;
 
         // Buffers
         let buffers_pct = if self.info.mem_total > 0 {
             (self.info.buffers as f32 / self.info.mem_total as f32) * 100.0
         } else { 0.0 };
-        self.draw_mem_row(term, panel_x, cy, panel_w, "Buffers", self.info.buffers, buffers_pct, Color::AnsiValue(14));
+        self.draw_mem_row(term, panel_x, cy, panel_w, "Buffers", self.info.buffers, buffers_pct, colors, false);
         cy += 1;
 
         // Free
         let free_pct = if self.info.mem_total > 0 {
             (self.info.mem_free as f32 / self.info.mem_total as f32) * 100.0
         } else { 0.0 };
-        self.draw_mem_row(term, panel_x, cy, panel_w, "Free", self.info.mem_free, free_pct, Color::DarkGrey);
+        self.draw_mem_row(term, panel_x, cy, panel_w, "Free", self.info.mem_free, free_pct, colors, false);
         cy += 1;
 
         // Swap section (if present)
         if has_swap {
             cy += 1; // Blank line
 
-            term.set_str(panel_x, cy, "Swap", Some(Color::White), true);
+            term.set_str(panel_x, cy, "Swap", Some(text_color_scheme(colors)), true);
             let swap_total_str = format_bytes(self.info.swap_total);
-            term.set_str(panel_x + panel_w as i32 - swap_total_str.len() as i32, cy, &swap_total_str, Some(Color::DarkGrey), false);
+            term.set_str(panel_x + panel_w as i32 - swap_total_str.len() as i32, cy, &swap_total_str, Some(muted_color_scheme(colors)), false);
             cy += 1;
 
             let swap_pct = self.info.swap_percent();
-            self.draw_mem_row(term, panel_x, cy, panel_w, "Used", self.info.swap_used(), swap_pct, Color::AnsiValue(13));
+            self.draw_mem_row(term, panel_x, cy, panel_w, "Used", self.info.swap_used(), swap_pct, colors, true);
         }
     }
 
-    fn draw_mem_row(&self, term: &mut Terminal, x: i32, y: i32, width: usize, label: &str, bytes: u64, percent: f32, color: Color) {
+    fn draw_mem_row(&self, term: &mut Terminal, x: i32, y: i32, width: usize, label: &str, bytes: u64, percent: f32, colors: &ColorState, use_gradient: bool) {
         // Layout: Label(8) + Meter(dynamic) + Pct(6) + Size(9)
         // Meter fills space between label and pct+size
         let label_w = 8;
@@ -180,12 +185,21 @@ impl MemMonitor {
 
         // Label (8 chars)
         let label_str = format!("{:<8}", label);
-        term.set_str(pos, y, &label_str, Some(Color::Grey), false);
+        term.set_str(pos, y, &label_str, Some(muted_color_scheme(colors)), false);
         pos += label_w as i32;
+
+        // Get color based on scheme
+        let color = if use_gradient {
+            cpu_gradient_color_scheme(percent, colors)
+        } else if colors.is_mono() {
+            Color::AnsiValue(12)  // Blue for non-gradient items in mono
+        } else {
+            cpu_gradient_color_scheme(50.0, colors)  // Mid-intensity for non-gradient
+        };
 
         // Meter (dynamic width)
         if meter_w > 0 {
-            draw_meter_btop(term, pos, y, meter_w, percent, color);
+            draw_meter_btop_scheme(term, pos, y, meter_w, percent, colors);
             pos += meter_w as i32;
         }
 
@@ -197,7 +211,7 @@ impl MemMonitor {
         // Size right-aligned
         let size_str = format_bytes(bytes);
         let size_pad = size_w.saturating_sub(size_str.len());
-        term.set_str(pos + size_pad as i32, y, &size_str, Some(Color::DarkGrey), false);
+        term.set_str(pos + size_pad as i32, y, &size_str, Some(muted_color_scheme(colors)), false);
     }
 }
 
@@ -231,7 +245,7 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
 
         // Render without border
         let (w, h) = term.size();
-        monitor.render_fullscreen(&mut term, w as usize, h as usize);
+        monitor.render_fullscreen(&mut term, w as usize, h as usize, &state.colors);
 
         term.present()?;
         term.sleep(state.speed);

@@ -1,3 +1,4 @@
+use crate::colors::{ColorState, scheme_color};
 use crate::terminal::Terminal;
 use crossterm::style::Color;
 
@@ -157,6 +158,31 @@ pub fn draw_meter_btop(
     }
 }
 
+/// Draw a btop-style meter with color scheme support
+pub fn draw_meter_btop_scheme(
+    term: &mut Terminal,
+    x: i32,
+    y: i32,
+    width: usize,
+    percent: f32,
+    colors: &ColorState,
+) {
+    if width == 0 { return; }
+
+    const METER_CHAR: char = '■';
+    let filled = ((percent / 100.0) * width as f32) as usize;
+
+    for i in 0..width {
+        if i < filled {
+            let pos_pct = (i as f32 / width as f32) * 100.0;
+            let grad = cpu_gradient_color_scheme(pos_pct.min(percent), colors);
+            term.set(x + i as i32, y, METER_CHAR, Some(grad), false);
+        } else {
+            term.set(x + i as i32, y, METER_CHAR, Some(muted_color_scheme(colors)), false);
+        }
+    }
+}
+
 /// Draw per-core meters with temps (linear meter style)
 /// Format: C0  ■■■■■■■■■■   0% ■■■■■  29°C│C6  ...
 pub fn draw_core_graphs(
@@ -240,6 +266,80 @@ pub fn draw_core_graphs(
     }
 }
 
+/// Draw per-core meters with temps and color scheme support
+pub fn draw_core_graphs_scheme(
+    term: &mut Terminal,
+    x: i32,
+    y: i32,
+    width: usize,
+    height: usize,
+    usage: &[f32],
+    temps: &[Option<u32>],
+    colors: &ColorState,
+) {
+    if usage.is_empty() || height == 0 { return; }
+
+    let cores = usage.len();
+    let has_temps = !temps.is_empty();
+
+    let cols = 2;
+    let col_width = (width - 1) / cols;
+    let rows_per_col = (cores + cols - 1) / cols;
+    let actual_rows = rows_per_col.min(height);
+
+    let label_w = 4;
+    let pct_w = 5;
+    let temp_section_w = if has_temps { 1 + 5 + 6 } else { 0 };
+    let fixed_w = label_w + pct_w + temp_section_w;
+
+    let usage_meter_w = col_width.saturating_sub(fixed_w).max(5);
+    let temp_meter_w = if has_temps { 5 } else { 0 };
+
+    for row in 0..actual_rows {
+        for col in 0..cols {
+            let idx = col * rows_per_col + row;
+            if idx >= cores { continue; }
+
+            if col > 0 {
+                term.set(x + col_width as i32, y + row as i32, '│', Some(muted_color_scheme(colors)), false);
+            }
+
+            let cx = x + (col * (col_width + 1)) as i32;
+            let cy = y + row as i32;
+            let pct = usage[idx];
+            let mut pos = cx;
+
+            let label = format!("{:<4}", format!("C{}", idx));
+            term.set_str(pos, cy, &label, Some(text_color_scheme(colors)), false);
+            pos += label_w as i32;
+
+            if usage_meter_w > 0 {
+                draw_meter_btop_scheme(term, pos, cy, usage_meter_w, pct, colors);
+                pos += usage_meter_w as i32;
+            }
+
+            let pct_str = format!("{:4.0}%", pct);
+            term.set_str(pos, cy, &pct_str, Some(cpu_gradient_color_scheme(pct, colors)), false);
+            pos += 5;
+
+            if temp_meter_w > 0 {
+                pos += 1;
+                if let Some(Some(temp)) = temps.get(idx) {
+                    let temp_pct = ((*temp as f32 - 20.0) / 80.0 * 100.0).clamp(0.0, 100.0);
+                    draw_meter_btop_scheme(term, pos, cy, temp_meter_w, temp_pct, colors);
+                }
+                pos += temp_meter_w as i32;
+            }
+
+            if let Some(Some(temp)) = temps.get(idx) {
+                let temp_str = format!("  {:2}°C", temp);
+                let temp_pct = ((*temp as f32 - 20.0) / 80.0 * 100.0).clamp(0.0, 100.0);
+                term.set_str(pos, cy, &temp_str, Some(temp_gradient_color_scheme(temp_pct, colors)), false);
+            }
+        }
+    }
+}
+
 /// Format bytes with adaptive precision
 pub fn format_bytes(bytes: u64) -> String {
     const KB: u64 = 1024;
@@ -313,6 +413,65 @@ pub fn temp_gradient_color(percent: f32) -> Color {
         Color::AnsiValue(14)  // Bright cyan (ANSI 96) - mid point
     } else {
         Color::AnsiValue(12)  // Bright blue (ANSI 94)
+    }
+}
+
+// ============ Scheme-aware color functions ============
+
+/// Get gradient color with scheme support
+pub fn gradient_color_scheme(percent: f32, colors: &ColorState) -> Color {
+    if colors.is_mono() {
+        gradient_color(percent)
+    } else {
+        let intensity = if percent >= 80.0 { 3 } else if percent >= 50.0 { 2 } else { 1 };
+        scheme_color(colors.scheme, intensity, percent >= 80.0).0
+    }
+}
+
+/// Get CPU gradient color with scheme support
+pub fn cpu_gradient_color_scheme(percent: f32, colors: &ColorState) -> Color {
+    if colors.is_mono() {
+        cpu_gradient_color(percent)
+    } else {
+        let intensity = if percent >= 80.0 { 3 } else if percent >= 50.0 { 2 } else { 1 };
+        scheme_color(colors.scheme, intensity, percent >= 80.0).0
+    }
+}
+
+/// Get temperature gradient color with scheme support
+pub fn temp_gradient_color_scheme(percent: f32, colors: &ColorState) -> Color {
+    if colors.is_mono() {
+        temp_gradient_color(percent)
+    } else {
+        let intensity = if percent >= 70.0 { 3 } else if percent >= 40.0 { 2 } else { 1 };
+        scheme_color(colors.scheme, intensity, percent >= 70.0).0
+    }
+}
+
+/// Get text color with scheme support
+pub fn text_color_scheme(colors: &ColorState) -> Color {
+    if colors.is_mono() {
+        Color::White
+    } else {
+        scheme_color(colors.scheme, 2, false).0
+    }
+}
+
+/// Get muted color with scheme support
+pub fn muted_color_scheme(colors: &ColorState) -> Color {
+    if colors.is_mono() {
+        Color::DarkGrey
+    } else {
+        scheme_color(colors.scheme, 0, false).0
+    }
+}
+
+/// Get header color with scheme support
+pub fn header_color_scheme(colors: &ColorState) -> Color {
+    if colors.is_mono() {
+        Color::Cyan
+    } else {
+        scheme_color(colors.scheme, 3, true).0
     }
 }
 

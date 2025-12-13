@@ -1,6 +1,10 @@
+use crate::colors::ColorState;
 use crate::terminal::Terminal;
 use crate::monitor::{MonitorConfig, MonitorState};
-use crate::monitor::layout::{Box, draw_meter_btop, format_rate, format_bytes};
+use crate::monitor::layout::{
+    Box, draw_meter_btop_scheme, format_rate, format_bytes,
+    cpu_gradient_color_scheme, text_color_scheme, muted_color_scheme, header_color_scheme,
+};
 use crossterm::style::Color;
 use crossterm::terminal::size;
 use std::collections::HashMap;
@@ -107,19 +111,20 @@ impl NetMonitor {
         Ok(())
     }
 
-    pub fn render(&self, term: &mut Terminal, bx: &Box) {
+    #[allow(dead_code)]
+    pub fn render(&self, term: &mut Terminal, bx: &Box, colors: &ColorState) {
         let x = bx.inner_x();
         let y = bx.inner_y();
         let w = bx.inner_width() as usize;
         let h = bx.inner_height() as usize;
-        self.render_at(term, x, y, w, h);
+        self.render_at(term, x, y, w, h, colors);
     }
 
-    pub fn render_fullscreen(&self, term: &mut Terminal, w: usize, h: usize) {
-        self.render_at(term, 0, 0, w, h);
+    pub fn render_fullscreen(&self, term: &mut Terminal, w: usize, h: usize, colors: &ColorState) {
+        self.render_at(term, 0, 0, w, h, colors);
     }
 
-    fn render_at(&self, term: &mut Terminal, x: i32, y: i32, w: usize, h: usize) {
+    fn render_at(&self, term: &mut Terminal, x: i32, y: i32, w: usize, h: usize, colors: &ColorState) {
         if h < 4 || w < 30 { return; }
 
         // Calculate panel height: Title(1) + Download(1) + Upload(1) + blank + per-interface lines
@@ -133,19 +138,19 @@ impl NetMonitor {
         // Title with total transferred
         let total_rx: u64 = self.total_rx.values().sum();
         let total_tx: u64 = self.total_tx.values().sum();
-        term.set_str(x, cy, "Network", Some(Color::White), true);
+        term.set_str(x, cy, "Network", Some(text_color_scheme(colors)), true);
         let totals_str = format!("↓{} ↑{}", format_bytes(total_rx), format_bytes(total_tx));
-        term.set_str(x + w as i32 - totals_str.len() as i32, cy, &totals_str, Some(Color::DarkGrey), false);
+        term.set_str(x + w as i32 - totals_str.len() as i32, cy, &totals_str, Some(muted_color_scheme(colors)), false);
         cy += 1;
 
         // Download rate
         let rx_pct = ((self.total_rx_rate / self.peak_rx_rate) * 100.0).min(100.0) as f32;
-        self.draw_net_row(term, x, cy, w, "Download", rx_pct, self.total_rx_rate, Color::Green);
+        self.draw_net_row(term, x, cy, w, "Download", rx_pct, self.total_rx_rate, colors, true);
         cy += 1;
 
         // Upload rate
         let tx_pct = ((self.total_tx_rate / self.peak_tx_rate) * 100.0).min(100.0) as f32;
-        self.draw_net_row(term, x, cy, w, "Upload", tx_pct, self.total_tx_rate, Color::Magenta);
+        self.draw_net_row(term, x, cy, w, "Upload", tx_pct, self.total_tx_rate, colors, false);
         cy += 1;
 
         // Per-interface breakdown (if multiple interfaces)
@@ -157,23 +162,23 @@ impl NetMonitor {
                 let iface_tx = self.tx_rates.get(iface).copied().unwrap_or(0.0);
 
                 // Interface name as label
-                term.set_str(x, cy, iface, Some(Color::Cyan), false);
+                term.set_str(x, cy, iface, Some(header_color_scheme(colors)), false);
                 cy += 1;
 
                 // Download for this interface
                 let iface_rx_pct = ((iface_rx / self.peak_rx_rate) * 100.0).min(100.0) as f32;
-                self.draw_net_row(term, x, cy, w, "  ↓", iface_rx_pct, iface_rx, Color::Green);
+                self.draw_net_row(term, x, cy, w, "  ↓", iface_rx_pct, iface_rx, colors, true);
                 cy += 1;
 
                 // Upload for this interface
                 let iface_tx_pct = ((iface_tx / self.peak_tx_rate) * 100.0).min(100.0) as f32;
-                self.draw_net_row(term, x, cy, w, "  ↑", iface_tx_pct, iface_tx, Color::Magenta);
+                self.draw_net_row(term, x, cy, w, "  ↑", iface_tx_pct, iface_tx, colors, false);
                 cy += 1;
             }
         }
     }
 
-    fn draw_net_row(&self, term: &mut Terminal, x: i32, y: i32, width: usize, label: &str, percent: f32, rate: f64, color: Color) {
+    fn draw_net_row(&self, term: &mut Terminal, x: i32, y: i32, width: usize, label: &str, percent: f32, rate: f64, colors: &ColorState, is_download: bool) {
         // Layout: Label(10) + Meter(dynamic) + Pct(6) + Rate(12)
         let label_w = 10;
         let pct_w = 6;
@@ -184,12 +189,19 @@ impl NetMonitor {
 
         // Label
         let label_str = format!("{:<10}", label);
-        term.set_str(pos, y, &label_str, Some(Color::Grey), false);
+        term.set_str(pos, y, &label_str, Some(muted_color_scheme(colors)), false);
         pos += label_w as i32;
+
+        // Color based on scheme
+        let color = if colors.is_mono() {
+            if is_download { Color::Green } else { Color::Magenta }
+        } else {
+            cpu_gradient_color_scheme(percent, colors)
+        };
 
         // Meter
         if meter_w > 0 {
-            draw_meter_btop(term, pos, y, meter_w, percent, color);
+            draw_meter_btop_scheme(term, pos, y, meter_w, percent, colors);
             pos += meter_w as i32;
         }
 
@@ -201,7 +213,7 @@ impl NetMonitor {
         // Rate right-aligned
         let rate_str = format_rate(rate);
         let rate_pad = rate_w.saturating_sub(rate_str.len());
-        term.set_str(pos + rate_pad as i32, y, &rate_str, Some(Color::DarkGrey), false);
+        term.set_str(pos + rate_pad as i32, y, &rate_str, Some(muted_color_scheme(colors)), false);
     }
 }
 
@@ -234,7 +246,7 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
         term.clear();
 
         let (w, h) = term.size();
-        monitor.render_fullscreen(&mut term, w as usize, h as usize);
+        monitor.render_fullscreen(&mut term, w as usize, h as usize, &state.colors);
 
         term.present()?;
         term.sleep(state.speed);

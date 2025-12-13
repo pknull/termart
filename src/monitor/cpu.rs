@@ -1,7 +1,11 @@
+use crate::colors::ColorState;
 use crate::terminal::Terminal;
 use crate::monitor::{MonitorConfig, MonitorState};
-use crate::monitor::layout::{Box, draw_meter_btop, draw_core_graphs, gradient_color, cpu_gradient_color, temp_gradient_color};
-use crossterm::style::Color;
+use crate::monitor::layout::{
+    Box, draw_meter_btop_scheme, draw_core_graphs_scheme,
+    cpu_gradient_color_scheme, temp_gradient_color_scheme,
+    text_color_scheme, muted_color_scheme,
+};
 use crossterm::terminal::size;
 use std::fs;
 use std::io;
@@ -277,20 +281,20 @@ impl CpuMonitor {
         Ok(())
     }
 
-    pub fn render_fullscreen(&self, term: &mut Terminal, w: usize, h: usize) {
-        self.render_at(term, 0, 0, w, h);
+    pub fn render_fullscreen(&self, term: &mut Terminal, w: usize, h: usize, colors: &ColorState) {
+        self.render_at(term, 0, 0, w, h, colors);
     }
 
     #[allow(dead_code)]
-    pub fn render(&self, term: &mut Terminal, bx: &Box) {
+    pub fn render(&self, term: &mut Terminal, bx: &Box, colors: &ColorState) {
         let x = bx.inner_x();
         let y = bx.inner_y();
         let w = bx.inner_width() as usize;
         let h = bx.inner_height() as usize;
-        self.render_at(term, x, y, w, h);
+        self.render_at(term, x, y, w, h, colors);
     }
 
-    fn render_at(&self, term: &mut Terminal, x: i32, y: i32, w: usize, h: usize) {
+    fn render_at(&self, term: &mut Terminal, x: i32, y: i32, w: usize, h: usize, colors: &ColorState) {
 
         if h < 3 || w < 20 { return; }
 
@@ -318,9 +322,9 @@ impl CpuMonitor {
         let max_model_len = core_section_w.saturating_sub(freq.len() + 2);
         let model_short = shorten_cpu_model(&model, max_model_len);
 
-        term.set_str(info_x, cy, &model_short, Some(Color::White), true);
+        term.set_str(info_x, cy, &model_short, Some(text_color_scheme(colors)), true);
         if !freq.is_empty() {
-            term.set_str(info_x + core_section_w as i32 - freq.len() as i32, cy, &freq, Some(Color::Green), false);
+            term.set_str(info_x + core_section_w as i32 - freq.len() as i32, cy, &freq, Some(cpu_gradient_color_scheme(30.0, colors)), false);
         }
         cy += 1;
 
@@ -336,23 +340,23 @@ impl CpuMonitor {
         let mut pos = info_x;
 
         // "CPU " label (4 chars, same as core labels)
-        term.set_str(pos, cy, "CPU ", Some(Color::White), false);
+        term.set_str(pos, cy, "CPU ", Some(text_color_scheme(colors)), false);
         pos += label_w as i32;
 
         // Meter bar (dynamic width to match core meters)
-        draw_meter_btop(term, pos, cy, meter_w, self.usage_total, gradient_color(self.usage_total));
+        draw_meter_btop_scheme(term, pos, cy, meter_w, self.usage_total, colors);
         pos += meter_w as i32;
 
         // Percentage (5 chars right-aligned to match core pct position)
         let pct_str = format!("{:4.0}%", self.usage_total);
-        term.set_str(pos, cy, &pct_str, Some(cpu_gradient_color(self.usage_total)), false);
+        term.set_str(pos, cy, &pct_str, Some(cpu_gradient_color_scheme(self.usage_total, colors)), false);
         pos += pct_w as i32 + 1;  // 5 chars + 1 space
 
         // Temperature meter (5 chars to match core temp meter width)
         let temp_meter_w = 5;
         if let Some(temp) = pkg_temp {
             let temp_pct = ((temp as f32 - 20.0) / 80.0 * 100.0).clamp(0.0, 100.0);
-            draw_meter_btop(term, pos, cy, temp_meter_w, temp_pct, temp_gradient_color(temp_pct));
+            draw_meter_btop_scheme(term, pos, cy, temp_meter_w, temp_pct, colors);
         }
         pos += temp_meter_w as i32;
 
@@ -360,17 +364,18 @@ impl CpuMonitor {
         if let Some(temp) = pkg_temp {
             let temp_str = format!("  {:2}°C", temp);
             let temp_pct = ((temp as f32 - 20.0) / 80.0 * 100.0).clamp(0.0, 100.0);
-            term.set_str(pos, cy, &temp_str, Some(temp_gradient_color(temp_pct)), false);
+            term.set_str(pos, cy, &temp_str, Some(temp_gradient_color_scheme(temp_pct, colors)), false);
         }
         cy += 1;
 
         // Per-core meters with temps (linear meter style)
         if !self.usage_per_core.is_empty() {
             let core_temps = get_core_temps(self.usage_per_core.len());
-            draw_core_graphs(
+            draw_core_graphs_scheme(
                 term, info_x, cy, info_w, cores_rows,
                 &self.usage_per_core,
                 &core_temps,
+                colors,
             );
             cy += cores_rows as i32;
         }
@@ -378,11 +383,11 @@ impl CpuMonitor {
         // Uptime (left, under C5) and Load average (right) on same line
         let uptime_str = get_uptime().unwrap_or_else(|| "??:??".to_string());
         let up_str = format!("up {}", uptime_str);
-        term.set_str(info_x, cy, &up_str, Some(Color::DarkGrey), false);
+        term.set_str(info_x, cy, &up_str, Some(muted_color_scheme(colors)), false);
 
         let load = get_loadavg().unwrap_or((0.0, 0.0, 0.0));
         let lav_str = format!("Load AVG: {:.2}  {:.2}  {:.2}", load.0, load.1, load.2);
-        term.set_str(info_x + core_section_w as i32 - lav_str.len() as i32, cy, &lav_str, Some(Color::DarkGrey), false);
+        term.set_str(info_x + core_section_w as i32 - lav_str.len() as i32, cy, &lav_str, Some(muted_color_scheme(colors)), false);
     }
 }
 
@@ -416,7 +421,7 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
 
         // Render without border
         let (w, h) = term.size();
-        monitor.render_fullscreen(&mut term, w as usize, h as usize);
+        monitor.render_fullscreen(&mut term, w as usize, h as usize, &state.colors);
 
         term.present()?;
         term.sleep(state.speed);

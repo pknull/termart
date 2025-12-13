@@ -1,6 +1,10 @@
+use crate::colors::ColorState;
 use crate::terminal::Terminal;
 use crate::monitor::{MonitorConfig, MonitorState};
-use crate::monitor::layout::{Box, draw_meter_btop, format_rate, format_bytes};
+use crate::monitor::layout::{
+    Box, draw_meter_btop_scheme, format_rate, format_bytes,
+    cpu_gradient_color_scheme, text_color_scheme, muted_color_scheme, header_color_scheme,
+};
 use crossterm::style::Color;
 use crossterm::terminal::size;
 use std::collections::HashMap;
@@ -120,19 +124,20 @@ impl IoMonitor {
         Ok(())
     }
 
-    pub fn render(&self, term: &mut Terminal, bx: &Box) {
+    #[allow(dead_code)]
+    pub fn render(&self, term: &mut Terminal, bx: &Box, colors: &ColorState) {
         let x = bx.inner_x();
         let y = bx.inner_y();
         let w = bx.inner_width() as usize;
         let h = bx.inner_height() as usize;
-        self.render_at(term, x, y, w, h);
+        self.render_at(term, x, y, w, h, colors);
     }
 
-    pub fn render_fullscreen(&self, term: &mut Terminal, w: usize, h: usize) {
-        self.render_at(term, 0, 0, w, h);
+    pub fn render_fullscreen(&self, term: &mut Terminal, w: usize, h: usize, colors: &ColorState) {
+        self.render_at(term, 0, 0, w, h, colors);
     }
 
-    fn render_at(&self, term: &mut Terminal, x: i32, y: i32, w: usize, h: usize) {
+    fn render_at(&self, term: &mut Terminal, x: i32, y: i32, w: usize, h: usize, colors: &ColorState) {
         if h < 4 || w < 30 { return; }
 
         let num_disks = self.disks.len().min(6);
@@ -152,9 +157,9 @@ impl IoMonitor {
         // Title with total transferred
         let total_read: u64 = self.total_read.values().sum();
         let total_write: u64 = self.total_write.values().sum();
-        term.set_str(x, cy, "Disk I/O", Some(Color::White), true);
+        term.set_str(x, cy, "Disk I/O", Some(text_color_scheme(colors)), true);
         let totals_str = format!("R:{} W:{}", format_bytes(total_read), format_bytes(total_write));
-        term.set_str(x + w as i32 - totals_str.len() as i32, cy, &totals_str, Some(Color::DarkGrey), false);
+        term.set_str(x + w as i32 - totals_str.len() as i32, cy, &totals_str, Some(muted_color_scheme(colors)), false);
         cy += 1;
 
         // Per-disk breakdown
@@ -163,22 +168,22 @@ impl IoMonitor {
             let disk_write = self.write_rates.get(disk).copied().unwrap_or(0.0);
 
             // Disk name as label
-            term.set_str(x, cy, disk, Some(Color::Cyan), false);
+            term.set_str(x, cy, disk, Some(header_color_scheme(colors)), false);
             cy += 1;
 
             // Read for this disk
             let disk_read_pct = ((disk_read / self.peak_read_rate) * 100.0).min(100.0) as f32;
-            self.draw_io_row(term, x, cy, w, "  Read", disk_read_pct, disk_read, Color::Green);
+            self.draw_io_row(term, x, cy, w, "  Read", disk_read_pct, disk_read, colors, true);
             cy += 1;
 
             // Write for this disk
             let disk_write_pct = ((disk_write / self.peak_write_rate) * 100.0).min(100.0) as f32;
-            self.draw_io_row(term, x, cy, w, "  Write", disk_write_pct, disk_write, Color::Magenta);
+            self.draw_io_row(term, x, cy, w, "  Write", disk_write_pct, disk_write, colors, false);
             cy += 1;
         }
     }
 
-    fn draw_io_row(&self, term: &mut Terminal, x: i32, y: i32, width: usize, label: &str, percent: f32, rate: f64, color: Color) {
+    fn draw_io_row(&self, term: &mut Terminal, x: i32, y: i32, width: usize, label: &str, percent: f32, rate: f64, colors: &ColorState, is_read: bool) {
         // Layout: Label(10) + Meter(dynamic) + Pct(6) + Rate(12)
         let label_w = 10;
         let pct_w = 6;
@@ -189,12 +194,19 @@ impl IoMonitor {
 
         // Label
         let label_str = format!("{:<10}", label);
-        term.set_str(pos, y, &label_str, Some(Color::Grey), false);
+        term.set_str(pos, y, &label_str, Some(muted_color_scheme(colors)), false);
         pos += label_w as i32;
+
+        // Color based on scheme
+        let color = if colors.is_mono() {
+            if is_read { Color::Green } else { Color::Magenta }
+        } else {
+            cpu_gradient_color_scheme(percent, colors)
+        };
 
         // Meter
         if meter_w > 0 {
-            draw_meter_btop(term, pos, y, meter_w, percent, color);
+            draw_meter_btop_scheme(term, pos, y, meter_w, percent, colors);
             pos += meter_w as i32;
         }
 
@@ -206,7 +218,7 @@ impl IoMonitor {
         // Rate right-aligned
         let rate_str = format_rate(rate);
         let rate_pad = rate_w.saturating_sub(rate_str.len());
-        term.set_str(pos + rate_pad as i32, y, &rate_str, Some(Color::DarkGrey), false);
+        term.set_str(pos + rate_pad as i32, y, &rate_str, Some(muted_color_scheme(colors)), false);
     }
 }
 
@@ -239,7 +251,7 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
         term.clear();
 
         let (w, h) = term.size();
-        monitor.render_fullscreen(&mut term, w as usize, h as usize);
+        monitor.render_fullscreen(&mut term, w as usize, h as usize, &state.colors);
 
         term.present()?;
         term.sleep(state.speed);
