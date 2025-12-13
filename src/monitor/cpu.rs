@@ -2,7 +2,7 @@ use crate::colors::ColorState;
 use crate::terminal::Terminal;
 use crate::monitor::{MonitorConfig, MonitorState};
 use crate::monitor::layout::{
-    Box, draw_meter_btop_scheme, draw_core_graphs_with_history,
+    Box, draw_meter_btop_scheme, draw_core_graphs_scheme,
     cpu_gradient_color_scheme, temp_gradient_color_scheme,
     text_color_scheme, muted_color_scheme,
 };
@@ -200,9 +200,6 @@ pub struct CpuMonitor {
     prev_state: Option<CpuState>,
     pub usage_per_core: Vec<f32>,
     pub usage_total: f32,
-    pub history_per_core: Vec<Vec<f32>>,      // Usage history per core
-    pub history_per_core_temp: Vec<Vec<f32>>, // Temp history per core
-    history_len: usize,
 }
 
 impl CpuMonitor {
@@ -211,9 +208,6 @@ impl CpuMonitor {
             prev_state: None,
             usage_per_core: Vec::new(),
             usage_total: 0.0,
-            history_per_core: Vec::new(),
-            history_per_core_temp: Vec::new(),
-            history_len: 10, // 10 samples for mini braille graphs
         }
     }
 
@@ -279,39 +273,6 @@ impl CpuMonitor {
                         0.0
                     };
                     self.usage_per_core.push(usage);
-                }
-            }
-
-            // Update usage history per core
-            let num_cores = self.usage_per_core.len();
-            while self.history_per_core.len() < num_cores {
-                self.history_per_core.push(Vec::new());
-            }
-            for (i, &usage) in self.usage_per_core.iter().enumerate() {
-                if i < self.history_per_core.len() {
-                    self.history_per_core[i].push(usage);
-                    if self.history_per_core[i].len() > self.history_len {
-                        self.history_per_core[i].remove(0);
-                    }
-                }
-            }
-
-            // Update temperature history per core
-            let temps = get_core_temps(num_cores);
-            while self.history_per_core_temp.len() < num_cores {
-                self.history_per_core_temp.push(Vec::new());
-            }
-            for (i, temp_opt) in temps.iter().enumerate() {
-                if i < self.history_per_core_temp.len() {
-                    let temp_pct = if let Some(temp) = temp_opt {
-                        ((*temp as f32 - 20.0) / 80.0 * 100.0).clamp(0.0, 100.0)
-                    } else {
-                        0.0
-                    };
-                    self.history_per_core_temp[i].push(temp_pct);
-                    if self.history_per_core_temp[i].len() > self.history_len {
-                        self.history_per_core_temp[i].remove(0);
-                    }
                 }
             }
         }
@@ -407,15 +368,13 @@ impl CpuMonitor {
         }
         cy += 1;
 
-        // Per-core meters with temps (braille mini-graph style)
+        // Per-core meters with temps (linear meter style)
         if !self.usage_per_core.is_empty() {
             let core_temps = get_core_temps(self.usage_per_core.len());
-            draw_core_graphs_with_history(
+            draw_core_graphs_scheme(
                 term, info_x, cy, info_w, cores_rows,
                 &self.usage_per_core,
-                &self.history_per_core,
                 &core_temps,
-                &self.history_per_core_temp,
                 colors,
             );
             cy += cores_rows as i32;
