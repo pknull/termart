@@ -266,7 +266,8 @@ pub fn draw_core_graphs(
     }
 }
 
-/// Draw per-core meters with temps and color scheme support
+/// Draw per-core meters with temps and color scheme support (btop-style with braille graphs)
+/// Layout: C0⡇⡇⡇⡇⡇  9% ⡇⡇⡇⡇⡇ 45°C │ C6⡇⡇⡇⡇⡇ 12% ⡇⡇⡇⡇⡇ 54°C
 pub fn draw_core_graphs_scheme(
     term: &mut Terminal,
     x: i32,
@@ -277,29 +278,69 @@ pub fn draw_core_graphs_scheme(
     temps: &[Option<u32>],
     colors: &ColorState,
 ) {
+    draw_core_graphs_with_history(term, x, y, width, height, usage, &[], temps, &[], colors);
+}
+
+/// Draw per-core graphs with history support (braille mini-graphs)
+pub fn draw_core_graphs_with_history(
+    term: &mut Terminal,
+    x: i32,
+    y: i32,
+    width: usize,
+    height: usize,
+    usage: &[f32],
+    usage_history: &[Vec<f32>],
+    temps: &[Option<u32>],
+    temp_history: &[Vec<f32>],
+    colors: &ColorState,
+) {
     if usage.is_empty() || height == 0 { return; }
 
     let cores = usage.len();
     let has_temps = !temps.is_empty();
+    let has_history = !usage_history.is_empty();
 
     let cols = 2;
     let col_width = (width - 1) / cols;
     let rows_per_col = (cores + cols - 1) / cols;
     let actual_rows = rows_per_col.min(height);
 
-    let label_w = 4;
-    let pct_w = 5;
-    let temp_section_w = if has_temps { 1 + 5 + 6 } else { 0 };
-    let fixed_w = label_w + pct_w + temp_section_w;
+    // Calculate b_column_size based on available width per column
+    // btop adaptive layout:
+    // b_column_size=2: full layout with both graphs
+    // b_column_size=1: smaller usage graph, no temp graph
+    // b_column_size=0: no graphs at all
+    let min_with_both_graphs = 3 + 5 + 5 + 1 + 5 + 5;  // label(3) + graph(5) + pct(5) + sp(1) + temp_graph(5) + temp(5) = 24
+    let min_with_usage_graph = 3 + 5 + 5 + 5;         // label(3) + graph(5) + pct(5) + temp(5) = 18
+    let min_no_graphs = 3 + 5 + 5;                     // label(3) + pct(5) + temp(5) = 13
 
-    let usage_meter_w = col_width.saturating_sub(fixed_w).max(5);
-    let temp_meter_w = if has_temps { 5 } else { 0 };
+    let b_column_size = if col_width >= min_with_both_graphs && has_temps {
+        2
+    } else if col_width >= min_with_usage_graph {
+        1
+    } else if col_width >= min_no_graphs {
+        0
+    } else {
+        0
+    };
+
+    // Fixed widths
+    let label_w = 3;  // "C0" or "C12"
+    let pct_w = 5;    // " 99%"
+    let _temp_w = 5;  // " 45°C" (used for layout calculation)
+
+    // Graph widths based on b_column_size
+    let usage_graph_w = if b_column_size >= 1 {
+        if b_column_size == 2 { 5 } else { 5 }
+    } else { 0 };
+    let temp_graph_w = if b_column_size >= 2 && has_temps { 5 } else { 0 };
 
     for row in 0..actual_rows {
         for col in 0..cols {
             let idx = col * rows_per_col + row;
             if idx >= cores { continue; }
 
+            // Column separator
             if col > 0 {
                 term.set(x + col_width as i32, y + row as i32, '│', Some(muted_color_scheme(colors)), false);
             }
@@ -309,32 +350,45 @@ pub fn draw_core_graphs_scheme(
             let pct = usage[idx];
             let mut pos = cx;
 
-            let label = format!("{:<4}", format!("C{}", idx));
+            // Core label "C0" (no trailing space, btop-style)
+            let label = format!("C{}", idx);
             term.set_str(pos, cy, &label, Some(text_color_scheme(colors)), false);
             pos += label_w as i32;
 
-            if usage_meter_w > 0 {
-                draw_meter_btop_scheme(term, pos, cy, usage_meter_w, pct, colors);
-                pos += usage_meter_w as i32;
+            // Usage graph (braille mini-graph if history available, otherwise meter)
+            if usage_graph_w > 0 {
+                if has_history && idx < usage_history.len() && !usage_history[idx].is_empty() {
+                    draw_mini_graph_scheme(term, pos, cy, usage_graph_w, &usage_history[idx], colors, false);
+                } else {
+                    // Fallback: draw meter with current value
+                    draw_meter_btop_scheme(term, pos, cy, usage_graph_w, pct, colors);
+                }
+                pos += usage_graph_w as i32;
             }
 
+            // Percentage
             let pct_str = format!("{:4.0}%", pct);
             term.set_str(pos, cy, &pct_str, Some(cpu_gradient_color_scheme(pct, colors)), false);
-            pos += 5;
+            pos += pct_w as i32;
 
-            if temp_meter_w > 0 {
-                pos += 1;
-                if let Some(Some(temp)) = temps.get(idx) {
+            // Temperature graph (braille mini-graph if history available)
+            if temp_graph_w > 0 {
+                if idx < temp_history.len() && !temp_history[idx].is_empty() {
+                    draw_mini_graph_scheme(term, pos, cy, temp_graph_w, &temp_history[idx], colors, true);
+                } else if let Some(Some(temp)) = temps.get(idx) {
                     let temp_pct = ((*temp as f32 - 20.0) / 80.0 * 100.0).clamp(0.0, 100.0);
-                    draw_meter_btop_scheme(term, pos, cy, temp_meter_w, temp_pct, colors);
+                    draw_meter_btop_scheme(term, pos, cy, temp_graph_w, temp_pct, colors);
                 }
-                pos += temp_meter_w as i32;
+                pos += temp_graph_w as i32;
             }
 
-            if let Some(Some(temp)) = temps.get(idx) {
-                let temp_str = format!("  {:2}°C", temp);
-                let temp_pct = ((*temp as f32 - 20.0) / 80.0 * 100.0).clamp(0.0, 100.0);
-                term.set_str(pos, cy, &temp_str, Some(temp_gradient_color_scheme(temp_pct, colors)), false);
+            // Temperature value
+            if has_temps {
+                if let Some(Some(temp)) = temps.get(idx) {
+                    let temp_str = format!(" {:2}°C", temp);
+                    let temp_pct = ((*temp as f32 - 20.0) / 80.0 * 100.0).clamp(0.0, 100.0);
+                    term.set_str(pos, cy, &temp_str, Some(temp_gradient_color_scheme(temp_pct, colors)), false);
+                }
             }
         }
     }
@@ -472,6 +526,99 @@ pub fn header_color_scheme(colors: &ColorState) -> Color {
         Color::Cyan
     } else {
         scheme_color(colors.scheme, 3, true).0
+    }
+}
+
+// Braille characters for mini vertical bar graphs (left column)
+// Height maps to these characters: 0/4, 1/4, 2/4, 3/4, 4/4
+const BRAILLE_UP: [char; 5] = [
+    '⠀', // 0/4 - empty (0x2800)
+    '⡀', // 1/4 - dot 7 (0x2840)
+    '⡄', // 2/4 - dots 3,7 (0x2844)
+    '⡆', // 3/4 - dots 2,3,7 (0x2846)
+    '⡇', // 4/4 - dots 1,2,3,7 (0x2847)
+];
+
+/// Background character for braille graphs (btop uses bottom dots)
+const BRAILLE_BG: char = '⣀'; // dots 7,8 (0x28C0) - "floor" character
+
+/// Draw a mini braille graph showing history values
+/// Each character represents one sample, height based on percentage
+pub fn draw_mini_graph(
+    term: &mut Terminal,
+    x: i32,
+    y: i32,
+    width: usize,
+    history: &[f32],
+    fg_color: Color,
+    bg_color: Color,
+) {
+    if width == 0 { return; }
+
+    // Draw background first
+    for i in 0..width {
+        term.set(x + i as i32, y, BRAILLE_BG, Some(bg_color), false);
+    }
+
+    // Draw history values (most recent on the right)
+    let start_idx = if history.len() > width {
+        history.len() - width
+    } else {
+        0
+    };
+
+    for (i, &val) in history.iter().skip(start_idx).enumerate() {
+        if i >= width { break; }
+        // Map percentage (0-100) to braille height (0-4)
+        let height_idx = ((val / 100.0) * 4.0).round() as usize;
+        let height_idx = height_idx.clamp(0, 4);
+
+        if height_idx > 0 {
+            term.set(x + i as i32, y, BRAILLE_UP[height_idx], Some(fg_color), false);
+        }
+    }
+}
+
+/// Draw mini graph with color scheme support
+pub fn draw_mini_graph_scheme(
+    term: &mut Terminal,
+    x: i32,
+    y: i32,
+    width: usize,
+    history: &[f32],
+    colors: &ColorState,
+    is_temp: bool,
+) {
+    if width == 0 { return; }
+
+    let bg_color = muted_color_scheme(colors);
+
+    // Draw background first
+    for i in 0..width {
+        term.set(x + i as i32, y, BRAILLE_BG, Some(bg_color), false);
+    }
+
+    // Draw history values
+    let start_idx = if history.len() > width {
+        history.len() - width
+    } else {
+        0
+    };
+
+    for (i, &val) in history.iter().skip(start_idx).enumerate() {
+        if i >= width { break; }
+        let height_idx = ((val / 100.0) * 4.0).round() as usize;
+        let height_idx = height_idx.clamp(0, 4);
+
+        if height_idx > 0 {
+            // Color based on the value - use gradient
+            let fg_color = if is_temp {
+                temp_gradient_color_scheme(val, colors)
+            } else {
+                cpu_gradient_color_scheme(val, colors)
+            };
+            term.set(x + i as i32, y, BRAILLE_UP[height_idx], Some(fg_color), false);
+        }
     }
 }
 
