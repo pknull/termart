@@ -121,7 +121,7 @@ fn scheme_color(scheme: u8, intensity: u8, bold: bool) -> (Color, bool) {
             0 => (Color::DarkGreen, false),
             1 => (Color::Green, false),
             2 => (Color::Green, true),
-            _ => (Color::Rgb { r: 180, g: 255, b: 180 }, true),  // Bright green-white for head
+            _ => (Color::White, true),  // Bright white for head
         },
     }
 }
@@ -1606,7 +1606,7 @@ fn run_globe(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> i
                     let ch = char::from_u32(0x2800 + dots as u32).unwrap_or(' ');
                     // User marker (4) gets special orange color, others use scheme
                     let (color, bold) = if max_intensity == 4 {
-                        (Color::Rgb { r: 255, g: 165, b: 0 }, true) // Orange for user
+                        (Color::Yellow, true) // Yellow for user
                     } else {
                         let intensity = match max_intensity {
                             1 => 0, // Grid lines - dim
@@ -2041,7 +2041,7 @@ fn run_keyboard(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
                 };
 
                 let (color, bold) = if heat > 0.7 {
-                    (Color::Rgb { r: 255, g: 255, b: 255 }, true)
+                    (Color::White, true)
                 } else if heat > 0.3 {
                     scheme_color(state.color_scheme, 3, true)
                 } else if heat > 0.0 {

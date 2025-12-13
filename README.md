@@ -1,31 +1,38 @@
 # termart
 
-Terminal-based generative art: bonsai trees and animated visualizations.
+Terminal-based generative art, system monitors, and utilities.
 
 ![Rust](https://img.shields.io/badge/rust-stable-orange)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ## Features
 
-- **Bonsai Trees**: Generate procedural ASCII bonsai trees with customizable parameters
-- **Matrix Rain**: Classic cmatrix-style falling characters
-- **Game of Life**: Conway's cellular automaton
+### Visualizations
+- **Bonsai**: Procedural ASCII bonsai trees with customizable growth
+- **Matrix**: Classic cmatrix-style falling characters
+- **Life**: Conway's Game of Life cellular automaton
 - **Plasma**: Animated sine wave plasma effect
 - **Fire**: Doom-style fire simulation
 - **Rain**: Falling raindrops with splashes
 - **Waves**: Animated ocean waves
-- **3D Cube**: Rotating wireframe cube using braille characters
+- **Cube**: Rotating 3D wireframe cube
 - **Pipes**: Classic pipes screensaver
 - **Donut**: Rotating 3D torus (donut.c style)
-- **Globe**: Rotating 3D globe with network activity nodes (eDEX-UI style), auto-detects user location
-- **Hex Grid**: Hexagon grid with animated wave/pulse effects (eDEX-UI style)
-- **Keyboard**: On-screen keyboard visualization with real-time global key monitoring via evdev
+- **Globe**: Rotating 3D globe with network nodes (eDEX-UI style)
+- **Hex**: Hexagon grid with animated wave pulses
+- **Keyboard**: Real-time keyboard visualization via evdev
 
-All visualizations support:
-- Interactive speed control (1-9 keys)
-- Multiple color schemes (Shift+1-9)
-- Pause/resume (Space)
-- Terminal resize handling
+### System Monitors
+- **CPU**: Per-core usage with temperature and frequency
+- **Memory**: RAM and swap usage with process breakdown
+- **Disk**: Filesystem space usage
+- **I/O**: Disk read/write rates
+- **Network**: Interface traffic rates
+- **GPU**: NVIDIA GPU stats (utilization, memory, temperature)
+
+### Utilities
+- **Weather**: Live weather display with ASCII art animations
+- **Pomodoro**: Timer with ASCII tomato visualization
 
 ## Installation
 
@@ -44,123 +51,210 @@ cargo build --release
 ### Bonsai Trees
 
 ```bash
-# Generate a static bonsai tree
-termart bonsai
-
-# Live growth animation
-termart bonsai --live
-
-# Infinite mode - continuously generate new trees
-termart bonsai --infinite
-
-# Print to stdout (for piping/screenshots)
-termart bonsai --print
-
-# Customize tree parameters
-termart bonsai --life 50 --multiplier 8 --seed 12345
-
-# Add a message box
-termart bonsai --message "Happy Birthday!"
+termart bonsai                    # Generate a static tree
+termart bonsai --live             # Live growth animation
+termart bonsai --infinite         # Continuously generate trees
+termart bonsai --print            # Print to stdout (no interactive display)
+termart bonsai -L 50 -M 8         # Large bushy tree
+termart bonsai -m "Hello!"        # Add message box
 ```
 
-**Bonsai Options:**
-- `-l, --live`: Show live growth animation
-- `-i, --infinite`: Keep generating trees
-- `-p, --print`: Print to stdout
-- `-t, --time <SECONDS>`: Animation step delay (default: 0.03)
-- `-w, --wait <SECONDS>`: Wait between trees in infinite mode (default: 4.0)
-- `-L, --life <0-200>`: Initial branch life, higher = bigger tree (default: 32)
-- `-M, --multiplier <0-20>`: Branch multiplier, higher = bushier (default: 5)
-- `-s, --seed <NUMBER>`: Random seed for reproducibility
-- `-b, --base <0-2>`: Pot type: 0=none, 1=large, 2=small (default: 1)
-- `-c, --leaf <CHARS>`: Leaf characters, comma-separated (default: &)
-- `-m, --message <TEXT>`: Message to display next to tree
+**Options:**
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-l, --live` | Show live growth animation | off |
+| `-i, --infinite` | Keep generating trees | off |
+| `-p, --print` | Print to stdout | off |
+| `-t, --time <SEC>` | Animation step delay | 0.03 |
+| `-w, --wait <SEC>` | Wait between trees (infinite mode) | 4.0 |
+| `-L, --life <0-200>` | Initial branch life (higher = bigger) | 32 |
+| `-M, --multiplier <0-20>` | Branch multiplier (higher = bushier) | 5 |
+| `-s, --seed <NUM>` | Random seed for reproducibility | random |
+| `-b, --base <0-2>` | Pot type: 0=none, 1=large, 2=small | 1 |
+| `-c, --leaf <CHARS>` | Leaf characters (comma-separated) | & |
+| `-m, --message <TEXT>` | Message to display | none |
 
 ### Visualizations
 
 ```bash
-# Matrix rain (default)
-termart viz
-
-# Specify visualization type
-termart viz -T matrix    # Classic falling characters
-termart viz -T life      # Conway's Game of Life
-termart viz -T plasma    # Sine wave plasma effect
-termart viz -T fire      # Doom-style fire simulation
-termart viz -T rain      # Raindrops with splashes
-termart viz -T waves     # Ocean wave animation
-termart viz -T cube      # Rotating 3D wireframe cube
-termart viz -T pipes     # Classic pipes screensaver
-termart viz -T donut     # Rotating 3D torus
-termart viz -T globe     # Rotating globe with network nodes
-termart viz -T hex       # Hexagon grid with wave pulses
-termart viz -T keyboard  # On-screen keyboard (requires evdev access)
-
-# Keyboard with debug info (shows F-keys row)
-termart viz -T keyboard --debug
+termart matrix                    # Matrix rain
+termart life                      # Conway's Game of Life
+termart plasma                    # Plasma effect
+termart fire                      # Doom fire
+termart rain                      # Rain animation
+termart waves                     # Ocean waves
+termart cube                      # 3D rotating cube
+termart pipes                     # Pipes screensaver
+termart donut                     # Rotating torus
+termart globe                     # Globe with network nodes
+termart hex                       # Hexagon grid
+termart keyboard                  # Keyboard visualization
 ```
 
-**Visualization Options:**
-- `-T, --viz-type <TYPE>`: Visualization type (default: matrix)
-- `-t, --time <SECONDS>`: Animation speed (default: 0.03)
-- `-s, --seed <NUMBER>`: Random seed
-- `-c, --char <CHAR>`: Character for drawing (life mode)
-- `-d, --debug`: Show debug info (keyboard: displays F-keys and status)
+**Common Options:**
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-t, --time <SEC>` | Animation speed (seconds per frame) | 0.03 |
+| `-s, --seed <NUM>` | Random seed | random |
+| `-d, --debug` | Show debug info | off |
 
-### Interactive Controls
+**Life-specific:**
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-c, --char <CHAR>` | Character for cells | # |
 
-While running any visualization:
-- `1-9`: Change speed (1=fastest, 9=slowest)
-- `Shift+1-9`: Change color scheme
-  - `)` (Shift+0): Green/Matrix
-  - `!` (Shift+1): Fire (red/yellow)
-  - `@` (Shift+2): Ice (blue/cyan)
-  - `#` (Shift+3): Pink (magenta)
-  - `$` (Shift+4): Gold (yellow/white)
-  - `%` (Shift+5): Electric (cyan/white)
-  - `^` (Shift+6): Lava (red/magenta)
-  - `&` (Shift+7): Mono (grayscale)
-  - `*` (Shift+8): Rainbow
-  - `(` (Shift+9): Neon (blue/magenta)
-- `Space`: Pause/Resume
-- `q` or `Esc`: Quit
+### Interactive Controls (Visualizations)
 
-## Examples
+| Key | Action |
+|-----|--------|
+| `1-9` | Change speed (1=fastest, 9=slowest) |
+| `Shift+0-9` | Change color scheme |
+| `Space` | Pause/Resume |
+| `q` / `Esc` | Quit |
+
+**Color Schemes:**
+- `)` Shift+0: Green/Matrix
+- `!` Shift+1: Fire (red/yellow)
+- `@` Shift+2: Ice (blue/cyan)
+- `#` Shift+3: Pink (magenta)
+- `$` Shift+4: Gold (yellow/white)
+- `%` Shift+5: Electric (cyan/white)
+- `^` Shift+6: Lava (red/magenta)
+- `&` Shift+7: Mono (grayscale)
+- `*` Shift+8: Rainbow
+- `(` Shift+9: Neon (blue/magenta)
+
+### System Monitors
 
 ```bash
-# Large bushy bonsai with live animation
-termart bonsai -l -L 60 -M 10
-
-# Screensaver mode - infinite bonsai trees
-termart bonsai -i -w 5
-
-# Matrix rain with fire colors
-termart viz -T matrix  # then press Shift+1
-
-# Peaceful ocean waves
-termart viz -T waves
-
-# Classic donut
-termart viz -T donut
-
-# eDEX-UI style globe with network activity
-termart viz -T globe
-
-# Hexagon honeycomb grid
-termart viz -T hex
-
-# Live keyboard heatmap (requires input group access)
-termart viz -T keyboard
+termart cpu                       # CPU usage per core
+termart mem                       # Memory usage
+termart disk                      # Disk space
+termart io                        # Disk I/O rates
+termart net                       # Network traffic
+termart gpu                       # NVIDIA GPU stats
 ```
+
+**Options:**
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-t, --time <SEC>` | Update interval | 1.0 |
+| `-d, --debug` | Show debug info | off |
+
+**Monitor Controls:**
+| Key | Action |
+|-----|--------|
+| `q` / `Esc` | Quit |
+
+### Weather
+
+```bash
+termart weather                   # Auto-detect location via IP
+termart weather -l "London"       # Specify city
+termart weather -l "New York"     # City with spaces
+```
+
+**Options:**
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-l, --location <CITY>` | City name | auto-detect |
+| `-t, --time <SEC>` | Animation speed | 0.1 |
+
+**Features:**
+- Animated ASCII art for weather conditions (sun, clouds, rain, snow, fog, storms)
+- Day/night detection with appropriate visuals
+- Temperature, humidity, wind speed, precipitation
+- Auto-refreshes weather data periodically
+
+**Controls:**
+| Key | Action |
+|-----|--------|
+| `q` / `Esc` | Quit |
+
+### Pomodoro Timer
+
+```bash
+termart pomodoro                  # Default: 25/5/15 minutes
+termart pomodoro -w 50            # 50-minute work sessions
+termart pomodoro -w 25 -s 5 -l 30 # Custom durations
+termart pomodoro -c 6             # 6 pomodoros before long break
+```
+
+**Options:**
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-w, --work <MIN>` | Work duration in minutes | 25 |
+| `-s, --short-break <MIN>` | Short break duration | 5 |
+| `-l, --long-break <MIN>` | Long break duration | 15 |
+| `-c, --count <NUM>` | Pomodoros before long break | 4 |
+
+**Features:**
+- ASCII tomato fills as time progresses
+- Big digit countdown display
+- Progress bar and pomodoro dot tracker
+- Terminal bell when timer ends
+- Flashing display when awaiting input
+- Color-coded phases: red (work), green (short break), blue (long break)
+
+**Controls:**
+| Key | Action |
+|-----|--------|
+| `Space` | Pause/Resume |
+| `s` | Skip to next phase |
+| `r` | Reset timer |
+| `Enter` | Advance when timer done |
+| `q` / `Esc` | Quit |
 
 ## Notes
 
 ### Keyboard Visualization
 
-The keyboard visualization uses Linux evdev to monitor global key events. This requires:
-- Read access to `/dev/input/event*` devices
-- Usually requires membership in the `input` group: `sudo usermod -aG input $USER`
-- Log out and back in after adding yourself to the group
+Requires Linux evdev access to monitor global key events:
+
+```bash
+# Add yourself to the input group
+sudo usermod -aG input $USER
+# Log out and back in for changes to take effect
+```
+
+### GPU Monitor
+
+Requires NVIDIA GPU with `nvidia-smi` available in PATH.
+
+### Weather
+
+Uses Open-Meteo API (free, no API key required). Location auto-detection uses ip-api.com.
+
+## Examples
+
+```bash
+# Screensaver mode - infinite bonsai trees
+termart bonsai -i -w 5
+
+# Large tree with cherry blossom leaves
+termart bonsai -L 60 -M 10 -c "❀,✿,❁"
+
+# Birthday greeting
+termart bonsai -m "Happy Birthday!" --live
+
+# Quick system check
+termart cpu -t 0.5
+
+# Weather for Paris
+termart weather -l "Paris"
+
+# 50-minute focus sessions
+termart pomodoro -w 50 -s 10
+
+# Classic donut
+termart donut
+
+# eDEX-UI style globe
+termart globe
+
+# Live keyboard heatmap
+termart keyboard
+```
 
 ## License
 

@@ -1,0 +1,78 @@
+pub mod layout;
+pub mod cpu;
+pub mod mem;
+pub mod disk;
+pub mod diskio;
+pub mod net;
+pub mod gpu;
+
+use crossterm::event::{KeyCode, KeyModifiers};
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum MonitorType {
+    Cpu,
+    Mem,
+    Disk,
+    Io,
+    Net,
+    Gpu,
+}
+
+#[derive(Clone)]
+pub struct MonitorConfig {
+    pub monitor_type: MonitorType,
+    pub time_step: f32,
+    #[allow(dead_code)]
+    pub debug: bool,
+}
+
+pub struct MonitorState {
+    pub speed: f32,
+    pub paused: bool,
+}
+
+impl MonitorState {
+    pub fn new(initial_speed: f32) -> Self {
+        Self {
+            speed: initial_speed,
+            paused: false,
+        }
+    }
+
+    pub fn handle_key(&mut self, code: KeyCode, _modifiers: KeyModifiers) -> bool {
+        match code {
+            KeyCode::Char('q') | KeyCode::Esc => return true,
+            KeyCode::Char(' ') => self.paused = !self.paused,
+            KeyCode::Char(c) if c.is_ascii_digit() => {
+                let n = c.to_digit(10).unwrap() as u8;
+                self.speed = match n {
+                    0 => 2.0,
+                    1 => 0.1,
+                    2 => 0.2,
+                    3 => 0.3,
+                    4 => 0.5,
+                    5 => 0.7,
+                    6 => 1.0,
+                    7 => 1.5,
+                    8 => 2.0,
+                    9 => 3.0,
+                    _ => self.speed,
+                };
+            }
+            _ => {}
+        }
+        false
+    }
+}
+
+pub fn run(config: MonitorConfig) -> std::io::Result<()> {
+    match config.monitor_type {
+        MonitorType::Cpu => cpu::run(config),
+        MonitorType::Mem => mem::run(config),
+        MonitorType::Disk => disk::run(config),
+        MonitorType::Io => diskio::run(config),
+        MonitorType::Net => net::run(config),
+        MonitorType::Gpu => gpu::run(config),
+    }
+}
+

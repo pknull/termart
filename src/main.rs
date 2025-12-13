@@ -2,16 +2,46 @@ mod config;
 mod terminal;
 mod bonsai;
 mod fractal;
+mod monitor;
+mod weather;
+mod pomodoro;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, Args};
 use config::{BonsaiConfig, FractalConfig, FractalType};
+use monitor::{MonitorConfig, MonitorType};
 use std::io;
+
+#[derive(Args, Clone)]
+struct VizOptions {
+    /// Animation speed (seconds per frame)
+    #[arg(short, long, default_value = "0.03")]
+    time: f32,
+
+    /// Random seed for reproducibility
+    #[arg(short, long)]
+    seed: Option<u64>,
+
+    /// Show debug info
+    #[arg(short, long)]
+    debug: bool,
+}
+
+#[derive(Args, Clone)]
+struct MonitorOptions {
+    /// Update interval (seconds)
+    #[arg(short, long, default_value = "1.0")]
+    time: f32,
+
+    /// Show debug info
+    #[arg(short, long)]
+    debug: bool,
+}
 
 #[derive(Parser)]
 #[command(name = "termart")]
 #[command(author = "Terminal Art Generator")]
 #[command(version = "0.1.0")]
-#[command(about = "Terminal-based generative art: bonsai trees and fractals", long_about = None)]
+#[command(about = "Terminal-based generative art", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -66,28 +96,167 @@ enum Commands {
         message: Option<String>,
     },
 
-    /// Run an animated visualization (matrix, life, plasma, fire, rain, waves, cube, pipes, donut, globe, hex, keyboard)
-    Viz {
-        /// Type of visualization: matrix, life, plasma, fire, rain, waves, cube, pipes, donut, globe, hex, keyboard
-        #[arg(short = 'T', long, default_value = "matrix")]
-        viz_type: String,
+    /// Matrix rain effect
+    Matrix {
+        #[command(flatten)]
+        opts: VizOptions,
+    },
 
-        /// Animation speed (seconds per frame)
-        #[arg(short, long, default_value = "0.03")]
-        time: f32,
+    /// Conway's Game of Life
+    Life {
+        #[command(flatten)]
+        opts: VizOptions,
 
-        /// Random seed for reproducibility
-        #[arg(short, long)]
-        seed: Option<u64>,
-
-        /// Character to use for drawing (life mode)
+        /// Character to use for drawing
         #[arg(short, long, default_value = "#")]
         char: String,
-
-        /// Show debug info (keyboard: shows F-keys and global/local status)
-        #[arg(short, long)]
-        debug: bool,
     },
+
+    /// Plasma effect
+    Plasma {
+        #[command(flatten)]
+        opts: VizOptions,
+    },
+
+    /// Doom-style fire
+    Fire {
+        #[command(flatten)]
+        opts: VizOptions,
+    },
+
+    /// Rain animation
+    Rain {
+        #[command(flatten)]
+        opts: VizOptions,
+    },
+
+    /// Ocean waves
+    Waves {
+        #[command(flatten)]
+        opts: VizOptions,
+    },
+
+    /// Spinning 3D cube
+    Cube {
+        #[command(flatten)]
+        opts: VizOptions,
+    },
+
+    /// Pipes screensaver
+    Pipes {
+        #[command(flatten)]
+        opts: VizOptions,
+    },
+
+    /// Spinning donut (torus)
+    Donut {
+        #[command(flatten)]
+        opts: VizOptions,
+    },
+
+    /// Rotating globe with network connections
+    Globe {
+        #[command(flatten)]
+        opts: VizOptions,
+    },
+
+    /// Hexagonal grid pattern
+    Hex {
+        #[command(flatten)]
+        opts: VizOptions,
+    },
+
+    /// Keyboard visualization
+    Keyboard {
+        #[command(flatten)]
+        opts: VizOptions,
+    },
+
+    /// CPU usage monitor
+    Cpu {
+        #[command(flatten)]
+        opts: MonitorOptions,
+    },
+
+    /// Memory usage monitor
+    Mem {
+        #[command(flatten)]
+        opts: MonitorOptions,
+    },
+
+    /// Disk space usage
+    Disk {
+        #[command(flatten)]
+        opts: MonitorOptions,
+    },
+
+    /// Disk I/O rates
+    Io {
+        #[command(flatten)]
+        opts: MonitorOptions,
+    },
+
+    /// Network I/O rates
+    Net {
+        #[command(flatten)]
+        opts: MonitorOptions,
+    },
+
+    /// GPU usage monitor (NVIDIA)
+    Gpu {
+        #[command(flatten)]
+        opts: MonitorOptions,
+    },
+
+    /// Live weather display with ASCII art
+    Weather {
+        /// Location (city name, e.g., "London" or "New York")
+        #[arg(short, long)]
+        location: Option<String>,
+
+        /// Animation speed (seconds per frame)
+        #[arg(short, long, default_value = "0.1")]
+        time: f32,
+    },
+
+    /// Pomodoro timer with ASCII tomato
+    Pomodoro {
+        /// Work duration in minutes
+        #[arg(short, long, default_value = "25")]
+        work: u32,
+
+        /// Short break duration in minutes
+        #[arg(short, long, default_value = "5")]
+        short_break: u32,
+
+        /// Long break duration in minutes
+        #[arg(short, long, default_value = "15")]
+        long_break: u32,
+
+        /// Pomodoros before long break
+        #[arg(short, long, default_value = "4")]
+        count: u32,
+    },
+}
+
+fn run_viz(ftype: FractalType, opts: VizOptions, draw_char: char) -> io::Result<()> {
+    let config = FractalConfig {
+        fractal_type: ftype,
+        time_step: opts.time,
+        seed: opts.seed,
+        draw_char,
+        debug: opts.debug,
+    };
+    fractal::run(config)
+}
+
+fn run_monitor(mtype: MonitorType, opts: MonitorOptions) -> io::Result<()> {
+    let config = MonitorConfig {
+        monitor_type: mtype,
+        time_step: opts.time,
+        debug: opts.debug,
+    };
+    monitor::run(config)
 }
 
 fn main() -> io::Result<()> {
@@ -123,40 +292,41 @@ fn main() -> io::Result<()> {
             };
             bonsai::run(config)?;
         }
-        Commands::Viz {
-            viz_type,
-            time,
-            seed,
-            char: draw_char,
-            debug,
-        } => {
-            let ftype = match viz_type.to_lowercase().as_str() {
-                "matrix" | "cmatrix" => FractalType::Matrix,
-                "life" | "gol" | "gameoflife" => FractalType::Life,
-                "plasma" => FractalType::Plasma,
-                "fire" | "doom" => FractalType::Fire,
-                "rain" => FractalType::Rain,
-                "waves" | "wave" | "ocean" => FractalType::Waves,
-                "cube" | "3d" => FractalType::Cube,
-                "pipes" | "pipe" => FractalType::Pipes,
-                "donut" | "torus" | "doughnut" => FractalType::Donut,
-                "globe" | "earth" | "network" => FractalType::Globe,
-                "hex" | "hexagon" | "honeycomb" => FractalType::Hex,
-                "keyboard" | "keys" | "kb" => FractalType::Keyboard,
-                _ => {
-                    eprintln!("Unknown viz type: {}. Using matrix.", viz_type);
-                    eprintln!("Available: matrix, life, plasma, fire, rain, waves, cube, pipes, donut, globe, hex, keyboard");
-                    FractalType::Matrix
-                }
-            };
-            let config = FractalConfig {
-                fractal_type: ftype,
+        Commands::Matrix { opts } => run_viz(FractalType::Matrix, opts, '#')?,
+        Commands::Life { opts, char: c } => {
+            run_viz(FractalType::Life, opts, c.chars().next().unwrap_or('#'))?
+        }
+        Commands::Plasma { opts } => run_viz(FractalType::Plasma, opts, '#')?,
+        Commands::Fire { opts } => run_viz(FractalType::Fire, opts, '#')?,
+        Commands::Rain { opts } => run_viz(FractalType::Rain, opts, '#')?,
+        Commands::Waves { opts } => run_viz(FractalType::Waves, opts, '#')?,
+        Commands::Cube { opts } => run_viz(FractalType::Cube, opts, '#')?,
+        Commands::Pipes { opts } => run_viz(FractalType::Pipes, opts, '#')?,
+        Commands::Donut { opts } => run_viz(FractalType::Donut, opts, '#')?,
+        Commands::Globe { opts } => run_viz(FractalType::Globe, opts, '#')?,
+        Commands::Hex { opts } => run_viz(FractalType::Hex, opts, '#')?,
+        Commands::Keyboard { opts } => run_viz(FractalType::Keyboard, opts, '#')?,
+        Commands::Cpu { opts } => run_monitor(MonitorType::Cpu, opts)?,
+        Commands::Mem { opts } => run_monitor(MonitorType::Mem, opts)?,
+        Commands::Disk { opts } => run_monitor(MonitorType::Disk, opts)?,
+        Commands::Io { opts } => run_monitor(MonitorType::Io, opts)?,
+        Commands::Net { opts } => run_monitor(MonitorType::Net, opts)?,
+        Commands::Gpu { opts } => run_monitor(MonitorType::Gpu, opts)?,
+        Commands::Weather { location, time } => {
+            let config = weather::WeatherConfig {
+                location,
                 time_step: time,
-                seed,
-                draw_char: draw_char.chars().next().unwrap_or('#'),
-                debug,
             };
-            fractal::run(config)?;
+            weather::run(config)?;
+        }
+        Commands::Pomodoro { work, short_break, long_break, count } => {
+            let config = pomodoro::PomodoroConfig {
+                work_mins: work,
+                short_break_mins: short_break,
+                long_break_mins: long_break,
+                pomodoros_until_long: count,
+            };
+            pomodoro::run(config)?;
         }
     }
 
