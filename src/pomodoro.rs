@@ -1,3 +1,4 @@
+use crate::colors::{ColorState, scheme_color};
 use crate::terminal::Terminal;
 use crossterm::event::KeyCode;
 use crossterm::style::Color;
@@ -26,6 +27,14 @@ impl PomodoroPhase {
             PomodoroPhase::Work => Color::Red,
             PomodoroPhase::ShortBreak => Color::Green,
             PomodoroPhase::LongBreak => Color::Blue,
+        }
+    }
+
+    fn intensity(&self) -> u8 {
+        match self {
+            PomodoroPhase::Work => 3,        // Brightest - active work
+            PomodoroPhase::ShortBreak => 2,  // Medium - short rest
+            PomodoroPhase::LongBreak => 1,   // Dimmer - long rest
         }
     }
 }
@@ -232,7 +241,7 @@ fn draw_progress_bar(term: &mut Terminal, x: usize, y: usize, width: usize, prog
     }
 }
 
-fn draw_pomodoro_dots(term: &mut Terminal, cx: usize, y: usize, completed: u32, until_long: u32) {
+fn draw_pomodoro_dots(term: &mut Terminal, cx: usize, y: usize, completed: u32, until_long: u32, colors: &ColorState) {
     let total = until_long;
     let dot_spacing = 3;
     let total_width = (total as usize - 1) * dot_spacing + total as usize;
@@ -242,7 +251,12 @@ fn draw_pomodoro_dots(term: &mut Terminal, cx: usize, y: usize, completed: u32, 
         let x = start_x + i as usize * (dot_spacing + 1);
         let in_current_cycle = completed % until_long;
         let (ch, color) = if i < in_current_cycle {
-            ('●', Color::Red)
+            let c = if colors.is_mono() {
+                Color::Red
+            } else {
+                scheme_color(colors.scheme, 3, true).0
+            };
+            ('●', c)
         } else {
             ('○', Color::DarkGrey)
         };
@@ -253,21 +267,24 @@ fn draw_pomodoro_dots(term: &mut Terminal, cx: usize, y: usize, completed: u32, 
 pub fn run(config: PomodoroConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
     let mut state = PomodoroState::new(&config);
+    let mut colors = ColorState::new(7); // Default to mono (semantic colors)
 
     loop {
         // Handle input
         if let Ok(Some((code, _mods))) = term.check_key() {
-            match code {
-                KeyCode::Char('q') | KeyCode::Esc => break,
-                KeyCode::Char(' ') => state.paused = !state.paused,
-                KeyCode::Char('s') => state.next_phase(&config),
-                KeyCode::Char('r') => state.reset(&config),
-                KeyCode::Enter => {
-                    if state.remaining_secs == 0 {
-                        state.next_phase(&config);
+            if !colors.handle_key(code) {
+                match code {
+                    KeyCode::Char('q') | KeyCode::Esc => break,
+                    KeyCode::Char(' ') => state.paused = !state.paused,
+                    KeyCode::Char('s') => state.next_phase(&config),
+                    KeyCode::Char('r') => state.reset(&config),
+                    KeyCode::Enter => {
+                        if state.remaining_secs == 0 {
+                            state.next_phase(&config);
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
             }
         }
 
@@ -300,10 +317,18 @@ pub fn run(config: PomodoroConfig) -> io::Result<()> {
 
         let cx = w / 2;
 
-        // Flash colors when done
+        // Determine display color: gray when paused, flash when done, otherwise phase color
         let done = state.remaining_secs == 0;
         let flash_on = done && (state.flash_frame / 3) % 2 == 0;
-        let phase_color = if flash_on { Color::White } else { state.phase.color() };
+        let phase_color = if state.paused {
+            Color::DarkGrey
+        } else if flash_on {
+            Color::White
+        } else if colors.is_mono() {
+            state.phase.color()
+        } else {
+            scheme_color(colors.scheme, state.phase.intensity(), true).0
+        };
 
         // Calculate vertical center for compact layout (total ~12 lines)
         let content_height = 12;
@@ -327,7 +352,7 @@ pub fn run(config: PomodoroConfig) -> io::Result<()> {
         y += 1;
 
         // Pomodoro dots
-        draw_pomodoro_dots(&mut term, cx, y, state.pomodoros_completed, config.pomodoros_until_long);
+        draw_pomodoro_dots(&mut term, cx, y, state.pomodoros_completed, config.pomodoros_until_long, &colors);
 
         term.present()?;
         term.sleep(0.1);

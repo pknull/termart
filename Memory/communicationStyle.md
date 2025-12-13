@@ -1,0 +1,1 @@
+/home/pknull/Obsidian/AAS/Memory/communicationStyle.md

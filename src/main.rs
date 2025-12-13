@@ -1,5 +1,6 @@
 mod config;
 mod terminal;
+mod colors;
 mod bonsai;
 mod fractal;
 mod monitor;
