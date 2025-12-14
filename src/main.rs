@@ -6,6 +6,8 @@ mod fractal;
 mod monitor;
 mod weather;
 mod pomodoro;
+mod fah;
+mod settings;
 
 use clap::{Parser, Subcommand, Args};
 use config::{BonsaiConfig, FractalConfig, FractalType};
@@ -238,6 +240,17 @@ enum Commands {
         #[arg(short, long, default_value = "4")]
         count: u32,
     },
+
+    /// Folding@Home stats display
+    Fah {
+        /// FAH username (or set in ~/.config/termart/config.toml)
+        #[arg(short, long)]
+        user: Option<String>,
+
+        /// Animation speed (seconds per frame)
+        #[arg(short, long, default_value = "0.1")]
+        time: f32,
+    },
 }
 
 fn run_viz(ftype: FractalType, opts: VizOptions, draw_char: char) -> io::Result<()> {
@@ -328,6 +341,26 @@ fn main() -> io::Result<()> {
                 pomodoros_until_long: count,
             };
             pomodoro::run(config)?;
+        }
+        Commands::Fah { user, time } => {
+            let settings = settings::Settings::load();
+
+            // Username: CLI > config file
+            let username = user.or(settings.fah.username).unwrap_or_else(|| {
+                eprintln!("Error: FAH username required. Use --user or set in {}",
+                    settings::Settings::config_path().display());
+                std::process::exit(1);
+            });
+
+            let config = fah::FahConfig {
+                username,
+                email: settings.fah.email,
+                password: settings.fah.password,
+                fah_secret: settings.fah.fah_secret,
+                fah_sid: settings.fah.fah_sid,
+                time_step: time,
+            };
+            fah::run(config)?;
         }
     }
 

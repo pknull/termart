@@ -6,6 +6,7 @@ use crossterm::terminal::size;
 use rand::Rng;
 use serde::Deserialize;
 use std::io;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum WeatherCondition {
@@ -71,20 +72,31 @@ struct CurrentWeather {
     winddirection: f64,
     weathercode: i32,
     is_day: i32,
+    time: String,  // ISO8601 format: "2025-12-13T16:30"
+}
+
+#[derive(Debug, Deserialize)]
+struct DailyWeather {
+    temperature_2m_max: Vec<f64>,
+    temperature_2m_min: Vec<f64>,
 }
 
 #[derive(Debug, Deserialize)]
 struct WeatherResponse {
     current_weather: CurrentWeather,
+    daily: Option<DailyWeather>,
 }
 
 pub struct WeatherData {
     pub temperature: f64,
+    pub temp_high: f64,
+    pub temp_low: f64,
     pub wind_speed: f64,
     pub wind_direction: f64,
     pub condition: WeatherCondition,
     pub is_day: bool,
     pub location: String,
+    pub observation_time: String,  // When weather was observed
 }
 
 struct Particle {
@@ -135,9 +147,9 @@ impl WeatherDisplay {
             }
         };
 
-        // Fetch weather data
+        // Fetch weather data (current + today's high/low)
         let url = format!(
-            "https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&current_weather=true",
+            "https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&current_weather=true&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1",
             lat, lon
         );
 
@@ -146,13 +158,23 @@ impl WeatherDisplay {
                 match response.into_json::<WeatherResponse>() {
                     Ok(weather) => {
                         let cw = weather.current_weather;
+                        let (high, low) = weather.daily
+                            .map(|d| {
+                                let h = d.temperature_2m_max.first().copied().unwrap_or(cw.temperature);
+                                let l = d.temperature_2m_min.first().copied().unwrap_or(cw.temperature);
+                                (h, l)
+                            })
+                            .unwrap_or((cw.temperature, cw.temperature));
                         self.data = Some(WeatherData {
                             temperature: cw.temperature,
+                            temp_high: high,
+                            temp_low: low,
                             wind_speed: cw.windspeed,
                             wind_direction: cw.winddirection,
                             condition: WeatherCondition::from_code(cw.weathercode, cw.is_day == 1),
                             is_day: cw.is_day == 1,
                             location: loc_name,
+                            observation_time: cw.time,
                         });
                         self.error = None;
                     }
@@ -294,7 +316,7 @@ impl WeatherDisplay {
         }
     }
 
-    pub fn render(&self, term: &mut Terminal, w: usize, h: usize, colors: &ColorState) {
+    pub fn render(&self, term: &mut Terminal, w: usize, h: usize, colors: &ColorState, use_fahrenheit: bool) {
         let Some(ref data) = self.data else {
             if let Some(ref err) = self.error {
                 let cy = h / 2;
@@ -339,7 +361,7 @@ impl WeatherDisplay {
         self.draw_particles(term, data, colors);
 
         // Draw info panel
-        self.draw_info(term, w, h, data, colors);
+        self.draw_info(term, w, h, data, colors, use_fahrenheit);
     }
 
     fn draw_sky(&self, term: &mut Terminal, w: usize, h: usize, data: &WeatherData, flash: bool, colors: &ColorState) {
@@ -564,17 +586,27 @@ impl WeatherDisplay {
         }
     }
 
-    fn draw_info(&self, term: &mut Terminal, _w: usize, h: usize, data: &WeatherData, colors: &ColorState) {
+    fn draw_info(&self, term: &mut Terminal, _w: usize, h: usize, data: &WeatherData, colors: &ColorState, use_fahrenheit: bool) {
         // Info panel at bottom
-        let panel_y = h - 5;
+        let panel_y = h - 6;
 
         // Location
         let loc = &data.location;
         let loc_color = if colors.is_mono() { Color::White } else { scheme_color(colors.scheme, 3, true).0 };
         term.set_str(2, panel_y as i32, loc, Some(loc_color), true);
 
-        // Temperature (large)
-        let temp = format!("{}°C", data.temperature.round() as i32);
+        // Helper to convert C to F
+        let to_display = |c: f64| -> i32 {
+            if use_fahrenheit {
+                (c * 9.0 / 5.0 + 32.0).round() as i32
+            } else {
+                c.round() as i32
+            }
+        };
+        let unit = if use_fahrenheit { "°F" } else { "°C" };
+
+        // Current temperature
+        let temp = format!("{}{}", to_display(data.temperature), unit);
         let temp_color = if colors.is_mono() {
             // Semantic temperature colors
             if data.temperature < 0.0 {
@@ -593,14 +625,19 @@ impl WeatherDisplay {
         };
         term.set_str(2, (panel_y + 1) as i32, &temp, Some(temp_color), true);
 
+        // High/Low
+        let hi_lo = format!("H:{}{}  L:{}{}", to_display(data.temp_high), unit, to_display(data.temp_low), unit);
+        let hi_lo_color = if colors.is_mono() { Color::Grey } else { scheme_color(colors.scheme, 1, false).0 };
+        term.set_str(2, (panel_y + 2) as i32, &hi_lo, Some(hi_lo_color), false);
+
         // Condition
         let cond_color = if colors.is_mono() { Color::Grey } else { scheme_color(colors.scheme, 1, false).0 };
-        term.set_str(2, (panel_y + 2) as i32, data.condition.description(), Some(cond_color), false);
+        term.set_str(2, (panel_y + 3) as i32, data.condition.description(), Some(cond_color), false);
 
         // Wind
         let wind = format!("Wind: {} km/h", data.wind_speed.round() as i32);
         let wind_color = if colors.is_mono() { Color::DarkGrey } else { scheme_color(colors.scheme, 0, false).0 };
-        term.set_str(2, (panel_y + 3) as i32, &wind, Some(wind_color), false);
+        term.set_str(2, (panel_y + 4) as i32, &wind, Some(wind_color), false);
 
         // Wind direction arrow
         let arrow = match data.wind_direction as i32 {
@@ -614,11 +651,41 @@ impl WeatherDisplay {
             293..=337 => "↖",
             _ => "?",
         };
-        term.set_str((2 + wind.len() + 1) as i32, (panel_y + 3) as i32, arrow, Some(wind_color), false);
+        term.set_str((2 + wind.len() + 1) as i32, (panel_y + 4) as i32, arrow, Some(wind_color), false);
+
+        // Observation time at bottom
+        let obs_time = parse_observation_time(&data.observation_time);
+        let time_str = format!("Updated {}", obs_time);
+        let time_color = if colors.is_mono() { Color::DarkGrey } else { scheme_color(colors.scheme, 0, false).0 };
+        term.set_str(2, (panel_y + 5) as i32, &time_str, Some(time_color), false);
     }
 }
 
 // Simple URL encoding for location queries
+/// Parse ISO8601 time "2025-12-13T16:30" into "4:30 PM"
+fn parse_observation_time(iso_time: &str) -> String {
+    // Extract time part after 'T'
+    if let Some(time_part) = iso_time.split('T').nth(1) {
+        let parts: Vec<&str> = time_part.split(':').collect();
+        if parts.len() >= 2 {
+            if let Ok(hour) = parts[0].parse::<u32>() {
+                let minute = parts[1];
+                let (hour12, ampm) = if hour == 0 {
+                    (12, "AM")
+                } else if hour < 12 {
+                    (hour, "AM")
+                } else if hour == 12 {
+                    (12, "PM")
+                } else {
+                    (hour - 12, "PM")
+                };
+                return format!("{}:{} {}", hour12, minute, ampm);
+            }
+        }
+    }
+    iso_time.to_string() // Fallback to raw string
+}
+
 fn urlencoding(s: &str) -> String {
     let mut result = String::new();
     for c in s.chars() {
@@ -644,6 +711,7 @@ pub fn run(config: WeatherConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
     let mut display = WeatherDisplay::new();
     let mut colors = ColorState::new(7); // Default to mono (semantic colors)
+    let mut use_fahrenheit = true; // Default to Fahrenheit
 
     // Fetch weather data
     display.fetch_weather(config.location.as_deref())?;
@@ -652,6 +720,10 @@ pub fn run(config: WeatherConfig) -> io::Result<()> {
     let (w, h) = term.size();
     display.init_particles(w as usize, h as usize);
 
+    // Auto-refresh every 20 minutes
+    let refresh_interval = Duration::from_secs(20 * 60);
+    let mut last_refresh = Instant::now();
+
     loop {
         // Check for quit
         if let Ok(Some((code, _))) = term.check_key() {
@@ -659,13 +731,21 @@ pub fn run(config: WeatherConfig) -> io::Result<()> {
                 match code {
                     KeyCode::Char('q') | KeyCode::Esc => break,
                     KeyCode::Char('r') => {
-                        // Refresh weather
+                        // Manual refresh
                         display.fetch_weather(config.location.as_deref())?;
                         display.init_particles(w as usize, h as usize);
+                        last_refresh = Instant::now();
                     }
+                    KeyCode::Char('f') => use_fahrenheit = !use_fahrenheit,
                     _ => {}
                 }
             }
+        }
+
+        // Auto-refresh weather data
+        if last_refresh.elapsed() >= refresh_interval {
+            let _ = display.fetch_weather(config.location.as_deref()); // Ignore errors on auto-refresh
+            last_refresh = Instant::now();
         }
 
         // Handle resize
@@ -682,7 +762,7 @@ pub fn run(config: WeatherConfig) -> io::Result<()> {
 
         term.clear();
         let (w, h) = term.size();
-        display.render(&mut term, w as usize, h as usize, &colors);
+        display.render(&mut term, w as usize, h as usize, &colors, use_fahrenheit);
         term.present()?;
 
         term.sleep(config.time_step);

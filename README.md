@@ -33,6 +33,7 @@ Terminal-based generative art, system monitors, and utilities.
 ### Utilities
 - **Weather**: Live weather display with ASCII art animations
 - **Pomodoro**: Timer with ASCII tomato visualization
+- **FAH**: Folding@home stats with real-time work unit progress
 
 ## Installation
 
@@ -203,6 +204,41 @@ termart pomodoro -c 6             # 6 pomodoros before long break
 | `s` | Skip to next phase |
 | `r` | Reset timer |
 | `Enter` | Advance when timer done |
+| `q` / `Esc` | Quit |
+
+### Folding@home
+
+```bash
+termart fah                       # Display FAH stats and work units
+```
+
+**Features:**
+- Real-time progress for local and remote machines
+- Live WebSocket updates from FAH relay
+- Account stats (points, WUs, rank)
+- C/G indicator for CPU/GPU work units
+
+**Configuration:**
+
+Create `~/.config/termart/config.toml`:
+
+```toml
+[fah]
+username = "your_username"
+# Optional: for remote machine monitoring
+fah_secret = "base64_private_key_from_browser"
+fah_sid = "session_id_from_browser"
+```
+
+To get `fah_secret` and `fah_sid` for remote machines:
+1. Log into https://v8-4.foldingathome.org
+2. Open browser DevTools → Application → Local Storage
+3. Copy `fah-secret` and `fah-sid` values
+
+**Controls:**
+| Key | Action |
+|-----|--------|
+| `r` | Refresh data |
 | `q` / `Esc` | Quit |
 
 ## Notes

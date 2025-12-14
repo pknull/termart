@@ -48,32 +48,32 @@ pub fn scheme_color(scheme: u8, intensity: u8, bold: bool) -> (Color, bool) {
         2 => match intensity {  // Blue/Cyan (ice)
             0 => (Color::DarkBlue, false),
             1 => (Color::Blue, false),
-            2 => (Color::DarkCyan, bold),
+            2 => (Color::Cyan, bold),
             _ => (Color::Cyan, true),
         },
-        3 => match intensity {  // Magenta/Red (pink)
+        3 => match intensity {  // Magenta/Pink (pink)
             0 => (Color::DarkMagenta, false),
             1 => (Color::Magenta, false),
-            2 => (Color::Red, bold),
-            _ => (Color::White, true),
+            2 => (Color::Magenta, bold),
+            _ => (Color::AnsiValue(13), true),  // Bright magenta
         },
-        4 => match intensity {  // Yellow/White (gold)
+        4 => match intensity {  // Yellow/Gold (gold)
             0 => (Color::DarkYellow, false),
             1 => (Color::Yellow, false),
-            2 => (Color::White, bold),
-            _ => (Color::White, true),
+            2 => (Color::Yellow, bold),
+            _ => (Color::AnsiValue(11), true),  // Bright yellow
         },
-        5 => match intensity {  // Cyan/White (electric)
+        5 => match intensity {  // Cyan/Electric (electric)
             0 => (Color::DarkCyan, false),
             1 => (Color::Cyan, false),
-            2 => (Color::White, bold),
-            _ => (Color::White, true),
+            2 => (Color::Cyan, bold),
+            _ => (Color::AnsiValue(14), true),  // Bright cyan
         },
         6 => match intensity {  // Red/Magenta (lava)
             0 => (Color::DarkRed, false),
             1 => (Color::Red, false),
             2 => (Color::Magenta, bold),
-            _ => (Color::White, true),
+            _ => (Color::AnsiValue(9), true),  // Bright red
         },
         7 => match intensity {  // White/Grey (mono)
             0 => (Color::DarkGrey, false),
@@ -91,13 +91,13 @@ pub fn scheme_color(scheme: u8, intensity: u8, bold: bool) -> (Color, bool) {
             0 => (Color::DarkBlue, false),
             1 => (Color::Blue, false),
             2 => (Color::Magenta, bold),
-            _ => (Color::White, true),
+            _ => (Color::AnsiValue(13), true),  // Bright magenta
         },
         _ => match intensity {  // Default: Green (matrix)
             0 => (Color::DarkGreen, false),
             1 => (Color::Green, false),
             2 => (Color::Green, true),
-            _ => (Color::White, true),
+            _ => (Color::AnsiValue(10), true),  // Bright green
         },
     }
 }
