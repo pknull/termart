@@ -1,5 +1,5 @@
 ---
-version: "1.1"
+version: "1.2"
 lastUpdated: "2025-12-14"
 lifecycle: core
 stakeholder: pknull
@@ -24,7 +24,16 @@ Project expanded with system monitors and utilities:
 
 ## Recent Changes
 
-### Session 2025-12-14
+### Session 2025-12-14 (Bug Fix)
+- **CPU Monitor Fix**: Fixed all monitors showing ~98% usage on startup
+  - Root cause: First and second samples taken microseconds apart
+  - With tiny time delta, any CPU activity appeared as near-100% usage
+  - Fix: Added 100ms sleep between first update and main loop
+  - Applied to all monitors: cpu, mem, gpu, diskio, net
+- **Network Scaling**: Confirmed network monitor uses auto-scaling with peak tracking
+  - 100% = observed peak rate (with slow decay toward 1 MB/s minimum)
+
+### Session 2025-12-14 (FAH)
 - **FAH Monitor Complete**: Real-time Folding@home display with WebSocket connection
   - AES-256-CBC encrypted message decryption
   - Local and remote machine progress tracking
