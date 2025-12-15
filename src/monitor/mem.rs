@@ -221,6 +221,7 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
     let mut monitor = MemMonitor::new();
 
     monitor.update()?;
+    std::thread::sleep(std::time::Duration::from_millis(100));
 
     loop {
         if let Ok(Some((code, mods))) = term.check_key() {
