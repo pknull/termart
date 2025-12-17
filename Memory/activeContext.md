@@ -1,5 +1,5 @@
 ---
-version: "1.3"
+version: "1.4"
 lastUpdated: "2025-12-16"
 lifecycle: core
 stakeholder: pknull
@@ -23,6 +23,13 @@ Project expanded with system monitors and utilities:
 - **Folding@home monitor** with real-time WebSocket updates
 
 ## Recent Changes
+
+### Session 2025-12-16 (Submodule Rename)
+- **Asha → asha**: Renamed submodule directory to lowercase
+  - Updated .gitmodules, .gitignore, CLAUDE.md
+  - Updated git config submodule section
+  - Renamed .git/modules/Asha → .git/modules/asha
+  - Updated worktree path in modules config
 
 ### Session 2025-12-16 (Space Invaders AI)
 - **AI Bullet Avoidance**: Rewrote from zone-counting to predictive danger zones
