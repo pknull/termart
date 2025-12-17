@@ -1,6 +1,6 @@
 ---
-version: "1.2"
-lastUpdated: "2025-12-14"
+version: "1.3"
+lastUpdated: "2025-12-16"
 lifecycle: core
 stakeholder: pknull
 changeTrigger: "session end, significant changes"
@@ -23,6 +23,22 @@ Project expanded with system monitors and utilities:
 - **Folding@home monitor** with real-time WebSocket updates
 
 ## Recent Changes
+
+### Session 2025-12-16 (Space Invaders AI)
+- **AI Bullet Avoidance**: Rewrote from zone-counting to predictive danger zones
+  - Tracks where each bullet will land (impact_x = bullet.x since they fall straight)
+  - Urgency-based safety margins: close bullets get 3.5px, distant get 2.5px
+  - Dodge jumps 6 pixels to escape danger zones
+- **Directional Intercept**: Only pursue aliens coming TOWARD player
+  - Alien moving away → ignore, wait for it to return
+  - Alien moving toward → calculate intercept point and move there
+- **Proactive Positioning**: When no aliens approaching, move ahead to leading edge
+  - Positions 5px ahead of where aliens will turn around at edge
+  - Ready to shoot when they reverse direction
+- **Scaled Alien Grid**: Columns scale to terminal width (41% proportion)
+  - Matches original 11 cols on 80-char terminal
+  - Min 5, max 30 columns for different terminal sizes
+- **Key Learning**: "Chasing" vs "intercepting" distinction - never pursue moving-away targets
 
 ### Session 2025-12-14 (Bug Fix)
 - **CPU Monitor Fix**: Fixed all monitors showing ~98% usage on startup
@@ -50,6 +66,7 @@ Project expanded with system monitors and utilities:
 
 ## Next Steps
 
+- [ ] Space Invaders AI: Continue testing bullet avoidance (occasional hits reported)
 - [ ] Add more visualization types
 - [ ] Consider color scheme customization via config file
 - [ ] Potential: sixel/kitty graphics protocol support for higher fidelity
