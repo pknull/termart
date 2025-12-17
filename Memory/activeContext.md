@@ -1,6 +1,6 @@
 ---
-version: "1.4"
-lastUpdated: "2025-12-16"
+version: "1.5"
+lastUpdated: "2025-12-17"
 lifecycle: core
 stakeholder: pknull
 changeTrigger: "session end, significant changes"
@@ -23,6 +23,12 @@ Project expanded with system monitors and utilities:
 - **Folding@home monitor** with real-time WebSocket updates
 
 ## Recent Changes
+
+### Session 2025-12-17 (Network Monitor Centering)
+- **Horizontal centering**: Added max 80-char content width, centered in terminal
+- **Vertical centering fix**: Removed `.max(0)` so content clips equally from top/bottom
+- **Panel height fix**: Each interface uses 3 lines (name+download+upload), not 2
+- **Key Learning**: Panel height calculations must match actual rendered line count
 
 ### Session 2025-12-16 (Submodule Rename)
 - **Asha → asha**: Renamed submodule directory to lowercase

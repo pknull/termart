@@ -1,0 +1,39 @@
+{
+  "git_hash": "429f07b5d8343d6ea48fc0edd788ff4f88e9535b",
+  "files": {
+    ".claude/commands/index.md": "381883e4d1f49f9ebf9f984611b259ca",
+    ".claude/commands/save.md": "bfe0655063f5ff7f04913ff81057024d",
+    "Memory/CLAUDE.md": "badcced6b4b06efc1e556a664c429915",
+    "Memory/activeContext.md": "0bd1acdd85bbfcfc1f1038a761686d14",
+    "Memory/communicationStyle.md": "cd63af3cf3e1fe7f71c725e0b41c0134",
+    "Memory/projectbrief.md": "66a7f7b0b3452a747fb2f18ac94867f3",
+    "Memory/techEnvironment.md": "871fe88a1a600dbad831332b5dd11579",
+    "Memory/workflowProtocols.md": "e76575ac9a528c1455dd986fe1cb2204",
+    "asha/CORE-monolith.md": "502c2ed109bf333b1294238ea53c8cff",
+    "asha/CORE.md": "ee25d246fc39b512099d04a0fc5c183c",
+    "asha/README.md": "fa37f54ed9011e0278d363d81300f9b6",
+    "asha/commands/index.md": "381883e4d1f49f9ebf9f984611b259ca",
+    "asha/commands/save.md": "bfe0655063f5ff7f04913ff81057024d",
+    "asha/docs/MEMORY-STRUCTURE.md": "f38eb1ef72b3bb9e9f7bb93ff712459e",
+    "asha/docs/SESSION-CAPTURE.md": "d976f26aa7a48c362e6576965fe3d9da",
+    "asha/docs/SESSION-SAVE.md": "38a8ad4821fe557cca01990cbabc4d83",
+    "asha/modules/code.md": "3c0dcce1c1f629452655b9316681826a",
+    "asha/modules/high-stakes.md": "a496416a0a4f444bcd9d75feb6009a4d",
+    "asha/modules/memory-ops.md": "ce26642c15dba91f9967779ddffed86e",
+    "asha/modules/research.md": "46f4ebcd6c096bd9b6ad7c050de9d9d3",
+    "asha/modules/verbalized-sampling.md": "7f47e23766258d9044540fa3edd0b143",
+    "asha/modules/writing.md": "bb7403a1f5b19c5e250c09d1da2bf7fb",
+    "asha/templates/CLAUDE.md": "badcced6b4b06efc1e556a664c429915",
+    "asha/templates/activeContext.md": "9af1572a4a8e67b76d4a9038276939f6",
+    "asha/templates/communicationStyle.md": "1de7f5db78bf15e0a429159b5ad1244a",
+    "asha/templates/projectbrief.md": "cb2ed98f63ccd7018fce355b1cf0863d",
+    "asha/templates/techEnvironment.md": "340a52996fa5dba249523df90318a5b3",
+    "asha/templates/workflowProtocols.md": "f885133b385d20dbcb21ec5d480ee939"
+  },
+  "last_ingest": "2025-12-17T02:13:41.613984",
+  "config": {
+    "chunk_size": 4000,
+    "chunk_overlap": 400,
+    "embedding_model": "nomic-embed-text:latest"
+  }
+}

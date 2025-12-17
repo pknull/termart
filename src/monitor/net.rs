@@ -129,28 +129,35 @@ impl NetMonitor {
 
         // Calculate panel height: Title(1) + Download(1) + Upload(1) + blank + per-interface lines
         let num_ifaces = self.interfaces.len().min(4); // Show max 4 interfaces
-        let panel_height = 3 + if num_ifaces > 1 { 1 + num_ifaces * 2 } else { 0 };
+        // Each interface: name(1) + download(1) + upload(1) = 3 lines
+        let panel_height = 3 + if num_ifaces > 1 { 1 + num_ifaces * 3 } else { 0 };
 
-        // Vertically center
-        let start_y = y + ((h as i32 - panel_height as i32) / 2).max(0);
+        // Content width: cap at 80 chars for readability
+        let content_w = w.min(80);
+
+        // Horizontally center
+        let start_x = x + ((w as i32 - content_w as i32) / 2).max(0);
+
+        // Vertically center (allow negative to clip top and bottom equally)
+        let start_y = y + (h as i32 - panel_height as i32) / 2;
         let mut cy = start_y;
 
         // Title with total transferred
         let total_rx: u64 = self.total_rx.values().sum();
         let total_tx: u64 = self.total_tx.values().sum();
-        term.set_str(x, cy, "Network", Some(text_color_scheme(colors)), true);
+        term.set_str(start_x, cy, "Network", Some(text_color_scheme(colors)), true);
         let totals_str = format!("↓{} ↑{}", format_bytes(total_rx), format_bytes(total_tx));
-        term.set_str(x + w as i32 - totals_str.len() as i32, cy, &totals_str, Some(muted_color_scheme(colors)), false);
+        term.set_str(start_x + content_w as i32 - totals_str.len() as i32, cy, &totals_str, Some(muted_color_scheme(colors)), false);
         cy += 1;
 
         // Download rate
         let rx_pct = ((self.total_rx_rate / self.peak_rx_rate) * 100.0).min(100.0) as f32;
-        self.draw_net_row(term, x, cy, w, "Download", rx_pct, self.total_rx_rate, colors, true);
+        self.draw_net_row(term, start_x, cy, content_w, "Download", rx_pct, self.total_rx_rate, colors, true);
         cy += 1;
 
         // Upload rate
         let tx_pct = ((self.total_tx_rate / self.peak_tx_rate) * 100.0).min(100.0) as f32;
-        self.draw_net_row(term, x, cy, w, "Upload", tx_pct, self.total_tx_rate, colors, false);
+        self.draw_net_row(term, start_x, cy, content_w, "Upload", tx_pct, self.total_tx_rate, colors, false);
         cy += 1;
 
         // Per-interface breakdown (if multiple interfaces)
@@ -162,17 +169,17 @@ impl NetMonitor {
                 let iface_tx = self.tx_rates.get(iface).copied().unwrap_or(0.0);
 
                 // Interface name as label
-                term.set_str(x, cy, iface, Some(header_color_scheme(colors)), false);
+                term.set_str(start_x, cy, iface, Some(header_color_scheme(colors)), false);
                 cy += 1;
 
                 // Download for this interface
                 let iface_rx_pct = ((iface_rx / self.peak_rx_rate) * 100.0).min(100.0) as f32;
-                self.draw_net_row(term, x, cy, w, "  ↓", iface_rx_pct, iface_rx, colors, true);
+                self.draw_net_row(term, start_x, cy, content_w, "  ↓", iface_rx_pct, iface_rx, colors, true);
                 cy += 1;
 
                 // Upload for this interface
                 let iface_tx_pct = ((iface_tx / self.peak_tx_rate) * 100.0).min(100.0) as f32;
-                self.draw_net_row(term, x, cy, w, "  ↑", iface_tx_pct, iface_tx, colors, false);
+                self.draw_net_row(term, start_x, cy, content_w, "  ↑", iface_tx_pct, iface_tx, colors, false);
                 cy += 1;
             }
         }
