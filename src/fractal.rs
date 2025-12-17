@@ -136,7 +136,7 @@ pub fn run(config: FractalConfig) -> io::Result<()> {
     match config.fractal_type {
         crate::config::FractalType::Matrix => crate::viz::matrix::run(&mut term, &config, &mut rng),
         crate::config::FractalType::Life => crate::viz::life::run(&mut term, &config, &mut rng),
-        crate::config::FractalType::Plasma => crate::viz::plasma::run(&mut term, &config),
+        crate::config::FractalType::Plasma => crate::viz::plasma::run(&mut term, &config, &mut rng),
         crate::config::FractalType::Fire => crate::viz::fire::run(&mut term, &config, &mut rng),
         crate::config::FractalType::Rain => crate::viz::rain::run(&mut term, &config, &mut rng),
         crate::config::FractalType::Waves => crate::viz::waves::run(&mut term, &config),
@@ -257,10 +257,27 @@ fn count_neighbors(grid: &[Vec<bool>], x: usize, y: usize, w: usize, h: usize) -
 }
 
 /// Plasma effect (animated sine waves)
-pub fn run_plasma(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
+pub fn run_plasma(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
+    use rand::Rng;
+
     let mut state = VizState::new(config.time_step);
     let mut time: f64 = 0.0;
     let chars = [' ', '.', ':', ';', 'o', 'O', '0', '@', '#'];
+
+    // Seed-dependent parameters for unique patterns
+    let freq1: f64 = rng.gen_range(6.0..14.0);      // X frequency
+    let freq2: f64 = rng.gen_range(6.0..14.0);      // Y frequency
+    let freq3: f64 = rng.gen_range(3.0..8.0);       // Diagonal frequency
+    let freq4: f64 = rng.gen_range(6.0..14.0);      // Radial frequency
+    let phase1: f64 = rng.gen_range(0.0..6.28);     // Phase offsets
+    let phase2: f64 = rng.gen_range(0.0..6.28);
+    let phase3: f64 = rng.gen_range(0.0..6.28);
+    let phase4: f64 = rng.gen_range(0.0..6.28);
+    let center_x: f64 = rng.gen_range(0.3..0.7);    // Radial center
+    let center_y: f64 = rng.gen_range(0.3..0.7);
+    let time_mult1: f64 = rng.gen_range(0.7..1.3);  // Time multipliers
+    let time_mult2: f64 = rng.gen_range(1.2..1.8);
+    let time_mult3: f64 = rng.gen_range(0.3..0.7);
 
     let (init_w, init_h) = term.size();
     let mut prev_w = init_w;
@@ -303,24 +320,24 @@ pub fn run_plasma(term: &mut Terminal, config: &FractalConfig) -> io::Result<()>
             continue;
         }
 
-        let time_1 = time;
-        let time_1_5 = time * 1.5;
-        let time_0_5 = time * 0.5;
+        let t1 = time * time_mult1;
+        let t2 = time * time_mult2;
+        let t3 = time * time_mult3;
 
         for y in 0..height {
             let fy = y as f64 * inv_h;
-            let v2_base = fy * 10.0 + time_1_5;
+            let v2_base = fy * freq2 + phase2 + t2;
 
             for x in 0..width {
                 let fx = x as f64 * inv_w;
 
-                let v1 = fast_sin(fx * 10.0 + time_1);
+                let v1 = fast_sin(fx * freq1 + phase1 + t1);
                 let v2 = fast_sin(v2_base);
-                let v3 = fast_sin((fx + fy) * 5.0 + time_0_5);
-                let dx = fx - 0.5;
-                let dy = fy - 0.5;
+                let v3 = fast_sin((fx + fy) * freq3 + phase3 + t3);
+                let dx = fx - center_x;
+                let dy = fy - center_y;
                 let dist_sq = dx * dx + dy * dy;
-                let v4 = fast_sin(dist_sq.sqrt() * 10.0 - time_1);
+                let v4 = fast_sin(dist_sq.sqrt() * freq4 + phase4 - t1);
 
                 let value = (v1 + v2 + v3 + v4) * 0.25;
                 let normalized = (value + 1.0) * 0.5;
