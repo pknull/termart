@@ -29,6 +29,7 @@ pub enum FractalType {
     Globe,    // Rotating 3D globe with network activity
     Hex,      // Hexagon grid with wave animations
     Keyboard, // On-screen keyboard with key highlighting
+    Invaders, // Space Invaders style game
 }
 
 /// Configuration for fractal generation

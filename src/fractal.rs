@@ -5,6 +5,9 @@ use crossterm::style::Color;
 use rand::prelude::*;
 use std::io;
 
+// Speed lookup table for number keys (0-9)
+const SPEED_TABLE: [f32; 10] = [0.2, 0.005, 0.01, 0.02, 0.03, 0.05, 0.07, 0.1, 0.15, 0.2];
+
 /// Runtime state for interactive controls
 struct VizState {
     speed: f32,        // Current speed (time per frame)
@@ -13,6 +16,7 @@ struct VizState {
 }
 
 impl VizState {
+    #[inline]
     fn new(initial_speed: f32) -> Self {
         Self {
             speed: initial_speed,
@@ -22,26 +26,14 @@ impl VizState {
     }
 
     /// Handle keypress, returns true if should quit
+    #[inline]
     fn handle_key(&mut self, code: KeyCode, _modifiers: KeyModifiers) -> bool {
         match code {
             KeyCode::Char('q') | KeyCode::Esc => return true,
             KeyCode::Char(' ') => self.paused = !self.paused,
             // Number keys: change speed (1=fastest, 9=slowest, 0=very slow)
             KeyCode::Char(c) if c.is_ascii_digit() => {
-                let n = c.to_digit(10).unwrap() as u8;
-                self.speed = match n {
-                    0 => 0.2,
-                    1 => 0.005,
-                    2 => 0.01,
-                    3 => 0.02,
-                    4 => 0.03,
-                    5 => 0.05,
-                    6 => 0.07,
-                    7 => 0.1,
-                    8 => 0.15,
-                    9 => 0.2,
-                    _ => self.speed,
-                };
+                self.speed = SPEED_TABLE[(c as u8 - b'0') as usize];
             }
             // Shift+number produces symbols - use these for color schemes
             KeyCode::Char('!') => self.color_scheme = 1,  // Shift+1: fire
@@ -61,6 +53,7 @@ impl VizState {
 }
 
 /// Get color based on scheme and intensity
+#[inline]
 fn scheme_color(scheme: u8, intensity: u8, bold: bool) -> (Color, bool) {
     match scheme {
         1 => match intensity {  // Red/Yellow (fire)
@@ -141,134 +134,24 @@ pub fn run(config: FractalConfig) -> io::Result<()> {
     term.clear_screen()?;
 
     match config.fractal_type {
-        crate::config::FractalType::Matrix => run_matrix(&mut term, &config, &mut rng),
-        crate::config::FractalType::Life => run_life(&mut term, &config, &mut rng),
-        crate::config::FractalType::Plasma => run_plasma(&mut term, &config),
-        crate::config::FractalType::Fire => run_fire(&mut term, &config, &mut rng),
-        crate::config::FractalType::Rain => run_rain(&mut term, &config, &mut rng),
-        crate::config::FractalType::Waves => run_waves(&mut term, &config),
-        crate::config::FractalType::Cube => run_cube(&mut term, &config),
-        crate::config::FractalType::Pipes => run_pipes(&mut term, &config, &mut rng),
-        crate::config::FractalType::Donut => run_donut(&mut term, &config),
-        crate::config::FractalType::Globe => run_globe(&mut term, &config, &mut rng),
-        crate::config::FractalType::Hex => run_hex(&mut term, &config, &mut rng),
-        crate::config::FractalType::Keyboard => run_keyboard(&mut term, &config),
+        crate::config::FractalType::Matrix => crate::viz::matrix::run(&mut term, &config, &mut rng),
+        crate::config::FractalType::Life => crate::viz::life::run(&mut term, &config, &mut rng),
+        crate::config::FractalType::Plasma => crate::viz::plasma::run(&mut term, &config),
+        crate::config::FractalType::Fire => crate::viz::fire::run(&mut term, &config, &mut rng),
+        crate::config::FractalType::Rain => crate::viz::rain::run(&mut term, &config, &mut rng),
+        crate::config::FractalType::Waves => crate::viz::waves::run(&mut term, &config),
+        crate::config::FractalType::Cube => crate::viz::cube::run(&mut term, &config),
+        crate::config::FractalType::Pipes => crate::viz::pipes::run(&mut term, &config, &mut rng),
+        crate::config::FractalType::Donut => crate::viz::donut::run(&mut term, &config),
+        crate::config::FractalType::Globe => crate::viz::globe::run(&mut term, &config, &mut rng),
+        crate::config::FractalType::Hex => crate::viz::hex::run(&mut term, &config, &mut rng),
+        crate::config::FractalType::Keyboard => crate::viz::keyboard::run(&mut term, &config),
+        crate::config::FractalType::Invaders => crate::viz::invaders::run(&mut term, &config, &mut rng),
     }
-}
-
-/// Matrix rain effect (cmatrix-like)
-fn run_matrix(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
-    let mut state = VizState::new(config.time_step);
-
-    struct Drop {
-        y: f32,
-        speed: f32,
-        length: usize,
-        chars: Vec<char>,
-    }
-
-    let chars: Vec<char> = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*(){}[]|;:,.<>?~`"
-        .chars().collect();
-
-    let (init_w, init_h) = term.size();
-    let mut w = init_w as usize;
-    let mut h = init_h as usize;
-
-    let mut drops: Vec<Drop> = (0..w)
-        .map(|_| {
-            Drop {
-                y: rng.gen_range(-(h as f32)..0.0),
-                speed: rng.gen_range(0.5..1.2),
-                length: rng.gen_range(5..20),
-                chars: (0..25).map(|_| chars[rng.gen_range(0..chars.len())]).collect(),
-            }
-        })
-        .collect();
-
-    loop {
-        // Check for terminal resize
-        let (new_w, new_h) = crossterm::terminal::size().unwrap_or((w as u16, h as u16));
-        if new_w as usize != w || new_h as usize != h {
-            w = new_w as usize;
-            h = new_h as usize;
-            term.resize(new_w, new_h);
-            term.clear_screen()?;
-            // Resize drops vector
-            drops.resize_with(w, || {
-                Drop {
-                    y: rng.gen_range(-(h as f32)..0.0),
-                    speed: rng.gen_range(0.5..1.2),
-                    length: rng.gen_range(5..20),
-                    chars: (0..25).map(|_| chars[rng.gen_range(0..chars.len())]).collect(),
-                }
-            });
-        }
-
-        // Handle input
-        if let Some((code, mods)) = term.check_key()? {
-            if state.handle_key(code, mods) {
-                break;
-            }
-        }
-
-        if state.paused {
-            term.sleep(0.1);
-            continue;
-        }
-
-        // Clear back buffer
-        term.clear();
-
-        // Populate back buffer with all drops
-        for (x, drop) in drops.iter().enumerate() {
-            let head_y = drop.y as i32;
-            let len = drop.length;
-            let half_len = len / 2;
-
-            for i in 0..len {
-                let y = head_y - i as i32;
-                if y >= 0 && y < h as i32 {
-                    let char_idx = (y as usize + x) % drop.chars.len();
-                    let ch = drop.chars[char_idx];
-
-                    // Color gradient: head -> near head -> middle -> tail
-                    let intensity = if i == 0 { 3 } else if i < 3 { 2 } else if i < half_len { 1 } else { 0 };
-                    let (color, bold) = scheme_color(state.color_scheme, intensity, i < 3);
-
-                    term.set(x as i32, y, ch, Some(color), bold);
-                }
-            }
-        }
-
-        // Present with differential update (only changed cells)
-        term.present()?;
-
-        // Update drop positions
-        for drop in &mut drops {
-            drop.y += drop.speed;
-
-            // Reset drop when it goes off screen
-            let head_y = drop.y as i32;
-            if head_y - drop.length as i32 >= h as i32 {
-                drop.y = rng.gen_range(-20.0..0.0);
-                drop.speed = rng.gen_range(0.5..1.2);
-                drop.length = rng.gen_range(5..20);
-                for c in &mut drop.chars {
-                    if rng.gen_bool(0.3) {
-                        *c = chars[rng.gen_range(0..chars.len())];
-                    }
-                }
-            }
-        }
-
-        term.sleep(state.speed);
-    }
-
-    Ok(())
 }
 
 /// Conway's Game of Life
-fn run_life(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
+pub fn run_life(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
     let mut state = VizState::new(config.time_step);
 
     let (init_w, init_h) = term.size();
@@ -349,25 +232,32 @@ fn run_life(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io
     Ok(())
 }
 
+#[inline]
 fn count_neighbors(grid: &[Vec<bool>], x: usize, y: usize, w: usize, h: usize) -> u8 {
-    let mut count = 0;
-    for dy in -1i32..=1 {
-        for dx in -1i32..=1 {
-            if dx == 0 && dy == 0 {
-                continue;
-            }
-            let nx = (x as i32 + dx).rem_euclid(w as i32) as usize;
-            let ny = (y as i32 + dy).rem_euclid(h as i32) as usize;
-            if grid[ny][nx] {
-                count += 1;
-            }
-        }
+    let mut count = 0u8;
+    let xi = x as i32;
+    let yi = y as i32;
+    let wi = w as i32;
+    let hi = h as i32;
+    // Unrolled loop for all 8 neighbors
+    let neighbors = [
+        ((xi - 1).rem_euclid(wi) as usize, (yi - 1).rem_euclid(hi) as usize),
+        (x, (yi - 1).rem_euclid(hi) as usize),
+        ((xi + 1).rem_euclid(wi) as usize, (yi - 1).rem_euclid(hi) as usize),
+        ((xi - 1).rem_euclid(wi) as usize, y),
+        ((xi + 1).rem_euclid(wi) as usize, y),
+        ((xi - 1).rem_euclid(wi) as usize, (yi + 1).rem_euclid(hi) as usize),
+        (x, (yi + 1).rem_euclid(hi) as usize),
+        ((xi + 1).rem_euclid(wi) as usize, (yi + 1).rem_euclid(hi) as usize),
+    ];
+    for (nx, ny) in neighbors {
+        if grid[ny][nx] { count += 1; }
     }
     count
 }
 
 /// Plasma effect (animated sine waves)
-fn run_plasma(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
+pub fn run_plasma(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     let mut state = VizState::new(config.time_step);
     let mut time: f64 = 0.0;
     let chars = [' ', '.', ':', ';', 'o', 'O', '0', '@', '#'];
@@ -454,7 +344,7 @@ fn run_plasma(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
 }
 
 /// Fire effect (doom-style)
-fn run_fire(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
+pub fn run_fire(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
     let mut state = VizState::new(config.time_step);
     state.color_scheme = 1; // Default to fire colors
 
@@ -523,7 +413,7 @@ fn run_fire(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io
 }
 
 /// Rain effect (falling raindrops with splashes)
-fn run_rain(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
+pub fn run_rain(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
     let mut state = VizState::new(config.time_step);
     state.color_scheme = 2; // Default to blue/cyan
 
@@ -622,7 +512,7 @@ fn run_rain(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io
 }
 
 /// Waves effect (animated sine waves)
-fn run_waves(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
+pub fn run_waves(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     let mut state = VizState::new(config.time_step);
     state.color_scheme = 2; // Default to blue/cyan
 
@@ -703,7 +593,7 @@ fn run_waves(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
 }
 
 /// 3D rotating cube effect using braille characters
-fn run_cube(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
+pub fn run_cube(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     let mut state = VizState::new(config.time_step);
     let mut time: f32 = 0.0;
 
@@ -857,7 +747,7 @@ fn run_cube(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
 }
 
 /// Classic pipes screensaver
-fn run_pipes(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
+pub fn run_pipes(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
     let mut state = VizState::new(config.time_step);
 
     let pipe_chars: [[char; 4]; 4] = [
@@ -955,7 +845,7 @@ fn run_pipes(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> i
 }
 
 /// Rotating 3D donut (torus) effect
-fn run_donut(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
+pub fn run_donut(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     let mut state = VizState::new(config.time_step);
     let mut a: f32 = 0.0;
     let mut b: f32 = 0.0;
@@ -1106,7 +996,7 @@ fn fetch_user_location() -> Option<(f32, f32)> {
 }
 
 /// Rotating 3D globe with network activity (eDEX-UI style)
-fn run_globe(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
+pub fn run_globe(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
     let mut state = VizState::new(config.time_step);
     state.color_scheme = 5; // Default to electric (cyan/white)
 
@@ -1629,7 +1519,7 @@ fn run_globe(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> i
 }
 
 /// Hexagon grid with wave/pulse animations (eDEX-UI style)
-fn run_hex(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
+pub fn run_hex(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
     let mut state = VizState::new(config.time_step);
     state.color_scheme = 5; // Default to electric (cyan/white)
 
@@ -1863,7 +1753,7 @@ fn evdev_key_to_label(key: evdev::Key) -> Option<&'static str> {
 }
 
 /// On-screen keyboard visualization with global key monitoring via evdev
-fn run_keyboard(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
+pub fn run_keyboard(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     let mut state = VizState::new(config.time_step);
     state.color_scheme = 5; // Default to electric (cyan/white)
 

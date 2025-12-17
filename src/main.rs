@@ -3,6 +3,7 @@ mod terminal;
 mod colors;
 mod bonsai;
 mod fractal;
+mod viz;
 mod monitor;
 mod weather;
 mod pomodoro;
@@ -175,6 +176,30 @@ enum Commands {
         opts: VizOptions,
     },
 
+    /// Space Invaders style game
+    Invaders {
+        #[command(flatten)]
+        opts: VizOptions,
+    },
+
+    /// Clock display with block letters
+    Clock {
+        /// Animation speed (seconds per frame)
+        #[arg(short, long, default_value = "0.1")]
+        time: f32,
+
+        /// Hide seconds (show only HH:MM)
+        #[arg(long)]
+        no_seconds: bool,
+    },
+
+    /// Pong - two player game
+    Pong {
+        /// Game speed (seconds per frame)
+        #[arg(short, long, default_value = "0.016")]
+        time: f32,
+    },
+
     /// CPU usage monitor
     Cpu {
         #[command(flatten)]
@@ -320,6 +345,17 @@ fn main() -> io::Result<()> {
         Commands::Globe { opts } => run_viz(FractalType::Globe, opts, '#')?,
         Commands::Hex { opts } => run_viz(FractalType::Hex, opts, '#')?,
         Commands::Keyboard { opts } => run_viz(FractalType::Keyboard, opts, '#')?,
+        Commands::Invaders { opts } => run_viz(FractalType::Invaders, opts, '#')?,
+        Commands::Clock { time, no_seconds } => {
+            let config = viz::clock::ClockConfig {
+                time_step: time,
+                show_seconds: !no_seconds,
+            };
+            viz::clock::run(config)?;
+        }
+        Commands::Pong { time } => {
+            viz::pong::run(time)?;
+        }
         Commands::Cpu { opts } => run_monitor(MonitorType::Cpu, opts)?,
         Commands::Mem { opts } => run_monitor(MonitorType::Mem, opts)?,
         Commands::Disk { opts } => run_monitor(MonitorType::Disk, opts)?,
