@@ -1,5 +1,5 @@
 ---
-version: "1.5"
+version: "1.6"
 lastUpdated: "2025-12-17"
 lifecycle: core
 stakeholder: pknull
@@ -23,6 +23,22 @@ Project expanded with system monitors and utilities:
 - **Folding@home monitor** with real-time WebSocket updates
 
 ## Recent Changes
+
+### Session 2025-12-17 (Visualizations & Optimizations)
+- **Clock widget**: 24-hour time in block letters with date and timezone
+  - OnceLock for timezone caching (computed once)
+  - Reusable string buffers, cached layout values
+- **Pong game**: Two-player classic with AI toggle
+  - W/S for P1, Up/Down for P2, 1/2 to toggle AI
+  - Spin factor on paddle hits, win at 11 points
+- **Optimization pass** across viz files:
+  - clock.rs: OnceLock timezone, cached colors on scheme change
+  - invaders.rs: Named constants, static UI strings, reusable buffers
+  - matrix.rs: Fixed-size [char; 25] array instead of Vec
+  - fractal.rs: SPEED_TABLE const, inlined hot functions, unrolled neighbor lookup
+- **Plasma seed fix**: Was deterministic regardless of seed
+  - Now randomizes: wave frequencies (4), phase offsets (4), radial center, time multipliers (3)
+  - Same seed = same pattern, different seed = different pattern
 
 ### Session 2025-12-17 (Network Monitor Centering)
 - **Horizontal centering**: Added max 80-char content width, centered in terminal
@@ -80,11 +96,12 @@ Project expanded with system monitors and utilities:
 ## Next Steps
 
 - [ ] Space Invaders AI: Continue testing bullet avoidance (occasional hits reported)
-- [ ] Add more visualization types
+- [ ] Add more visualization types (snake, breakout, tetris?)
 - [ ] Consider color scheme customization via config file
 - [ ] Potential: sixel/kitty graphics protocol support for higher fidelity
 - [ ] Documentation improvements
 - [ ] FAH: Consider auto-reconnect on WebSocket disconnect
+- [ ] Waves: Consider adding seed support like plasma
 
 ## Active Decisions
 
