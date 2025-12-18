@@ -5,6 +5,8 @@ pub mod disk;
 pub mod diskio;
 pub mod net;
 pub mod gpu;
+pub mod ps;
+pub mod docker;
 
 use crate::colors::{ColorState, scheme_color};
 use crossterm::event::{KeyCode, KeyModifiers};

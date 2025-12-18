@@ -200,6 +200,7 @@ pub struct CpuMonitor {
     prev_state: Option<CpuState>,
     pub usage_per_core: Vec<f32>,
     pub usage_total: f32,
+    pub iowait_pct: f32,
 }
 
 impl CpuMonitor {
@@ -208,6 +209,7 @@ impl CpuMonitor {
             prev_state: None,
             usage_per_core: Vec::new(),
             usage_total: 0.0,
+            iowait_pct: 0.0,
         }
     }
 
@@ -255,9 +257,16 @@ impl CpuMonitor {
         if let Some(ref prev) = self.prev_state {
             let total_diff = current.total.total().saturating_sub(prev.total.total());
             let active_diff = current.total.active().saturating_sub(prev.total.active());
+            let iowait_diff = current.total.iowait.saturating_sub(prev.total.iowait);
 
             self.usage_total = if total_diff > 0 {
                 (active_diff as f32 / total_diff as f32) * 100.0
+            } else {
+                0.0
+            };
+
+            self.iowait_pct = if total_diff > 0 {
+                (iowait_diff as f32 / total_diff as f32) * 100.0
             } else {
                 0.0
             };
@@ -380,13 +389,25 @@ impl CpuMonitor {
             cy += cores_rows as i32;
         }
 
-        // Uptime (left, under C5) and Load average (right) on same line
+        // Uptime (left), IO Wait (after uptime), Load average (right) on same line
         let uptime_str = get_uptime().unwrap_or_else(|| "??:??".to_string());
         let up_str = format!("up {}", uptime_str);
         term.set_str(info_x, cy, &up_str, Some(muted_color_scheme(colors)), false);
 
+        // IO Wait after uptime - yellow/orange color since it indicates blocked I/O
+        let iowait_str = format!("  IO Wait: {:4.1}%", self.iowait_pct);
+        let iowait_color = if self.iowait_pct > 20.0 {
+            crossterm::style::Color::Red
+        } else if self.iowait_pct > 5.0 {
+            crossterm::style::Color::Yellow
+        } else {
+            muted_color_scheme(colors)
+        };
+        let iowait_x = info_x + up_str.len() as i32;
+        term.set_str(iowait_x, cy, &iowait_str, Some(iowait_color), false);
+
         let load = get_loadavg().unwrap_or((0.0, 0.0, 0.0));
-        let lav_str = format!("Load AVG: {:.2}  {:.2}  {:.2}", load.0, load.1, load.2);
+        let lav_str = format!("Load: {:.2}  {:.2}  {:.2}", load.0, load.1, load.2);
         term.set_str(info_x + core_section_w as i32 - lav_str.len() as i32, cy, &lav_str, Some(muted_color_scheme(colors)), false);
     }
 }

@@ -236,6 +236,28 @@ enum Commands {
         opts: MonitorOptions,
     },
 
+    /// Process list (top processes by CPU/memory)
+    Ps {
+        /// Update interval (seconds)
+        #[arg(short, long, default_value = "2.0")]
+        time: f32,
+
+        /// Max processes to show
+        #[arg(short = 'n', long, default_value = "50")]
+        count: usize,
+
+        /// Include kernel threads
+        #[arg(long)]
+        all: bool,
+    },
+
+    /// Docker container stats
+    Docker {
+        /// Update interval (seconds)
+        #[arg(short, long, default_value = "2.0")]
+        time: f32,
+    },
+
     /// Live weather display with ASCII art
     Weather {
         /// Location (city name, e.g., "London" or "New York")
@@ -362,6 +384,20 @@ fn main() -> io::Result<()> {
         Commands::Io { opts } => run_monitor(MonitorType::Io, opts)?,
         Commands::Net { opts } => run_monitor(MonitorType::Net, opts)?,
         Commands::Gpu { opts } => run_monitor(MonitorType::Gpu, opts)?,
+        Commands::Ps { time, count, all } => {
+            let config = monitor::ps::PsConfig {
+                time_step: time,
+                max_procs: count,
+                show_kernel: all,
+            };
+            monitor::ps::run(config)?;
+        }
+        Commands::Docker { time } => {
+            let config = monitor::docker::DockerConfig {
+                time_step: time,
+            };
+            monitor::docker::run(config)?;
+        }
         Commands::Weather { location, time } => {
             let config = weather::WeatherConfig {
                 location,

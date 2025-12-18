@@ -1,6 +1,6 @@
 ---
-version: "1.6"
-lastUpdated: "2025-12-17"
+version: "1.7"
+lastUpdated: "2025-12-18"
 lifecycle: core
 stakeholder: pknull
 changeTrigger: "session end, significant changes"
@@ -23,6 +23,27 @@ Project expanded with system monitors and utilities:
 - **Folding@home monitor** with real-time WebSocket updates
 
 ## Recent Changes
+
+### Session 2025-12-18 (Glances-Inspired Monitors)
+- **Process list** (`termart ps`): Top processes by CPU/MEM usage
+  - Reads /proc/[pid]/stat for CPU ticks, RSS, state
+  - Delta-based CPU% calculation (stores raw ticks between updates)
+  - Press `m` to toggle sort between CPU% and MEM%
+  - Simplified display: PID, CPU%, MEM%, PROCESS
+- **Docker monitor** (`termart docker`): Container resource usage
+  - Uses `docker stats --no-stream --format` (matches gpu.rs pattern)
+  - Shows NAME, CPU%, MEM, MEM%, NET I/O, STATUS
+  - Color-coded by status: green=running, yellow=paused, red=exited
+  - Supports remote Docker via DOCKER_HOST env var
+- **IO Wait metric**: Added to CPU monitor
+  - Displays after uptime: `up 2d 05:32  IO Wait: 0.1%`
+  - Color: muted <5%, yellow 5-20%, red >20%
+  - Data was already parsed in CpuTimes, just wasn't displayed
+- **Bug fixes**:
+  - ps.rs: Fixed 625000% CPU bug (was storing cpu_pct instead of cpu_ticks)
+  - ps.rs: Fixed column alignment with consistent double-space separators
+  - ps.rs: Made `m` key re-sort immediately instead of waiting for next update
+  - cpu.rs: Fixed IO Wait overlapping Load AVG on narrow terminals
 
 ### Session 2025-12-17 (Visualizations & Optimizations)
 - **Clock widget**: 24-hour time in block letters with date and timezone
@@ -95,6 +116,8 @@ Project expanded with system monitors and utilities:
 
 ## Next Steps
 
+- [ ] Docker: Add `--host` flag for easier remote Docker connection
+- [ ] Docker: Enable remote Docker API on 172.16.0.14 (ports 2375/2376 not open)
 - [ ] Space Invaders AI: Continue testing bullet avoidance (occasional hits reported)
 - [ ] Add more visualization types (snake, breakout, tetris?)
 - [ ] Consider color scheme customization via config file
