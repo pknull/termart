@@ -1,5 +1,5 @@
 ---
-version: "1.7"
+version: "1.8"
 lastUpdated: "2025-12-18"
 lifecycle: core
 stakeholder: pknull
@@ -23,6 +23,24 @@ Project expanded with system monitors and utilities:
 - **Folding@home monitor** with real-time WebSocket updates
 
 ## Recent Changes
+
+### Session 2025-12-18 (Optimizations & Bug Fixes)
+- **Docker monitor bug fix**: Fixed template parsing error with SSH Docker
+  - `.Status` not valid for `docker stats` (only for `docker ps`)
+  - Removed status field, updated parser to expect 5 fields
+  - Changed row coloring to CPU gradient instead of status-based
+- **Visualization optimizations** (fractal.rs):
+  - **Globe**: Made continent/city data static with `LazyLock`
+    - `GLOBE_CONTINENTS`: 10 continent outlines (238 points)
+    - `GLOBE_CITIES`: 48 major world cities
+    - Removed ~180 lines of per-call initialization
+  - **Keyboard**: Made layout rows `const` slices
+    - 6 `KB_ROW_*` consts for each keyboard row
+    - Runtime builds `Vec<&[...]>` from const refs
+  - **Rain**: Replaced Vec allocation pattern with `retain_mut`
+    - Drops and splashes now filtered in-place
+    - Made `SPLASH_CHARS` a const array
+- **Affected visualizations**: `globe`, `keyboard`, `rain`
 
 ### Session 2025-12-18 (Glances-Inspired Monitors)
 - **Process list** (`termart ps`): Top processes by CPU/MEM usage
