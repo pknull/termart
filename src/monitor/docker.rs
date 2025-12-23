@@ -18,7 +18,6 @@ struct ContainerInfo {
     mem_usage: String,
     mem_pct: f32,
     net_io: String,
-    status: String,
 }
 
 pub struct DockerMonitor {
@@ -43,7 +42,7 @@ impl DockerMonitor {
                 "stats",
                 "--no-stream",
                 "--format",
-                "{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.Status}}",
+                "{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}",
             ])
             .output();
 
@@ -116,8 +115,8 @@ impl DockerMonitor {
 
         // Column header
         let header = format!(
-            "{:<20} {:>8} {:>16} {:>8} {:>16} {}",
-            "NAME", "CPU%", "MEM USAGE", "MEM%", "NET I/O", "STATUS"
+            "{:<20} {:>8} {:>16} {:>8} {:>16}",
+            "NAME", "CPU%", "MEM USAGE", "MEM%", "NET I/O"
         );
         let header_truncated: String = header.chars().take(w).collect();
         term.set_str(0, y, &header_truncated, Some(text_color_scheme(colors)), false);
@@ -130,19 +129,18 @@ impl DockerMonitor {
             }
 
             let row = format!(
-                "{:<20} {:>8} {:>16} {:>8} {:>16} {}",
+                "{:<20} {:>8} {:>16} {:>8} {:>16}",
                 truncate_str(&container.name, 20),
                 format!("{:.1}%", container.cpu_pct),
                 container.mem_usage,
                 format!("{:.1}%", container.mem_pct),
-                container.net_io,
-                container.status
+                container.net_io
             );
 
             let row_truncated: String = row.chars().take(w).collect();
 
-            // Color based on status and CPU
-            let row_color = status_color(&container.status, container.cpu_pct, colors);
+            // Color based on CPU usage
+            let row_color = cpu_gradient_color_scheme(container.cpu_pct.min(100.0), colors);
             term.set_str(0, y, &row_truncated, Some(row_color), false);
 
             y += 1;
@@ -157,7 +155,7 @@ impl DockerMonitor {
 
 fn parse_container_line(line: &str) -> Option<ContainerInfo> {
     let parts: Vec<&str> = line.split('\t').collect();
-    if parts.len() < 6 {
+    if parts.len() < 5 {
         return None;
     }
 
@@ -170,20 +168,7 @@ fn parse_container_line(line: &str) -> Option<ContainerInfo> {
         mem_usage: parts[2].to_string(),
         mem_pct: mem_pct_str.parse().unwrap_or(0.0),
         net_io: parts[4].to_string(),
-        status: parts[5].to_string(),
     })
-}
-
-fn status_color(status: &str, cpu_pct: f32, colors: &ColorState) -> Color {
-    let status_lower = status.to_lowercase();
-    if status_lower.contains("exited") || status_lower.contains("dead") {
-        Color::Red
-    } else if status_lower.contains("paused") || status_lower.contains("restarting") {
-        Color::Yellow
-    } else {
-        // Running - use CPU gradient
-        cpu_gradient_color_scheme(cpu_pct.min(100.0), colors)
-    }
 }
 
 fn truncate_str(s: &str, max_len: usize) -> String {

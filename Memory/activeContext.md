@@ -24,6 +24,25 @@ Project expanded with system monitors and utilities:
 
 ## Recent Changes
 
+### Session 2025-12-23 (Dygma Keyboard Visualization - WIP)
+- **New visualization**: `termart dygma` for Dygma Raise split keyboard
+  - Focus protocol connection via serial (115200 baud, auto-detect by USB VID/PID)
+  - Layer detection via `layer.state` command - updates in real-time
+  - Keymap query via `keymap.custom` - loads all 9-10 layers × 80 keys
+  - Physical layout with split halves, thumb clusters, columnar stagger
+  - Keycode-to-label conversion for Kaleidoscope firmware codes
+  - Shift state tracking via evdev - shows shifted chars (!@#$ etc)
+  - Heat map from evdev key events (same as existing keyboard viz)
+- **Technical details**:
+  - Added `serialport = "4.3"` dependency
+  - Created `src/viz/dygma.rs` (~970 lines)
+  - Key mapping based on official RaiseANSIKeyMap.png from Dygma firmware repo
+- **Known issues** (to revisit):
+  - Physical layout geometry feels off
+  - Some Kaleidoscope keycodes still show as hex
+  - Thumb keys only show 2 of 4 (Dygma image shows 70-71, 72-73)
+  - Overall feel is "clunky" - may need different approach
+
 ### Session 2025-12-18 (Optimizations & Bug Fixes)
 - **Docker monitor bug fix**: Fixed template parsing error with SSH Docker
   - `.Status` not valid for `docker stats` (only for `docker ps`)
@@ -134,6 +153,12 @@ Project expanded with system monitors and utilities:
 
 ## Next Steps
 
+- [ ] **Dygma visualization**: Revisit and refine (see notes below)
+  - Physical layout geometry feels "clunky" - needs refinement
+  - Some keycodes still showing as hex - need more Kaleidoscope mappings
+  - Index mapping between physical layout and keymap may have errors
+  - "Something missing" - possibly needs a different approach entirely
+  - Current state: Working layer detection, keymap query, shift tracking, but rough
 - [ ] Docker: Add `--host` flag for easier remote Docker connection
 - [ ] Docker: Enable remote Docker API on 172.16.0.14 (ports 2375/2376 not open)
 - [ ] Space Invaders AI: Continue testing bullet avoidance (occasional hits reported)

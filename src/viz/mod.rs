@@ -17,6 +17,7 @@ pub mod hex;
 pub mod keyboard;
 pub mod clock;
 pub mod pong;
+pub mod dygma;
 
 use crossterm::event::{KeyCode, KeyModifiers};
 use crossterm::style::Color;

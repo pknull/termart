@@ -176,6 +176,21 @@ enum Commands {
         opts: VizOptions,
     },
 
+    /// Dygma Raise split keyboard visualization
+    Dygma {
+        /// Animation speed (seconds per frame)
+        #[arg(short, long, default_value = "0.03")]
+        time: f32,
+
+        /// Serial port path (auto-detect if not specified)
+        #[arg(short, long)]
+        port: Option<std::path::PathBuf>,
+
+        /// Show debug info
+        #[arg(short, long)]
+        debug: bool,
+    },
+
     /// Space Invaders style game
     Invaders {
         #[command(flatten)]
@@ -367,6 +382,14 @@ fn main() -> io::Result<()> {
         Commands::Globe { opts } => run_viz(FractalType::Globe, opts, '#')?,
         Commands::Hex { opts } => run_viz(FractalType::Hex, opts, '#')?,
         Commands::Keyboard { opts } => run_viz(FractalType::Keyboard, opts, '#')?,
+        Commands::Dygma { time, port, debug } => {
+            let config = viz::dygma::DygmaConfig {
+                time_step: time,
+                port,
+                debug,
+            };
+            viz::dygma::run(config)?;
+        }
         Commands::Invaders { opts } => run_viz(FractalType::Invaders, opts, '#')?,
         Commands::Clock { time, no_seconds } => {
             let config = viz::clock::ClockConfig {
