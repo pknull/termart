@@ -1,6 +1,6 @@
 ---
-version: "1.8"
-lastUpdated: "2025-12-18"
+version: "1.9"
+lastUpdated: "2025-12-23"
 lifecycle: core
 stakeholder: pknull
 changeTrigger: "session end, significant changes"
