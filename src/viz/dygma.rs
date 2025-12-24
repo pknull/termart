@@ -89,7 +89,7 @@ const LEFT_THUMB: &[(usize, KeyPos)] = &[
 ];
 
 /// Right half main keys
-/// Outer edge (right) aligned at x=6
+/// Outer edge (right) aligned at x=7
 const RIGHT_MAIN: &[(usize, KeyPos)] = &[
     // Row 0 (number row): 7-=, Backspace (7 keys)
     (32, KeyPos::new(0.0, 0.0, 1.0)),   // 7
@@ -99,46 +99,48 @@ const RIGHT_MAIN: &[(usize, KeyPos)] = &[
     (36, KeyPos::new(4.0, 0.0, 1.0)),   // -
     (37, KeyPos::new(5.0, 0.0, 1.0)),   // =
     (38, KeyPos::new(6.0, 0.0, 1.0)),   // Backspace
-    // Row 1 (top letter): Y-] (7 keys, NO backslash here!)
+    // Row 1 (top letter): Y-] with backslash (8 keys)
     (39, KeyPos::new(0.0, 1.0, 1.0)),   // Y
     (40, KeyPos::new(1.0, 1.0, 1.0)),   // U
     (41, KeyPos::new(2.0, 1.0, 1.0)),   // I
     (42, KeyPos::new(3.0, 1.0, 1.0)),   // O
     (43, KeyPos::new(4.0, 1.0, 1.0)),   // P
-    (44, KeyPos::new(5.0, 1.0, 1.0)),   // [
-    (45, KeyPos::new(6.0, 1.0, 1.0)),   // ]
-    // Row 2 (home): H-', Enter (7 keys) - Enter is the red RETURN key
-    (46, KeyPos::new(0.0, 2.0, 1.0)),   // H
-    (47, KeyPos::new(1.0, 2.0, 1.0)),   // J
-    (48, KeyPos::new(2.0, 2.0, 1.0)),   // K
-    (49, KeyPos::new(3.0, 2.0, 1.0)),   // L
-    (50, KeyPos::new(4.0, 2.0, 1.0)),   // ;
-    (51, KeyPos::new(5.0, 2.0, 1.0)),   // '
-    (52, KeyPos::new(6.0, 2.0, 1.0)),   // Enter (red key)
+    (44, KeyPos::new(5.0, 1.0, 1.0)),   // \ (backslash after P)
+    (45, KeyPos::new(6.0, 1.0, 1.0)),   // [
+    (46, KeyPos::new(7.0, 1.0, 1.0)),   // ]
+    // Row 2 (home): H-', Enter (7 keys)
+    (47, KeyPos::new(0.0, 2.0, 1.0)),   // H
+    (48, KeyPos::new(1.0, 2.0, 1.0)),   // J
+    (49, KeyPos::new(2.0, 2.0, 1.0)),   // K
+    (50, KeyPos::new(3.0, 2.0, 1.0)),   // L
+    (51, KeyPos::new(4.0, 2.0, 1.0)),   // ;
+    (52, KeyPos::new(5.0, 2.0, 1.0)),   // '
+    (53, KeyPos::new(6.0, 2.0, 1.0)),   // Enter (red key)
     // Row 3 (bottom): N-/, Shift (6 keys)
-    (53, KeyPos::new(1.0, 3.0, 1.0)),   // N
-    (54, KeyPos::new(2.0, 3.0, 1.0)),   // M
-    (55, KeyPos::new(3.0, 3.0, 1.0)),   // ,
-    (56, KeyPos::new(4.0, 3.0, 1.0)),   // .
-    (57, KeyPos::new(5.0, 3.0, 1.0)),   // /
-    (58, KeyPos::new(6.0, 3.0, 1.0)),   // Shift
-    // Row 4 (modifiers): Alt, ??, Ctrl (3 keys on right edge)
-    (59, KeyPos::new(4.0, 4.0, 1.0)),   // Alt
-    (60, KeyPos::new(5.0, 4.0, 1.0)),   // ??
-    (61, KeyPos::new(6.0, 4.0, 1.0)),   // Ctrl
+    (54, KeyPos::new(1.0, 3.0, 1.0)),   // N
+    (55, KeyPos::new(2.0, 3.0, 1.0)),   // M
+    (56, KeyPos::new(3.0, 3.0, 1.0)),   // ,
+    (57, KeyPos::new(4.0, 3.0, 1.0)),   // .
+    (58, KeyPos::new(5.0, 3.0, 1.0)),   // /
+    (59, KeyPos::new(6.0, 3.0, 1.0)),   // Shift
+    // Row 4 (modifiers): Alt, FN, Meta, Ctrl (4 keys)
+    (60, KeyPos::new(4.0, 4.0, 1.0)),   // Alt
+    (61, KeyPos::new(5.0, 4.0, 1.0)),   // FN
+    (62, KeyPos::new(6.0, 4.0, 1.0)),   // Meta
+    (63, KeyPos::new(7.0, 4.0, 1.0)),   // Ctrl
 ];
 
 /// Right thumb cluster - 4 keys in 2x2 arrangement
 const RIGHT_THUMB: &[(usize, KeyPos)] = &[
-    (62, KeyPos::new(1.0, 4.0, 1.0)),   // T5 (upper left)
-    (63, KeyPos::new(2.0, 4.0, 1.0)),   // T6 (upper right)
-    (64, KeyPos::new(1.0, 5.0, 1.0)),   // T7 (lower left)
-    (65, KeyPos::new(2.0, 5.0, 1.0)),   // T8 (lower right)
+    (64, KeyPos::new(1.0, 4.0, 1.0)),   // T5 (upper left)
+    (65, KeyPos::new(2.0, 4.0, 1.0)),   // T6 (upper right)
+    (66, KeyPos::new(1.0, 5.0, 1.0)),   // T7 (lower left)
+    (67, KeyPos::new(2.0, 5.0, 1.0)),   // T8 (lower right)
 ];
 
 /// Map from physical key index (our layout) to Dygma keymap index
 /// Based on official Dygma Raise ANSI keymap
-/// Array index = our physical position (0-65), value = Dygma keymap index
+/// Array index = our physical position (0-67), value = Dygma keymap index
 /// 255 = unmapped/unused position
 const PHYSICAL_TO_KEYMAP: &[usize] = &[
     // LEFT HALF (indices 0-31) - 32 keys
@@ -154,18 +156,18 @@ const PHYSICAL_TO_KEYMAP: &[usize] = &[
     64, 65, 66,
     // Thumb: T1-T4 (physical 28-31)
     67, 68, 69, 70,
-    // RIGHT HALF (indices 32-65) - 34 keys
+    // RIGHT HALF (indices 32-67) - 36 keys
     // Row 0: 7-=, Backspace (physical 32-38)
     9, 10, 11, 12, 13, 14, 15,
-    // Row 1: Y-] (physical 39-45) - 7 keys, NO Enter here
-    24, 25, 26, 27, 28, 29, 30,
-    // Row 2: H-', Enter (physical 46-52) - Enter@31 in keymap
+    // Row 1: Y U I O P \ [ ] (physical 39-46) - 8 keys with backslash
+    24, 25, 26, 27, 28, 47, 29, 30,
+    // Row 2: H-', Enter (physical 47-53) - Enter@31 in keymap
     41, 42, 43, 44, 45, 46, 31,
-    // Row 3: N-/, Shift (physical 53-58)
+    // Row 3: N-/, Shift (physical 54-59)
     57, 58, 59, 60, 61, 62,
-    // Row 4: Alt, FN, Ctrl (physical 59-61)
-    76, 77, 79,
-    // Thumb: T5-T8 (physical 62-65)
+    // Row 4: Alt, FN, Meta, Ctrl (physical 60-63) - 4 keys
+    76, 77, 78, 79,
+    // Thumb: T5-T8 (physical 64-67)
     72, 73, 74, 75,
 ];
 
@@ -184,18 +186,18 @@ const DEFAULT_LABELS: &[&str] = &[
     "CTL", "MET", "ALT",
     // Left thumb: T1-T4 (indices 28-31)
     "T1", "T2", "T3", "T4",
-    // Right half (32-65) - 34 keys
+    // Right half (32-67) - 36 keys
     // Row 0: 7-=, Backspace (indices 32-38)
     "7", "8", "9", "0", "-", "=", "BSP",
-    // Row 1: Y-] (indices 39-45) - 7 keys
-    "Y", "U", "I", "O", "P", "[", "]",
-    // Row 2: H-', Enter (indices 46-52)
+    // Row 1: Y-\ [ ] (indices 39-46) - 8 keys with backslash
+    "Y", "U", "I", "O", "P", "\\", "[", "]",
+    // Row 2: H-', Enter (indices 47-53)
     "H", "J", "K", "L", ";", "'", "ENT",
-    // Row 3: N-/, Shift (indices 53-58)
+    // Row 3: N-/, Shift (indices 54-59)
     "N", "M", ",", ".", "/", "SHF",
-    // Row 4: Alt, FN, Ctrl (indices 59-61)
-    "ALT", "FN", "CTL",
-    // Right thumb: T5-T8 (indices 62-65)
+    // Row 4: Alt, FN, Meta, Ctrl (indices 60-63)
+    "ALT", "FN", "MET", "CTL",
+    // Right thumb: T5-T8 (indices 64-67)
     "T5", "T6", "T7", "T8",
 ];
 
@@ -399,8 +401,8 @@ fn shifted_label(code: u16) -> Option<String> {
     })
 }
 
-/// Width of each half (7 keys wide: x=0 to x=6)
-const HALF_WIDTH: f32 = 7.0;
+/// Width of each half (8 keys wide: x=0 to x=7 for row 1)
+const HALF_WIDTH: f32 = 8.0;
 
 /// Total height (6 rows: 0,1,2,3,4,5)
 const TOTAL_HEIGHT: f32 = 6.0;
