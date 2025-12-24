@@ -41,10 +41,11 @@ impl KeyPos {
     }
 }
 
-/// Left half main keys (32 keys, positions 0-31)
-/// Columnar stagger: each column has slight vertical offset
+/// Left half main keys (Dygma Raise 2)
+/// Sequential indices 0-31 for left half, matching DEFAULT_LABELS
+/// Outer edge (left) aligned at x=0
 const LEFT_MAIN: &[(usize, KeyPos)] = &[
-    // Row 0 (top): ESC, 1-6
+    // Row 0 (top): ESC, 1-6 (7 keys) - indices 0-6
     (0,  KeyPos::new(0.0, 0.0, 1.0)),   // ESC
     (1,  KeyPos::new(1.0, 0.0, 1.0)),   // 1
     (2,  KeyPos::new(2.0, 0.0, 1.0)),   // 2
@@ -52,157 +53,156 @@ const LEFT_MAIN: &[(usize, KeyPos)] = &[
     (4,  KeyPos::new(4.0, 0.0, 1.0)),   // 4
     (5,  KeyPos::new(5.0, 0.0, 1.0)),   // 5
     (6,  KeyPos::new(6.0, 0.0, 1.0)),   // 6
-    // Row 1: Tab, Q-T (columnar stagger)
-    (7,  KeyPos::new(0.0, 1.0, 1.5)),   // Tab
-    (8,  KeyPos::new(1.5, 1.1, 1.0)),   // Q
-    (9,  KeyPos::new(2.5, 1.0, 1.0)),   // W
-    (10, KeyPos::new(3.5, 0.9, 1.0)),   // E
-    (11, KeyPos::new(4.5, 1.0, 1.0)),   // R
-    (12, KeyPos::new(5.5, 1.1, 1.0)),   // T
-    // Row 2: Caps, A-G
-    (13, KeyPos::new(0.0, 2.0, 1.75)),  // Caps
-    (14, KeyPos::new(1.75, 2.1, 1.0)),  // A
-    (15, KeyPos::new(2.75, 2.0, 1.0)),  // S
-    (16, KeyPos::new(3.75, 1.9, 1.0)),  // D
-    (17, KeyPos::new(4.75, 2.0, 1.0)),  // F
-    (18, KeyPos::new(5.75, 2.1, 1.0)),  // G
-    // Row 3: Shift, Z-B
-    (19, KeyPos::new(0.0, 3.0, 1.25)),  // Shift
-    (20, KeyPos::new(1.25, 3.1, 1.0)),  // \
-    (21, KeyPos::new(2.25, 3.1, 1.0)),  // Z
-    (22, KeyPos::new(3.25, 3.0, 1.0)),  // X
-    (23, KeyPos::new(4.25, 2.9, 1.0)),  // C
-    (24, KeyPos::new(5.25, 3.0, 1.0)),  // V
-    (25, KeyPos::new(6.25, 3.1, 1.0)),  // B
-    // Row 4: Ctrl, Win, Alt + small keys
-    (26, KeyPos::new(0.0, 4.0, 1.25)),  // Ctrl
-    (27, KeyPos::new(1.25, 4.0, 1.0)),  // Win
-    (28, KeyPos::new(2.25, 4.0, 1.0)),  // Alt
-    (29, KeyPos::new(3.25, 4.0, 1.0)),  // (space left)
-    (30, KeyPos::new(4.5, 4.0, 1.0)),   // (small)
-    (31, KeyPos::new(5.75, 4.0, 1.0)),  // (small)
+    // Row 1: Tab, Q-T (6 keys) - indices 7-12
+    (7,  KeyPos::new(0.0, 2.0, 1.0)),   // Tab
+    (8,  KeyPos::new(1.0, 2.0, 1.0)),   // Q
+    (9,  KeyPos::new(2.0, 2.0, 1.0)),   // W
+    (10, KeyPos::new(3.0, 2.0, 1.0)),   // E
+    (11, KeyPos::new(4.0, 2.0, 1.0)),   // R
+    (12, KeyPos::new(5.0, 2.0, 1.0)),   // T
+    // Row 2: Caps, A-G (6 keys) - indices 13-18
+    (13, KeyPos::new(0.0, 4.0, 1.0)),   // Caps
+    (14, KeyPos::new(1.0, 4.0, 1.0)),   // A
+    (15, KeyPos::new(2.0, 4.0, 1.0)),   // S
+    (16, KeyPos::new(3.0, 4.0, 1.0)),   // D
+    (17, KeyPos::new(4.0, 4.0, 1.0)),   // F
+    (18, KeyPos::new(5.0, 4.0, 1.0)),   // G
+    // Row 3: Shift, Z-B (6 keys) - indices 19-24
+    (19, KeyPos::new(0.0, 6.0, 1.0)),   // Shift
+    (20, KeyPos::new(1.0, 6.0, 1.0)),   // Z
+    (21, KeyPos::new(2.0, 6.0, 1.0)),   // X
+    (22, KeyPos::new(3.0, 6.0, 1.0)),   // C
+    (23, KeyPos::new(4.0, 6.0, 1.0)),   // V
+    (24, KeyPos::new(5.0, 6.0, 1.0)),   // B
+    // Row 4: Ctrl, Meta, Alt, T1, T2 (5 keys) - indices 25-29
+    (25, KeyPos::new(0.0, 8.0, 1.0)),   // Ctrl
+    (26, KeyPos::new(1.0, 8.0, 1.0)),   // Meta
+    (27, KeyPos::new(2.0, 8.0, 1.0)),   // Alt
+    (28, KeyPos::new(3.0, 8.0, 1.0)),   // T1 (thumb)
+    (29, KeyPos::new(4.0, 8.0, 1.0)),   // T2 (thumb)
 ];
 
-/// Left thumb cluster (4 keys, positions 32-35)
+/// Left thumb cluster - lower 2 keys - indices 30-31
 const LEFT_THUMB: &[(usize, KeyPos)] = &[
-    (32, KeyPos::new(4.0, 5.0, 1.5)),   // T1 (inner top)
-    (33, KeyPos::new(5.5, 5.0, 1.5)),   // T2 (outer top)
-    (34, KeyPos::new(4.0, 6.0, 1.5)),   // T3 (inner bottom)
-    (35, KeyPos::new(5.5, 6.0, 1.5)),   // T4 (outer bottom)
+    (30, KeyPos::new(3.0, 10.0, 1.0)),  // T3 (thumb)
+    (31, KeyPos::new(4.0, 10.0, 1.0)),  // T4 (thumb)
 ];
 
-/// Right half main keys (32 keys, positions 40-71)
-/// Mirror of left with offset
+/// Right half main keys - indices 32-63
+/// Outer edge (right) aligned - no stagger offsets
 const RIGHT_MAIN: &[(usize, KeyPos)] = &[
-    // Row 0: 7-0, -, =, Backspace
-    (40, KeyPos::new(0.0, 0.0, 1.0)),   // 7
-    (41, KeyPos::new(1.0, 0.0, 1.0)),   // 8
-    (42, KeyPos::new(2.0, 0.0, 1.0)),   // 9
-    (43, KeyPos::new(3.0, 0.0, 1.0)),   // 0
-    (44, KeyPos::new(4.0, 0.0, 1.0)),   // -
-    (45, KeyPos::new(5.0, 0.0, 1.0)),   // =
-    (46, KeyPos::new(6.0, 0.0, 1.5)),   // Backspace
-    // Row 1: Y-P, [, ], \
-    (47, KeyPos::new(0.0, 1.1, 1.0)),   // Y
-    (48, KeyPos::new(1.0, 1.0, 1.0)),   // U
-    (49, KeyPos::new(2.0, 0.9, 1.0)),   // I
-    (50, KeyPos::new(3.0, 1.0, 1.0)),   // O
-    (51, KeyPos::new(4.0, 1.1, 1.0)),   // P
-    (52, KeyPos::new(5.0, 1.1, 1.0)),   // [
-    (53, KeyPos::new(6.0, 1.0, 1.5)),   // ]
-    // Row 2: H-L, ;, ', Enter
-    (54, KeyPos::new(0.0, 2.1, 1.0)),   // H
-    (55, KeyPos::new(1.0, 2.0, 1.0)),   // J
-    (56, KeyPos::new(2.0, 1.9, 1.0)),   // K
-    (57, KeyPos::new(3.0, 2.0, 1.0)),   // L
-    (58, KeyPos::new(4.0, 2.1, 1.0)),   // ;
-    (59, KeyPos::new(5.0, 2.1, 1.0)),   // '
-    (60, KeyPos::new(6.0, 2.0, 1.5)),   // Enter
-    // Row 3: N-/, Shift
-    (61, KeyPos::new(0.0, 3.1, 1.0)),   // N
-    (62, KeyPos::new(1.0, 3.0, 1.0)),   // M
-    (63, KeyPos::new(2.0, 2.9, 1.0)),   // ,
-    (64, KeyPos::new(3.0, 3.0, 1.0)),   // .
-    (65, KeyPos::new(4.0, 3.1, 1.0)),   // /
-    (66, KeyPos::new(5.0, 3.1, 1.0)),   // (extra)
-    (67, KeyPos::new(6.0, 3.0, 1.5)),   // Shift
-    // Row 4: small keys, Alt, Win, Menu, Ctrl
-    (68, KeyPos::new(0.0, 4.0, 1.0)),   // (small)
-    (69, KeyPos::new(1.25, 4.0, 1.0)),  // (small)
-    (70, KeyPos::new(2.5, 4.0, 1.0)),   // AltGr
-    (71, KeyPos::new(3.5, 4.0, 1.0)),   // Win
-    (72, KeyPos::new(4.5, 4.0, 1.0)),   // Menu
-    (73, KeyPos::new(5.5, 4.0, 1.25)),  // Ctrl
+    // Row 0: 7-=, Backspace (7 keys) - indices 32-38
+    (32, KeyPos::new(0.0, 0.0, 1.0)),   // 7
+    (33, KeyPos::new(1.0, 0.0, 1.0)),   // 8
+    (34, KeyPos::new(2.0, 0.0, 1.0)),   // 9
+    (35, KeyPos::new(3.0, 0.0, 1.0)),   // 0
+    (36, KeyPos::new(4.0, 0.0, 1.0)),   // -
+    (37, KeyPos::new(5.0, 0.0, 1.0)),   // =
+    (38, KeyPos::new(6.0, 0.0, 1.0)),   // Backspace
+    // Row 1: Y-], \ (8 keys) - indices 39-46
+    (39, KeyPos::new(0.0, 2.0, 1.0)),   // Y
+    (40, KeyPos::new(1.0, 2.0, 1.0)),   // U
+    (41, KeyPos::new(2.0, 2.0, 1.0)),   // I
+    (42, KeyPos::new(3.0, 2.0, 1.0)),   // O
+    (43, KeyPos::new(4.0, 2.0, 1.0)),   // P
+    (44, KeyPos::new(5.0, 2.0, 1.0)),   // [
+    (45, KeyPos::new(6.0, 2.0, 1.0)),   // ]
+    (46, KeyPos::new(7.0, 2.0, 1.0)),   // \ (backslash)
+    // Row 2: H-', Enter (7 keys) - indices 47-53
+    (47, KeyPos::new(0.0, 4.0, 1.0)),   // H
+    (48, KeyPos::new(1.0, 4.0, 1.0)),   // J
+    (49, KeyPos::new(2.0, 4.0, 1.0)),   // K
+    (50, KeyPos::new(3.0, 4.0, 1.0)),   // L
+    (51, KeyPos::new(4.0, 4.0, 1.0)),   // ;
+    (52, KeyPos::new(5.0, 4.0, 1.0)),   // '
+    (53, KeyPos::new(6.0, 4.0, 1.0)),   // Enter
+    // Row 3: N-/, Shift (6 keys) - indices 54-59
+    (54, KeyPos::new(0.0, 6.0, 1.0)),   // N
+    (55, KeyPos::new(1.0, 6.0, 1.0)),   // M
+    (56, KeyPos::new(2.0, 6.0, 1.0)),   // ,
+    (57, KeyPos::new(3.0, 6.0, 1.0)),   // .
+    (58, KeyPos::new(4.0, 6.0, 1.0)),   // /
+    (59, KeyPos::new(5.0, 6.0, 1.0)),   // Shift
+    // Row 4: T5, T6, Alt, FN, Meta, Ctrl (6 keys) - indices 60-65
+    (60, KeyPos::new(0.0, 8.0, 1.0)),   // T5 (thumb)
+    (61, KeyPos::new(1.0, 8.0, 1.0)),   // T6 (thumb)
+    (62, KeyPos::new(2.0, 8.0, 1.0)),   // Alt
+    (63, KeyPos::new(3.0, 8.0, 1.0)),   // FN
+    (64, KeyPos::new(4.0, 8.0, 1.0)),   // Meta
+    (65, KeyPos::new(5.0, 8.0, 1.0)),   // Ctrl
 ];
 
-/// Right thumb cluster (4 keys, positions 76-79)
+/// Right thumb cluster - lower 2 keys - indices 66-67
 const RIGHT_THUMB: &[(usize, KeyPos)] = &[
-    (76, KeyPos::new(0.0, 5.0, 1.5)),   // T5 (outer top)
-    (77, KeyPos::new(1.5, 5.0, 1.5)),   // T6 (inner top)
-    (78, KeyPos::new(0.0, 6.0, 1.5)),   // T7 (outer bottom)
-    (79, KeyPos::new(1.5, 6.0, 1.5)),   // T8 (inner bottom)
+    (66, KeyPos::new(0.0, 10.0, 1.0)),  // T7 (thumb)
+    (67, KeyPos::new(1.0, 10.0, 1.0)),  // T8 (thumb)
 ];
 
 /// Map from physical key index (our layout) to Dygma keymap index
 /// Based on official Dygma RaiseANSIKeyMap.png
 /// Array index = our physical position, value = Dygma keymap index
+/// 255 = unmapped/unused position
 const PHYSICAL_TO_KEYMAP: &[usize] = &[
-    // Physical 0-6: Left Row 0 (ESC, 1-6)
+    // Physical 0-6: Left Row 0 (ESC, 1-6) → Dygma 0-6
     0, 1, 2, 3, 4, 5, 6,
-    // Physical 7-12: Left Row 1 (Tab, Q-T)
+    // Physical 7-12: Left Row 1 (Tab, Q-T) → Dygma 16-21
     16, 17, 18, 19, 20, 21,
-    // Physical 13-18: Left Row 2 (Caps, A-G)
+    // Physical 13-18: Left Row 2 (Caps, A-G) → Dygma 32-37
     32, 33, 34, 35, 36, 37,
-    // Physical 19-25: Left Row 3 (Shift, \, Z-B) - Dygma has 48,50-54 (skips 49)
-    48, 50, 51, 52, 53, 54, 255, // 7 physical keys, only 6 Dygma slots
-    // Physical 26-31: Left Row 4 (Ctrl, Win, Alt, small×3) - Dygma has 64-68
-    64, 65, 66, 67, 68, 255, // 6 physical keys, only 5 Dygma slots
-    // Physical 32-35: Left Thumb (T1-T4) - Dygma has 70-71
-    70, 71, 255, 255,
-    // Physical 36-39: Gap
-    255, 255, 255, 255,
-    // Physical 40-46: Right Row 0 (7-=, BS)
+    // Physical 19-25: Left Row 3 (Shift, \, Z-B) → Dygma 48, 50-55
+    48, 50, 51, 52, 53, 54, 55,
+    // Physical 26-29: Left Row 4 (Ctrl, Win, Alt, FN) → Dygma 64-67
+    64, 65, 66, 67,
+    // Physical 30-33: Left Thumb (4 keys) → Dygma 68-71
+    68, 69, 70, 71,
+    // Physical 34-39: Gap/padding
+    255, 255, 255, 255, 255, 255,
+    // Physical 40-46: Right Row 0 (7-=, BS) → Dygma 9-15
     9, 10, 11, 12, 13, 14, 15,
-    // Physical 47-53: Right Row 1 (Y-]) - Dygma has 24-30
-    24, 25, 26, 27, 28, 29, 30,
-    // Physical 54-60: Right Row 2 (H-Enter) - Dygma has 41-46, 31
-    41, 42, 43, 44, 45, 46, 31,
-    // Physical 61-67: Right Row 3 (N-Shift) - Dygma has 58-63
-    58, 59, 60, 61, 62, 63, 255, // 7 physical, 6 Dygma
-    // Physical 68-73: Right Row 4 - Dygma has 74-79
-    74, 75, 76, 77, 78, 79,
-    // Physical 74-75: Gap
-    255, 255,
-    // Physical 76-79: Right Thumb (T5-T8) - Dygma has 72-73
-    72, 73, 255, 255,
+    // Physical 47-54: Right Row 1 (Y-], \) → Dygma 24-31
+    24, 25, 26, 27, 28, 29, 30, 31,
+    // Physical 55-61: Right Row 2 (H-', Enter) → Dygma 40-46
+    40, 41, 42, 43, 44, 45, 46,
+    // Physical 62-67: Right Row 3 (N-/, Shift) → Dygma 56-61
+    56, 57, 58, 59, 60, 61,
+    // Physical 68-72: Right Row 4 (Alt, FN, Win, Menu, Ctrl) → Dygma 74-78
+    74, 75, 76, 77, 78,
+    // Physical 73-76: Right Thumb (4 keys) → Dygma 72-73 + 79 + extra
+    72, 73, 79, 255,
 ];
 
-/// Default labels for base layer (QWERTY) - used when no keymap available
+/// Default labels for base layer (QWERTY) - sequential indices matching layout
 const DEFAULT_LABELS: &[&str] = &[
-    // Left main (0-31)
+    // Left half (0-31) - 32 keys
+    // Row 0: ESC, 1-6 (indices 0-6)
     "ESC", "1", "2", "3", "4", "5", "6",
+    // Row 1: Tab, Q-T (indices 7-12)
     "TAB", "Q", "W", "E", "R", "T",
+    // Row 2: Caps, A-G (indices 13-18)
     "CAP", "A", "S", "D", "F", "G",
-    "SHF", "\\", "Z", "X", "C", "V", "B",
-    "CTL", "WIN", "ALT", "", "", "",
-    // Left thumb (32-35)
-    "T1", "T2", "T3", "T4",
-    // Gap (36-39)
-    "", "", "", "",
-    // Right main (40-73)
+    // Row 3: Shift, Z-B (indices 19-24) - standard ANSI, no extra key
+    "SHF", "Z", "X", "C", "V", "B",
+    // Row 4: Ctrl, Meta, Alt, T1, T2 (indices 25-29)
+    "CTL", "MET", "ALT", "T1", "T2",
+    // Left thumb: T3, T4 (indices 30-31)
+    "T3", "T4",
+    // Right half (32-67) - 36 keys
+    // Row 0: 7-=, Backspace (indices 32-38)
     "7", "8", "9", "0", "-", "=", "BSP",
-    "Y", "U", "I", "O", "P", "[", "]",
+    // Row 1: Y-], \ (indices 39-46)
+    "Y", "U", "I", "O", "P", "[", "]", "\\",
+    // Row 2: H-', Enter (indices 47-53)
     "H", "J", "K", "L", ";", "'", "ENT",
-    "N", "M", ",", ".", "/", "", "SHF",
-    "", "", "ALT", "WIN", "MNU", "CTL",
-    // Gap (74-75)
-    "", "",
-    // Right thumb (76-79)
-    "T5", "T6", "T7", "T8",
+    // Row 3: N-/, Shift (indices 54-59)
+    "N", "M", ",", ".", "/", "SHF",
+    // Row 4: T5, T6, Alt, FN, Meta, Ctrl (indices 60-65)
+    "T5", "T6", "ALT", "FN", "MET", "CTL",
+    // Right thumb: T7, T8 (indices 66-67)
+    "T7", "T8",
 ];
 
 /// Gap between keyboard halves (in key units)
-const SPLIT_GAP: f32 = 2.0;
+const SPLIT_GAP: f32 = 2.5;
 
 // ============================================================================
 // Kaleidoscope Keycode Conversion
@@ -382,11 +382,11 @@ fn shifted_label(code: u16) -> Option<String> {
     })
 }
 
-/// Width of each half
+/// Width of each half (right half has 8 keys: 0-7)
 const HALF_WIDTH: f32 = 8.0;
 
-/// Total height
-const TOTAL_HEIGHT: f32 = 7.0;
+/// Total height (6 rows: 0,2,4,6,8,10)
+const TOTAL_HEIGHT: f32 = 12.0;
 
 // ============================================================================
 // evdev Key Detection
@@ -834,14 +834,14 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
 
         // Calculate scaling
         let total_width = HALF_WIDTH * 2.0 + SPLIT_GAP;
-        let scale_x = (w * 0.9) / total_width;
+        let scale_x = (w * 0.9) / (total_width * 4.0 / 3.0);  // Account for 4-char spacing
         let scale_y = (h * 0.8) / TOTAL_HEIGHT;
         let scale = scale_x.min(scale_y).min(4.0); // Cap scale
 
         let key_char_width = (scale * 3.0) as usize;
 
         // Center the layout
-        let layout_width = (total_width * scale * 3.0) as usize;
+        let layout_width = (total_width * scale * 4.0) as usize;
         let layout_height = (TOTAL_HEIGHT * scale) as usize;
         let start_x = (width as usize).saturating_sub(layout_width) / 2;
         let start_y = (height as usize).saturating_sub(layout_height) / 2;
@@ -882,7 +882,7 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
         );
 
         // Draw right half (offset by left width + gap)
-        let right_offset = ((HALF_WIDTH + SPLIT_GAP) * scale * 3.0) as usize;
+        let right_offset = ((HALF_WIDTH + SPLIT_GAP) * scale * 4.0) as usize;
         draw_half(
             &mut term,
             RIGHT_MAIN,
@@ -921,42 +921,24 @@ fn draw_half(
     _key_char_width: usize,
     heat: &HashMap<String, f32>,
     scheme: u8,
-    keymap: Option<&Vec<Vec<u16>>>,
-    layer: u8,
-    shifted: bool,
+    _keymap: Option<&Vec<Vec<u16>>>,
+    _layer: u8,
+    _shifted: bool,
 ) {
     for (idx, pos) in main_keys.iter().chain(thumb_keys.iter()) {
-        let x = base_x + (pos.x * scale * 3.0) as usize;
+        // Use signed math to handle negative offsets (for right half stagger)
+        let x = (base_x as i32 + (pos.x * scale * 4.0) as i32).max(0) as usize;
         let y = base_y + (pos.y * scale) as usize;
-        let w = ((pos.w * scale * 3.0) as usize).max(1);
+        let w = ((pos.w * scale * 3.0) as usize).max(1);  // 3 char label width
 
-        // Get label from keymap (current layer) or fall back to defaults
-        let label: String = if let Some(km) = keymap {
-            // Map physical index to Dygma keymap index
-            let keymap_idx = PHYSICAL_TO_KEYMAP.get(*idx).copied().unwrap_or(255);
-            if keymap_idx == 255 {
-                // Unmapped position
-                DEFAULT_LABELS.get(*idx).copied().unwrap_or("").to_string()
-            } else {
-                // Try current layer first, fall back to lower layers for transparent keys
-                let mut found_label = String::new();
-                for check_layer in (0..=layer as usize).rev() {
-                    if let Some(layer_map) = km.get(check_layer) {
-                        if let Some(&keycode) = layer_map.get(keymap_idx) {
-                            let lbl = keycode_to_label(keycode, shifted);
-                            if !lbl.is_empty() {
-                                found_label = lbl;
-                                break;
-                            }
-                        }
-                    }
-                }
-                found_label
-            }
-        } else {
-            DEFAULT_LABELS.get(*idx).copied().unwrap_or("").to_string()
-        };
+        // Always use DEFAULT_LABELS for now until PHYSICAL_TO_KEYMAP is fixed
+        // TODO: Re-enable keymap lookup once firmware indices are correct
+        let label: String = DEFAULT_LABELS.get(*idx).copied().unwrap_or("").to_string();
 
+        // Original keymap lookup (disabled):
+        // let label: String = if let Some(km) = keymap { ... }
+
+        // Always render keys with labels (even if label is short)
         if label.is_empty() {
             continue;
         }
