@@ -139,36 +139,36 @@ const RIGHT_THUMB: &[(usize, KeyPos)] = &[
 ];
 
 /// Map from physical key index (our layout) to Dygma keymap index
-/// Based on official Dygma RaiseANSIKeyMap.png
-/// Array index = our physical position, value = Dygma keymap index
+/// Based on official Dygma Raise ANSI keymap
+/// Array index = our physical position (0-67), value = Dygma keymap index
 /// 255 = unmapped/unused position
 const PHYSICAL_TO_KEYMAP: &[usize] = &[
-    // Physical 0-6: Left Row 0 (ESC, 1-6) → Dygma 0-6
+    // LEFT HALF (indices 0-31)
+    // Row 0: ESC, 1-6 (physical 0-6)
     0, 1, 2, 3, 4, 5, 6,
-    // Physical 7-12: Left Row 1 (Tab, Q-T) → Dygma 16-21
+    // Row 1: Tab, Q-T (physical 7-12)
     16, 17, 18, 19, 20, 21,
-    // Physical 13-18: Left Row 2 (Caps, A-G) → Dygma 32-37
+    // Row 2: Caps, A-G (physical 13-18)
     32, 33, 34, 35, 36, 37,
-    // Physical 19-25: Left Row 3 (Shift, \, Z-B) → Dygma 48, 50-55
-    48, 50, 51, 52, 53, 54, 55,
-    // Physical 26-29: Left Row 4 (Ctrl, Win, Alt, FN) → Dygma 64-67
-    64, 65, 66, 67,
-    // Physical 30-33: Left Thumb (4 keys) → Dygma 68-71
-    68, 69, 70, 71,
-    // Physical 34-39: Gap/padding
-    255, 255, 255, 255, 255, 255,
-    // Physical 40-46: Right Row 0 (7-=, BS) → Dygma 9-15
+    // Row 3: Shift, Z-B (physical 19-24) - skip Dygma 49 (ISO key)
+    48, 50, 51, 52, 53, 54,
+    // Row 4: Ctrl, Meta, Alt, T1, T2 (physical 25-29)
+    64, 65, 66, 67, 68,
+    // Thumb: T3, T4 (physical 30-31)
+    69, 70,
+    // RIGHT HALF (indices 32-67)
+    // Row 0: 7-=, Backspace (physical 32-38)
     9, 10, 11, 12, 13, 14, 15,
-    // Physical 47-54: Right Row 1 (Y-], \) → Dygma 24-31
+    // Row 1: Y-], \ (physical 39-46)
     24, 25, 26, 27, 28, 29, 30, 31,
-    // Physical 55-61: Right Row 2 (H-', Enter) → Dygma 40-46
+    // Row 2: H-', Enter (physical 47-53)
     40, 41, 42, 43, 44, 45, 46,
-    // Physical 62-67: Right Row 3 (N-/, Shift) → Dygma 56-61
+    // Row 3: N-/, Shift (physical 54-59)
     56, 57, 58, 59, 60, 61,
-    // Physical 68-72: Right Row 4 (Alt, FN, Win, Menu, Ctrl) → Dygma 74-78
-    74, 75, 76, 77, 78,
-    // Physical 73-76: Right Thumb (4 keys) → Dygma 72-73 + 79 + extra
-    72, 73, 79, 255,
+    // Row 4: T5, T6, Alt, FN, Meta, Ctrl (physical 60-65)
+    71, 72, 75, 76, 77, 78,
+    // Thumb: T7, T8 (physical 66-67)
+    73, 74,
 ];
 
 /// Default labels for base layer (QWERTY) - sequential indices matching layout
@@ -348,6 +348,18 @@ fn keycode_to_label(code: u16, shifted: bool) -> String {
             } else {
                 keycode_to_label(key as u16, false)
             }
+        }
+
+        // Dygma SuperKeys (0xD200-0xD2FF range) - tap/hold dual-function keys
+        c if (0xD200..0xD300).contains(&c) => {
+            let slot = c - 0xD200;
+            format!("SK{}", slot)
+        }
+
+        // Dygma SuperKeys extended range (0xD000-0xDFFF)
+        c if (0xD000..0xE000).contains(&c) => {
+            let slot = c - 0xD000;
+            format!("S{}", slot)
         }
 
         // Unknown - show abbreviated hex
@@ -866,7 +878,23 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
         if config.debug {
             // Show last key pressed + keymap status
             let last_key_info = last_key.lock().map(|k| k.clone()).unwrap_or_default();
-            let debug_status = format!("[{}] {} | Key: {} | {}", connection_status, keymap_status, last_key_info, debug_info);
+            // Add keymap samples for positions 0 (ESC), 31 (\), 40 (H), 46 (Enter)
+            let km_samples = if let Some(ref km) = keymap {
+                let l = layer as usize;
+                if let Some(lk) = km.get(l) {
+                    format!("km[{}]: 0={:04X} 31={:04X} 40={:04X} 46={:04X}",
+                        l,
+                        lk.get(0).unwrap_or(&0),
+                        lk.get(31).unwrap_or(&0),
+                        lk.get(40).unwrap_or(&0),
+                        lk.get(46).unwrap_or(&0))
+                } else {
+                    "km: layer OOB".to_string()
+                }
+            } else {
+                "km: None".to_string()
+            };
+            let debug_status = format!("[{}] {} | {} | {}", connection_status, keymap_status, km_samples, debug_info);
             term.set_str(1, height as i32 - 1, &debug_status, Some(status_color), false);
         } else {
             term.set_str(1, height as i32 - 1, connection_status, Some(status_color), false);
