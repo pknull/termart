@@ -99,23 +99,23 @@ const RIGHT_MAIN: &[(usize, KeyPos)] = &[
     (36, KeyPos::new(4.0, 0.0, 1.0)),   // -
     (37, KeyPos::new(5.0, 0.0, 1.0)),   // =
     (38, KeyPos::new(6.0, 0.0, 1.0)),   // Backspace
-    // Row 1 (top letter): Y-] with backslash (8 keys)
+    // Row 1 (top letter): Y U I O P [ ] Enter (8 keys - Enter is red key on right edge)
     (39, KeyPos::new(0.0, 1.0, 1.0)),   // Y
     (40, KeyPos::new(1.0, 1.0, 1.0)),   // U
     (41, KeyPos::new(2.0, 1.0, 1.0)),   // I
     (42, KeyPos::new(3.0, 1.0, 1.0)),   // O
     (43, KeyPos::new(4.0, 1.0, 1.0)),   // P
-    (44, KeyPos::new(5.0, 1.0, 1.0)),   // \ (backslash after P)
-    (45, KeyPos::new(6.0, 1.0, 1.0)),   // [
-    (46, KeyPos::new(7.0, 1.0, 1.0)),   // ]
-    // Row 2 (home): H-', Enter (7 keys)
+    (44, KeyPos::new(5.0, 1.0, 1.0)),   // [
+    (45, KeyPos::new(6.0, 1.0, 1.0)),   // ]
+    (46, KeyPos::new(7.0, 1.0, 1.0)),   // Enter (red key)
+    // Row 2 (home): H J K L ; ' \ (7 keys - backslash at end)
     (47, KeyPos::new(0.0, 2.0, 1.0)),   // H
     (48, KeyPos::new(1.0, 2.0, 1.0)),   // J
     (49, KeyPos::new(2.0, 2.0, 1.0)),   // K
     (50, KeyPos::new(3.0, 2.0, 1.0)),   // L
     (51, KeyPos::new(4.0, 2.0, 1.0)),   // ;
     (52, KeyPos::new(5.0, 2.0, 1.0)),   // '
-    (53, KeyPos::new(6.0, 2.0, 1.0)),   // Enter (red key)
+    (53, KeyPos::new(6.0, 2.0, 1.0)),   // \ (backslash)
     // Row 3 (bottom): N-/, Shift (6 keys)
     (54, KeyPos::new(1.0, 3.0, 1.0)),   // N
     (55, KeyPos::new(2.0, 3.0, 1.0)),   // M
@@ -139,35 +139,35 @@ const RIGHT_THUMB: &[(usize, KeyPos)] = &[
 ];
 
 /// Map from physical key index (our layout) to Dygma keymap index
-/// Based on official Dygma Raise ANSI keymap
+/// Based on official Dygma Raise ANSI keymap from Bazecor source
 /// Array index = our physical position (0-67), value = Dygma keymap index
-/// 255 = unmapped/unused position
+/// Keymap uses 16-column grid: keyIndex = row * 16 + col
 const PHYSICAL_TO_KEYMAP: &[usize] = &[
     // LEFT HALF (indices 0-31) - 32 keys
-    // Row 0: ESC, 1-6 (physical 0-6)
+    // Row 0: ESC, 1-6 (physical 0-6) → keymap row 0, cols 0-6
     0, 1, 2, 3, 4, 5, 6,
-    // Row 1: Tab, Q-T (physical 7-12)
+    // Row 1: Tab, Q-T (physical 7-12) → keymap row 1, cols 0-5
     16, 17, 18, 19, 20, 21,
-    // Row 2: Caps, A-G (physical 13-18)
+    // Row 2: Caps, A-G (physical 13-18) → keymap row 2, cols 0-5
     32, 33, 34, 35, 36, 37,
-    // Row 3: Shift, Z-B (physical 19-24) - skip Dygma 49 (ISO key)
-    48, 50, 51, 52, 53, 54,
-    // Row 4: Ctrl, Meta, Alt (physical 25-27)
+    // Row 3: Shift, Z-B (physical 19-24) → ANSI uses keymap 49 for shift (not 48!)
+    49, 50, 51, 52, 53, 54,
+    // Row 4: Ctrl, Meta, Alt (physical 25-27) → keymap row 4, cols 0-2
     64, 65, 66,
-    // Thumb: T1-T4 (physical 28-31)
+    // Thumb: T1-T4 (physical 28-31) → keymap row 4, cols 3-6
     67, 68, 69, 70,
     // RIGHT HALF (indices 32-67) - 36 keys
-    // Row 0: 7-=, Backspace (physical 32-38)
+    // Row 0: 7-=, Backspace (physical 32-38) → keymap row 0, cols 9-15
     9, 10, 11, 12, 13, 14, 15,
-    // Row 1: Y U I O P \ [ ] (physical 39-46) - 8 keys with backslash
-    24, 25, 26, 27, 28, 47, 29, 30,
-    // Row 2: H-', Enter (physical 47-53) - Enter@31 in keymap
-    41, 42, 43, 44, 45, 46, 31,
-    // Row 3: N-/, Shift (physical 54-59)
-    57, 58, 59, 60, 61, 62,
-    // Row 4: Alt, FN, Meta, Ctrl (physical 60-63) - 4 keys
+    // Row 1: Y U I O P [ ] Enter (physical 39-46) → keymap row 1, cols 8-15
+    24, 25, 26, 27, 28, 29, 30, 31,
+    // Row 2: H J K L ; ' \ (physical 47-53) → keymap row 2, cols 9-15
+    41, 42, 43, 44, 45, 46, 47,
+    // Row 3: N-/, Shift (physical 54-59) → keymap row 3, cols 10-15
+    58, 59, 60, 61, 62, 63,
+    // Row 4: Alt, FN, Meta, Ctrl (physical 60-63) → keymap row 4, cols 12-15
     76, 77, 78, 79,
-    // Thumb: T5-T8 (physical 64-67)
+    // Thumb: T5-T8 (physical 64-67) → keymap row 4, cols 8-11
     72, 73, 74, 75,
 ];
 
@@ -189,10 +189,10 @@ const DEFAULT_LABELS: &[&str] = &[
     // Right half (32-67) - 36 keys
     // Row 0: 7-=, Backspace (indices 32-38)
     "7", "8", "9", "0", "-", "=", "BSP",
-    // Row 1: Y-\ [ ] (indices 39-46) - 8 keys with backslash
-    "Y", "U", "I", "O", "P", "\\", "[", "]",
-    // Row 2: H-', Enter (indices 47-53)
-    "H", "J", "K", "L", ";", "'", "ENT",
+    // Row 1: Y U I O P [ ] Enter (indices 39-46) - Enter on right edge
+    "Y", "U", "I", "O", "P", "[", "]", "ENT",
+    // Row 2: H J K L ; ' \ (indices 47-53) - Backslash at end of home row
+    "H", "J", "K", "L", ";", "'", "\\",
     // Row 3: N-/, Shift (indices 54-59)
     "N", "M", ",", ".", "/", "SHF",
     // Row 4: Alt, FN, Meta, Ctrl (indices 60-63)
