@@ -271,23 +271,29 @@ fn keycode_to_label(code: u16, shifted: bool) -> String {
         0xE4 => "CTL".into(), 0xE5 => "SHF".into(), 0xE6 => "ALT".into(), 0xE7 => "GUI".into(),
 
         // Kaleidoscope modifier keys (high byte encodes modifier)
-        // Left modifiers: 0x01xx
+        // Bazecor modifier offsets: Ctrl=0x0100, Alt=0x0200, AltGr=0x0400, Shift=0x0800, GUI=0x1000
+        // 0x01xx = Ctrl + key
         c if (0x0100..0x0200).contains(&c) => {
             let base = (c & 0xFF) as u16;
             if base == 0 { "CTL".into() } else { format!("C-{}", keycode_to_label(base, false)) }
         }
-        // 0x02xx = Left Shift + key
-        c if (0x0200..0x0300).contains(&c) => {
-            let base = (c & 0xFF) as u16;
-            if base == 0 { "SHF".into() } else { format!("S-{}", keycode_to_label(base, false)) }
-        }
-        // 0x04xx = Left Alt + key
-        c if (0x0400..0x0500).contains(&c) => {
+        // 0x02xx = Alt + key
+        c if (0x0200..0x0400).contains(&c) => {
             let base = (c & 0xFF) as u16;
             if base == 0 { "ALT".into() } else { format!("A-{}", keycode_to_label(base, false)) }
         }
-        // 0x08xx = Left GUI + key
-        c if (0x0800..0x0900).contains(&c) => {
+        // 0x04xx = AltGr + key
+        c if (0x0400..0x0800).contains(&c) => {
+            let base = (c & 0xFF) as u16;
+            if base == 0 { "AGR".into() } else { format!("R-{}", keycode_to_label(base, false)) }
+        }
+        // 0x08xx = Shift + key
+        c if (0x0800..0x1000).contains(&c) => {
+            let base = (c & 0xFF) as u16;
+            if base == 0 { "SHF".into() } else { shifted_label(base).unwrap_or_else(|| format!("S-{}", keycode_to_label(base, false))) }
+        }
+        // 0x10xx = GUI + key
+        c if (0x1000..0x1100).contains(&c) => {
             let base = (c & 0xFF) as u16;
             if base == 0 { "GUI".into() } else { format!("G-{}", keycode_to_label(base, false)) }
         }
