@@ -1,6 +1,6 @@
 ---
-version: "1.9"
-lastUpdated: "2025-12-23"
+version: "2.0"
+lastUpdated: "2025-12-25"
 lifecycle: core
 stakeholder: pknull
 changeTrigger: "session end, significant changes"
@@ -24,6 +24,31 @@ Project expanded with system monitors and utilities:
 
 ## Recent Changes
 
+### Session 2025-12-25 (Dygma Layout Polish & UI Fixes)
+- **Thumb cluster mappings finalized**:
+  - Left thumb: T1→67 (BSP), T2→68 (SPC), T3→70 (DEL), T4→71 (>L3)
+  - Right thumb: swapped T5/T7 positions (74, 75, 72, 73)
+  - Position 69 is empty (0x0000) - not used
+- **Layer key offsets corrected** (via debug output analysis):
+  - ShiftToLayer: 0x4429 + layer (not 0x4400)
+  - LockLayer: 0x4439 + layer
+  - MoveToLayer: 0x4449 + layer
+- **Right half alignment fixed**:
+  - Rows 0, 2, 3 right-aligned (right edge matches)
+  - Backspace now at position 7.0 (reaches edge)
+- **Key widths improved**:
+  - Tab/Caps/Shift widened to 1.5 units on left half
+  - Letter keys shifted to accommodate (start at x=1.5)
+- **Layout positioning**:
+  - Left half aligned to left edge (x=1)
+  - Right half aligned to right edge
+  - Removed vertical scaling (eliminated row gaps)
+- **UI polish**:
+  - SuperKey labels simplified from "SKxx" to "SK"
+  - Layer indicator moved to top with connection status: `[ Layer 1 : Focus ]`
+  - Layers display 1-indexed (matching Bazecor UI)
+- **Key learning**: Debug output (`LThumb: 67:002A 68:002C...`) invaluable for mapping verification
+
 ### Session 2025-12-24 (Dygma Layout Fix - Bazecor Source Analysis)
 - **Bazecor source analysis**: Used official Keymap-ANSI.jsx from Dygma repository
   - Keymap uses 16-column grid: `keyIndex = row * 16 + col`
@@ -40,7 +65,6 @@ Project expanded with system monitors and utilities:
   - LockLayer range: 0x4420-0x4440
   - MoveToLayer range: 0x4440-0x4460
   - F13-F24 keys (0x68-0x73), SuperKey support (0xD000-0xDFFF)
-- **Remaining**: Test with physical keyboard to verify all mappings work
 
 ### Session 2025-12-23 (Dygma Keyboard Visualization - WIP)
 - **New visualization**: `termart dygma` for Dygma Raise split keyboard
@@ -166,12 +190,13 @@ Project expanded with system monitors and utilities:
 
 ## Next Steps
 
-- [ ] **Dygma visualization**: Test with real keyboard
-  - Physical layout rewritten (66 keys, corrected row structure)
-  - Keymap mapping corrected (Enter@31, H@41 verified)
-  - Remaining: backslash key (km position 47) may need special handling
-  - Verify thumb cluster positioning on actual hardware
-  - Check if any additional Kaleidoscope keycodes still show as hex
+- [ ] **Dygma visualization - transparent key handling**:
+  - Currently shows default layer letter for "none"/transparent keys (confusing)
+  - Should show something like "·" or empty or "T" for transparent
+  - Need to detect keycode 0x0000 or 0xFFFF (whichever means transparent)
+- [ ] **Dygma visualization**: Continue testing with real keyboard
+  - Most mappings verified working
+  - Watch for any additional Kaleidoscope keycodes still showing as hex
 - [ ] Docker: Add `--host` flag for easier remote Docker connection
 - [ ] Docker: Enable remote Docker API on 172.16.0.14 (ports 2375/2376 not open)
 - [ ] Space Invaders AI: Continue testing bullet avoidance (occasional hits reported)
