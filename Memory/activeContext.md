@@ -24,6 +24,24 @@ Project expanded with system monitors and utilities:
 
 ## Recent Changes
 
+### Session 2025-12-24 (Dygma Layout Fix - Bazecor Source Analysis)
+- **Bazecor source analysis**: Used official Keymap-ANSI.jsx from Dygma repository
+  - Keymap uses 16-column grid: `keyIndex = row * 16 + col`
+  - Identified gap positions: 7-8, 22-23, 38-40, 48 (ISO), 55-57, 71
+  - Total: 68 physical keys matching JSX layout
+- **Critical layout corrections**:
+  - Right Row 1: Y U I O P [ ] Enter (Enter on right edge at keymap 31)
+  - Right Row 2: H J K L ; ' \ (backslash at end, keymap 47)
+  - Left Shift: keymap position 49 (ANSI doesn't use 48 - that's ISO key)
+- **PHYSICAL_TO_KEYMAP rewritten**:
+  - Left half: 0-6, 16-21, 32-37, 49-54, 64-66, 67-70 (thumb)
+  - Right half: 9-15, 24-31, 41-47, 58-63, 76-79, 72-75 (thumb)
+- **Previous fixes retained**:
+  - LockLayer range: 0x4420-0x4440
+  - MoveToLayer range: 0x4440-0x4460
+  - F13-F24 keys (0x68-0x73), SuperKey support (0xD000-0xDFFF)
+- **Remaining**: Test with physical keyboard to verify all mappings work
+
 ### Session 2025-12-23 (Dygma Keyboard Visualization - WIP)
 - **New visualization**: `termart dygma` for Dygma Raise split keyboard
   - Focus protocol connection via serial (115200 baud, auto-detect by USB VID/PID)
@@ -35,13 +53,8 @@ Project expanded with system monitors and utilities:
   - Heat map from evdev key events (same as existing keyboard viz)
 - **Technical details**:
   - Added `serialport = "4.3"` dependency
-  - Created `src/viz/dygma.rs` (~970 lines)
+  - Created `src/viz/dygma.rs` (~1050 lines)
   - Key mapping based on official RaiseANSIKeyMap.png from Dygma firmware repo
-- **Known issues** (to revisit):
-  - Physical layout geometry feels off
-  - Some Kaleidoscope keycodes still show as hex
-  - Thumb keys only show 2 of 4 (Dygma image shows 70-71, 72-73)
-  - Overall feel is "clunky" - may need different approach
 
 ### Session 2025-12-18 (Optimizations & Bug Fixes)
 - **Docker monitor bug fix**: Fixed template parsing error with SSH Docker
@@ -153,12 +166,12 @@ Project expanded with system monitors and utilities:
 
 ## Next Steps
 
-- [ ] **Dygma visualization**: Revisit and refine (see notes below)
-  - Physical layout geometry feels "clunky" - needs refinement
-  - Some keycodes still showing as hex - need more Kaleidoscope mappings
-  - Index mapping between physical layout and keymap may have errors
-  - "Something missing" - possibly needs a different approach entirely
-  - Current state: Working layer detection, keymap query, shift tracking, but rough
+- [ ] **Dygma visualization**: Test with real keyboard
+  - Physical layout rewritten (66 keys, corrected row structure)
+  - Keymap mapping corrected (Enter@31, H@41 verified)
+  - Remaining: backslash key (km position 47) may need special handling
+  - Verify thumb cluster positioning on actual hardware
+  - Check if any additional Kaleidoscope keycodes still show as hex
 - [ ] Docker: Add `--host` flag for easier remote Docker connection
 - [ ] Docker: Enable remote Docker API on 172.16.0.14 (ports 2375/2376 not open)
 - [ ] Space Invaders AI: Continue testing bullet avoidance (occasional hits reported)

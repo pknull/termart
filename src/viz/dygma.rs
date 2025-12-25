@@ -53,27 +53,27 @@ const LEFT_MAIN: &[(usize, KeyPos)] = &[
     (4,  KeyPos::new(4.0, 0.0, 1.0)),   // 4
     (5,  KeyPos::new(5.0, 0.0, 1.0)),   // 5
     (6,  KeyPos::new(6.0, 0.0, 1.0)),   // 6
-    // Row 1 (top letter): Tab, Q-T (6 keys)
-    (7,  KeyPos::new(0.0, 1.0, 1.0)),   // Tab
-    (8,  KeyPos::new(1.0, 1.0, 1.0)),   // Q
-    (9,  KeyPos::new(2.0, 1.0, 1.0)),   // W
-    (10, KeyPos::new(3.0, 1.0, 1.0)),   // E
-    (11, KeyPos::new(4.0, 1.0, 1.0)),   // R
-    (12, KeyPos::new(5.0, 1.0, 1.0)),   // T
-    // Row 2 (home): Caps, A-G (6 keys)
-    (13, KeyPos::new(0.0, 2.0, 1.0)),   // Caps
-    (14, KeyPos::new(1.0, 2.0, 1.0)),   // A
-    (15, KeyPos::new(2.0, 2.0, 1.0)),   // S
-    (16, KeyPos::new(3.0, 2.0, 1.0)),   // D
-    (17, KeyPos::new(4.0, 2.0, 1.0)),   // F
-    (18, KeyPos::new(5.0, 2.0, 1.0)),   // G
-    // Row 3 (bottom): Shift, Z-B (6 keys)
-    (19, KeyPos::new(0.0, 3.0, 1.0)),   // Shift
-    (20, KeyPos::new(1.0, 3.0, 1.0)),   // Z
-    (21, KeyPos::new(2.0, 3.0, 1.0)),   // X
-    (22, KeyPos::new(3.0, 3.0, 1.0)),   // C
-    (23, KeyPos::new(4.0, 3.0, 1.0)),   // V
-    (24, KeyPos::new(5.0, 3.0, 1.0)),   // B
+    // Row 1 (top letter): Tab, Q-T (6 keys) - Tab wider
+    (7,  KeyPos::new(0.0, 1.0, 1.5)),   // Tab (1.5 wide)
+    (8,  KeyPos::new(1.5, 1.0, 1.0)),   // Q
+    (9,  KeyPos::new(2.5, 1.0, 1.0)),   // W
+    (10, KeyPos::new(3.5, 1.0, 1.0)),   // E
+    (11, KeyPos::new(4.5, 1.0, 1.0)),   // R
+    (12, KeyPos::new(5.5, 1.0, 1.0)),   // T
+    // Row 2 (home): Caps, A-G (6 keys) - Caps wider
+    (13, KeyPos::new(0.0, 2.0, 1.5)),   // Caps (1.5 wide)
+    (14, KeyPos::new(1.5, 2.0, 1.0)),   // A
+    (15, KeyPos::new(2.5, 2.0, 1.0)),   // S
+    (16, KeyPos::new(3.5, 2.0, 1.0)),   // D
+    (17, KeyPos::new(4.5, 2.0, 1.0)),   // F
+    (18, KeyPos::new(5.5, 2.0, 1.0)),   // G
+    // Row 3 (bottom): Shift, Z-B (6 keys) - Shift wider
+    (19, KeyPos::new(0.0, 3.0, 1.5)),   // Shift (1.5 wide)
+    (20, KeyPos::new(1.5, 3.0, 1.0)),   // Z
+    (21, KeyPos::new(2.5, 3.0, 1.0)),   // X
+    (22, KeyPos::new(3.5, 3.0, 1.0)),   // C
+    (23, KeyPos::new(4.5, 3.0, 1.0)),   // V
+    (24, KeyPos::new(5.5, 3.0, 1.0)),   // B
     // Row 4 (modifiers): Ctrl, Cmd, Alt (3 keys)
     (25, KeyPos::new(0.0, 4.0, 1.0)),   // Ctrl
     (26, KeyPos::new(1.0, 4.0, 1.0)),   // Cmd/Meta
@@ -91,14 +91,14 @@ const LEFT_THUMB: &[(usize, KeyPos)] = &[
 /// Right half main keys
 /// Outer edge (right) aligned at x=7
 const RIGHT_MAIN: &[(usize, KeyPos)] = &[
-    // Row 0 (number row): 7-=, Backspace (7 keys)
-    (32, KeyPos::new(0.0, 0.0, 1.0)),   // 7
-    (33, KeyPos::new(1.0, 0.0, 1.0)),   // 8
-    (34, KeyPos::new(2.0, 0.0, 1.0)),   // 9
-    (35, KeyPos::new(3.0, 0.0, 1.0)),   // 0
-    (36, KeyPos::new(4.0, 0.0, 1.0)),   // -
-    (37, KeyPos::new(5.0, 0.0, 1.0)),   // =
-    (38, KeyPos::new(6.0, 0.0, 1.0)),   // Backspace
+    // Row 0 (number row): 7-=, Backspace (7 keys) - right-aligned with row 1
+    (32, KeyPos::new(1.0, 0.0, 1.0)),   // 7
+    (33, KeyPos::new(2.0, 0.0, 1.0)),   // 8
+    (34, KeyPos::new(3.0, 0.0, 1.0)),   // 9
+    (35, KeyPos::new(4.0, 0.0, 1.0)),   // 0
+    (36, KeyPos::new(5.0, 0.0, 1.0)),   // -
+    (37, KeyPos::new(6.0, 0.0, 1.0)),   // =
+    (38, KeyPos::new(7.0, 0.0, 1.0)),   // Backspace
     // Row 1 (top letter): Y U I O P [ ] \ (8 keys - backslash on right edge)
     (39, KeyPos::new(0.0, 1.0, 1.0)),   // Y
     (40, KeyPos::new(1.0, 1.0, 1.0)),   // U
@@ -109,20 +109,20 @@ const RIGHT_MAIN: &[(usize, KeyPos)] = &[
     (45, KeyPos::new(6.0, 1.0, 1.0)),   // ]
     (46, KeyPos::new(7.0, 1.0, 1.0)),   // \ (backslash)
     // Row 2 (home): H J K L ; ' Enter (7 keys - Enter at end)
-    (47, KeyPos::new(0.0, 2.0, 1.0)),   // H
-    (48, KeyPos::new(1.0, 2.0, 1.0)),   // J
-    (49, KeyPos::new(2.0, 2.0, 1.0)),   // K
-    (50, KeyPos::new(3.0, 2.0, 1.0)),   // L
-    (51, KeyPos::new(4.0, 2.0, 1.0)),   // ;
-    (52, KeyPos::new(5.0, 2.0, 1.0)),   // '
-    (53, KeyPos::new(6.0, 2.0, 1.0)),   // Enter
-    // Row 3 (bottom): N-/, Shift (6 keys)
-    (54, KeyPos::new(1.0, 3.0, 1.0)),   // N
-    (55, KeyPos::new(2.0, 3.0, 1.0)),   // M
-    (56, KeyPos::new(3.0, 3.0, 1.0)),   // ,
-    (57, KeyPos::new(4.0, 3.0, 1.0)),   // .
-    (58, KeyPos::new(5.0, 3.0, 1.0)),   // /
-    (59, KeyPos::new(6.0, 3.0, 1.0)),   // Shift
+    (47, KeyPos::new(1.0, 2.0, 1.0)),   // H
+    (48, KeyPos::new(2.0, 2.0, 1.0)),   // J
+    (49, KeyPos::new(3.0, 2.0, 1.0)),   // K
+    (50, KeyPos::new(4.0, 2.0, 1.0)),   // L
+    (51, KeyPos::new(5.0, 2.0, 1.0)),   // ;
+    (52, KeyPos::new(6.0, 2.0, 1.0)),   // '
+    (53, KeyPos::new(7.0, 2.0, 1.0)),   // Enter
+    // Row 3 (bottom): N-/, Shift (6 keys) - right-aligned with rows above
+    (54, KeyPos::new(2.0, 3.0, 1.0)),   // N
+    (55, KeyPos::new(3.0, 3.0, 1.0)),   // M
+    (56, KeyPos::new(4.0, 3.0, 1.0)),   // ,
+    (57, KeyPos::new(5.0, 3.0, 1.0)),   // .
+    (58, KeyPos::new(6.0, 3.0, 1.0)),   // /
+    (59, KeyPos::new(7.0, 3.0, 1.0)),   // Shift
     // Row 4 (modifiers): Alt, FN, Meta, Ctrl (4 keys)
     (60, KeyPos::new(4.0, 4.0, 1.0)),   // Alt
     (61, KeyPos::new(5.0, 4.0, 1.0)),   // FN
@@ -150,12 +150,12 @@ const PHYSICAL_TO_KEYMAP: &[usize] = &[
     16, 17, 18, 19, 20, 21,
     // Row 2: Caps, A-G (physical 13-18) → keymap row 2, cols 0-5
     32, 33, 34, 35, 36, 37,
-    // Row 3: Shift, Z-B (physical 19-24) → ANSI uses keymap 49 for shift (not 48!)
-    49, 50, 51, 52, 53, 54,
+    // Row 3: Shift, Z-B (physical 19-24) → keymap 48 for shift, skip 49 (ISO key)
+    48, 50, 51, 52, 53, 54,
     // Row 4: Ctrl, Meta, Alt (physical 25-27) → keymap row 4, cols 0-2
     64, 65, 66,
-    // Thumb: T1-T4 (physical 28-31) → keymap row 4, cols 3-6
-    67, 68, 69, 70,
+    // Thumb: T1-T4 (physical 28-31) → keymap indices
+    67, 68, 70, 71,
     // RIGHT HALF (indices 32-67) - 36 keys
     // Row 0: 7-=, Backspace (physical 32-38) → keymap row 0, cols 9-15
     9, 10, 11, 12, 13, 14, 15,
@@ -167,8 +167,8 @@ const PHYSICAL_TO_KEYMAP: &[usize] = &[
     58, 59, 60, 61, 62, 63,
     // Row 4: Alt, FN, Meta, Ctrl (physical 60-63) → keymap row 4, cols 12-15
     76, 77, 78, 79,
-    // Thumb: T5-T8 (physical 64-67) → keymap row 4, cols 8-11
-    72, 73, 74, 75,
+    // Thumb: T5-T8 (physical 64-67) → keymap indices (T5/T7 and T6/T8 swapped)
+    74, 75, 72, 73,
 ];
 
 /// Default labels for base layer (QWERTY) - sequential indices matching layout
@@ -298,13 +298,17 @@ fn keycode_to_label(code: u16, shifted: bool) -> String {
             if base == 0 { "GUI".into() } else { format!("G-{}", keycode_to_label(base, false)) }
         }
 
-        // Kaleidoscope layer keys (per Kaleidoscope layer_shift_flags)
-        // ShiftToLayer: 0x4400 + layer (hold to activate)
-        c if (0x4400..0x4420).contains(&c) => format!(">L{}", c - 0x4400),
-        // LockLayer: 0x4420 + layer (toggle layer on/off)
-        c if (0x4420..0x4440).contains(&c) => format!("=L{}", c - 0x4420),
-        // MoveToLayer: 0x4440 + layer (switch and stay)
-        c if (0x4440..0x4460).contains(&c) => format!("+L{}", c - 0x4440),
+        // Kaleidoscope/Bazecor layer keys
+        // ShiftToLayer: 0x4429 + layer (hold to activate) - empirically determined from Bazecor
+        c if (0x4429..0x4439).contains(&c) => format!(">L{}", c - 0x4429),
+        // LockLayer: 0x4439 + layer (toggle layer on/off)
+        c if (0x4439..0x4449).contains(&c) => format!("=L{}", c - 0x4439),
+        // MoveToLayer: 0x4449 + layer (switch and stay)
+        c if (0x4449..0x4459).contains(&c) => format!("+L{}", c - 0x4449),
+        // Legacy ranges (in case some keymaps use old format)
+        c if (0x4400..0x4410).contains(&c) => format!(">L{}", c - 0x4400),
+        c if (0x4410..0x4420).contains(&c) => format!("=L{}", c - 0x4410),
+        c if (0x4420..0x4429).contains(&c) => format!("+L{}", c - 0x4420),
 
         // OneShot layers: 49153+ (0xC001)
         c if (0xC001..0xC010).contains(&c) => format!("1L{}", c - 0xC001),
@@ -357,16 +361,10 @@ fn keycode_to_label(code: u16, shifted: bool) -> String {
         }
 
         // Dygma SuperKeys (0xD200-0xD2FF range) - tap/hold dual-function keys
-        c if (0xD200..0xD300).contains(&c) => {
-            let slot = c - 0xD200;
-            format!("SK{}", slot)
-        }
+        c if (0xD200..0xD300).contains(&c) => "SK".into(),
 
         // Dygma SuperKeys extended range (0xD000-0xDFFF)
-        c if (0xD000..0xE000).contains(&c) => {
-            let slot = c - 0xD000;
-            format!("S{}", slot)
-        }
+        c if (0xD000..0xE000).contains(&c) => "SK".into(),
 
         // Unknown - show abbreviated hex
         _ => {
@@ -733,11 +731,56 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
     // Shared debug key info
     let last_key = Arc::new(Mutex::new(String::new()));
 
+    // Shared pending modifiers across ALL evdev threads
+    // This is critical because Dygma Raise appears as multiple devices (one per half)
+    // and synthetic modifiers from one half need to be cancelled by keys from the other
+    // Tuple: (label, timestamp, is_shift)
+    let pending_mods: Arc<Mutex<Vec<(String, std::time::Instant, bool)>>> = Arc::new(Mutex::new(Vec::new()));
+    const MOD_DELAY_MS: u128 = 50; // If another key follows within 50ms, modifier is synthetic
+
+    fn is_modifier(key: evdev::Key) -> bool {
+        matches!(key,
+            evdev::Key::KEY_LEFTSHIFT | evdev::Key::KEY_RIGHTSHIFT |
+            evdev::Key::KEY_LEFTCTRL | evdev::Key::KEY_RIGHTCTRL |
+            evdev::Key::KEY_LEFTALT | evdev::Key::KEY_RIGHTALT |
+            evdev::Key::KEY_LEFTMETA | evdev::Key::KEY_RIGHTMETA)
+    }
+
+    fn is_shift(key: evdev::Key) -> bool {
+        matches!(key, evdev::Key::KEY_LEFTSHIFT | evdev::Key::KEY_RIGHTSHIFT)
+    }
+
+    /// Get shifted version of evdev key label (for synthetic Shift+key combos)
+    fn evdev_shifted_label(key: evdev::Key) -> Option<&'static str> {
+        use evdev::Key;
+        Some(match key {
+            Key::KEY_1 => "!", Key::KEY_2 => "@", Key::KEY_3 => "#", Key::KEY_4 => "$",
+            Key::KEY_5 => "%", Key::KEY_6 => "^", Key::KEY_7 => "&", Key::KEY_8 => "*",
+            Key::KEY_9 => "(", Key::KEY_0 => ")",
+            Key::KEY_MINUS => "_", Key::KEY_EQUAL => "+",
+            Key::KEY_LEFTBRACE => "{", Key::KEY_RIGHTBRACE => "}",
+            Key::KEY_BACKSLASH => "|",
+            Key::KEY_SEMICOLON => ":", Key::KEY_APOSTROPHE => "\"",
+            Key::KEY_GRAVE => "~",
+            Key::KEY_COMMA => "<", Key::KEY_DOT => ">", Key::KEY_SLASH => "?",
+            // Letters become uppercase
+            Key::KEY_A => "A", Key::KEY_B => "B", Key::KEY_C => "C", Key::KEY_D => "D",
+            Key::KEY_E => "E", Key::KEY_F => "F", Key::KEY_G => "G", Key::KEY_H => "H",
+            Key::KEY_I => "I", Key::KEY_J => "J", Key::KEY_K => "K", Key::KEY_L => "L",
+            Key::KEY_M => "M", Key::KEY_N => "N", Key::KEY_O => "O", Key::KEY_P => "P",
+            Key::KEY_Q => "Q", Key::KEY_R => "R", Key::KEY_S => "S", Key::KEY_T => "T",
+            Key::KEY_U => "U", Key::KEY_V => "V", Key::KEY_W => "W", Key::KEY_X => "X",
+            Key::KEY_Y => "Y", Key::KEY_Z => "Z",
+            _ => return None,
+        })
+    }
+
     for mut device in keyboards {
         let heat_clone = Arc::clone(&key_heat);
         let running_clone = Arc::clone(&running);
         let last_key_clone = Arc::clone(&last_key);
         let shift_clone = Arc::clone(&shift_held);
+        let pending_mods_clone = Arc::clone(&pending_mods);
         let debug_mode = config.debug;
 
         let handle = std::thread::spawn(move || {
@@ -750,36 +793,32 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
                 libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
             }
 
-            // Pending modifiers: (label, timestamp) - wait to see if they're synthetic
-            let mut pending_mods: Vec<(String, Instant)> = Vec::new();
-            const MOD_DELAY_MS: u128 = 50; // If another key follows within 50ms, modifier is synthetic
-
-            fn is_modifier(key: evdev::Key) -> bool {
-                matches!(key,
-                    evdev::Key::KEY_LEFTSHIFT | evdev::Key::KEY_RIGHTSHIFT |
-                    evdev::Key::KEY_LEFTCTRL | evdev::Key::KEY_RIGHTCTRL |
-                    evdev::Key::KEY_LEFTALT | evdev::Key::KEY_RIGHTALT |
-                    evdev::Key::KEY_LEFTMETA | evdev::Key::KEY_RIGHTMETA)
-            }
-
             while running_clone.load(Ordering::Relaxed) {
                 let now = Instant::now();
 
                 // Promote pending modifiers that have waited long enough (real modifier press)
-                let mut promoted = Vec::new();
-                pending_mods.retain(|(label, time)| {
-                    if now.duration_since(*time).as_millis() > MOD_DELAY_MS {
-                        promoted.push(label.clone());
-                        false // Remove from pending
-                    } else {
-                        true // Keep waiting
-                    }
-                });
+                if let Ok(mut pending) = pending_mods_clone.lock() {
+                    let mut promoted = Vec::new();
+                    let mut promoted_shift = false;
+                    pending.retain(|(label, time, is_s)| {
+                        if now.duration_since(*time).as_millis() > MOD_DELAY_MS {
+                            promoted.push(label.clone());
+                            if *is_s { promoted_shift = true; }
+                            false // Remove from pending
+                        } else {
+                            true // Keep waiting
+                        }
+                    });
 
-                if !promoted.is_empty() {
-                    if let Ok(mut heat) = heat_clone.lock() {
-                        for label in promoted {
-                            heat.insert(label, 1.0);
+                    if !promoted.is_empty() {
+                        if let Ok(mut heat) = heat_clone.lock() {
+                            for label in promoted {
+                                heat.insert(label, 1.0);
+                            }
+                        }
+                        // Only set shift_held when Shift is promoted (real hold, not synthetic)
+                        if promoted_shift {
+                            shift_clone.store(true, Ordering::Relaxed);
                         }
                     }
                 }
@@ -787,9 +826,11 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
                 if let Ok(events) = device.fetch_events() {
                     for ev in events {
                         if let evdev::InputEventKind::Key(key) = ev.kind() {
-                            // Track shift state
+                            // Track shift release - but NOT press (press goes through pending)
                             if key == evdev::Key::KEY_LEFTSHIFT || key == evdev::Key::KEY_RIGHTSHIFT {
-                                shift_clone.store(ev.value() != 0, Ordering::Relaxed);
+                                if ev.value() == 0 {
+                                    shift_clone.store(false, Ordering::Relaxed);
+                                }
                             }
 
                             if ev.value() == 1 || ev.value() == 2 {
@@ -799,13 +840,30 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
 
                                 if is_modifier(key) {
                                     // Queue modifier - wait to see if it's synthetic
-                                    pending_mods.push((label.clone(), now));
+                                    if let Ok(mut pending) = pending_mods_clone.lock() {
+                                        pending.push((label.clone(), now, is_shift(key)));
+                                    }
                                 } else {
-                                    // Non-modifier key pressed - cancel any pending modifiers (they were synthetic)
-                                    pending_mods.clear();
+                                    // Non-modifier key pressed - check if Shift was pending (synthetic)
+                                    let had_synthetic_shift = if let Ok(mut pending) = pending_mods_clone.lock() {
+                                        let had_shift = pending.iter().any(|(_, _, is_s)| *is_s);
+                                        pending.clear();
+                                        had_shift
+                                    } else {
+                                        false
+                                    };
+
+                                    // Use shifted label if Shift was synthetic, otherwise use raw label
+                                    let heat_label = if had_synthetic_shift {
+                                        evdev_shifted_label(key)
+                                            .map(|s| s.to_string())
+                                            .unwrap_or_else(|| label.clone())
+                                    } else {
+                                        label.clone()
+                                    };
 
                                     if let Ok(mut heat) = heat_clone.lock() {
-                                        heat.insert(label.clone(), 1.0);
+                                        heat.insert(heat_label, 1.0);
                                     }
                                 }
 
@@ -904,68 +962,57 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
         let w = width as f32;
         let h = height as f32;
 
-        // Calculate scaling
-        let total_width = HALF_WIDTH * 2.0 + SPLIT_GAP;
-        let scale_x = (w * 0.9) / (total_width * 3.0);  // Account for 3-char spacing
-        let scale_y = (h * 0.8) / TOTAL_HEIGHT;
-        let scale = scale_x.min(scale_y).min(1.5); // Cap scale for reasonable key spacing
+        // Calculate scaling based on available space for each half
+        let half_char_width = HALF_WIDTH * 3.0;  // Each half in character units
+        let available_per_half = (w * 0.45) as f32;  // ~45% of width per half
+        let scale_x = available_per_half / half_char_width;
+        // Keep vertical scale at 1.0 to avoid gaps between rows
+        let scale = scale_x.min(1.5); // Cap horizontal scale, vertical is always 1.0
 
         let key_char_width = (scale * 3.0) as usize;
+        let half_width_chars = (HALF_WIDTH * scale * 3.0) as usize;
 
-        // Center the layout
-        let layout_width = (total_width * scale * 3.0) as usize;
-        let layout_height = (TOTAL_HEIGHT * scale) as usize;
-        let start_x = (width as usize).saturating_sub(layout_width) / 2;
+        // Edge-align: left half to left edge, right half to right edge
+        let layout_height = TOTAL_HEIGHT as usize;  // No vertical scaling
+        let left_start_x: usize = 1;  // Small margin from left edge
+        let right_start_x = (width as usize).saturating_sub(half_width_chars + 1);  // Small margin from right edge
         let start_y = (height as usize).saturating_sub(layout_height) / 2;
 
-        // Draw layer indicator (show highest active layer)
+        // Draw layer indicator with connection status
         let top_layer = layer_stack.first().copied().unwrap_or(0);
-        let layer_text = format!("[ Layer {} ]", top_layer);
+        let connection_status = if has_focus { "Focus" } else if has_evdev { "evdev" } else { "none" };
+        let layer_text = format!("[ Layer {} : {} ]", top_layer + 1, connection_status);
         let layer_x = (width as usize - layer_text.len()) / 2;
         let (layer_color, _) = scheme_color(state.color_scheme, 2, true);
         term.set_str(layer_x as i32, 0, &layer_text, Some(layer_color), true);
 
-        // Status line
-        let connection_status = if has_focus { "Focus" } else if has_evdev { "evdev" } else { "none" };
-        let (status_color, _) = scheme_color(state.color_scheme, 0, false);
-
+        // Debug status line (only in debug mode)
         if config.debug {
-            // Show last key pressed + keymap status
-            let last_key_info = last_key.lock().map(|k| k.clone()).unwrap_or_default();
-            // Add keymap samples - scan for specific HID codes to find correct positions
-            // Looking for: 0x29=ESC, 0x31=\, 0x28=Enter, 0x0B=H
+            let (status_color, _) = scheme_color(state.color_scheme, 0, false);
+            let _last_key_info = last_key.lock().map(|k| k.clone()).unwrap_or_default();
+            // Add keymap samples - show left thumb positions 67-71
             let km_samples = if let Some(ref km) = keymap {
-                let l = top_layer as usize;
-                if let Some(lk) = km.get(l) {
-                    // Find positions of key codes
-                    let find_pos = |target: u16| -> String {
-                        lk.iter().position(|&k| k == target)
-                            .map(|p| p.to_string())
-                            .unwrap_or("-".into())
-                    };
-                    format!("ESC@{} \\@{} H@{} Ent@{}",
-                        find_pos(0x29),  // ESC
-                        find_pos(0x31),  // backslash
-                        find_pos(0x0B),  // H
-                        find_pos(0x28))  // Enter
+                if let Some(lk) = km.get(0) {
+                    let thumb_keys: Vec<String> = (67..=71)
+                        .filter_map(|pos| lk.get(pos).map(|&k| format!("{}:{:04X}", pos, k)))
+                        .collect();
+                    format!("LThumb: {}", thumb_keys.join(" "))
                 } else {
                     "km: layer OOB".to_string()
                 }
             } else {
                 "km: None".to_string()
             };
-            let debug_status = format!("[{}] {} | {} | {}", connection_status, keymap_status, km_samples, debug_info);
+            let debug_status = format!("{} | {} | {}", keymap_status, km_samples, debug_info);
             term.set_str(1, height as i32 - 1, &debug_status, Some(status_color), false);
-        } else {
-            term.set_str(1, height as i32 - 1, connection_status, Some(status_color), false);
         }
 
-        // Draw left half
+        // Draw left half (aligned to left edge)
         draw_half(
             &mut term,
             LEFT_MAIN,
             LEFT_THUMB,
-            start_x,
+            left_start_x,
             start_y + 1,
             scale,
             key_char_width,
@@ -976,13 +1023,12 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
             shifted,
         );
 
-        // Draw right half (offset by left width + gap)
-        let right_offset = ((HALF_WIDTH + SPLIT_GAP) * scale * 3.0) as usize;
+        // Draw right half (aligned to right edge)
         draw_half(
             &mut term,
             RIGHT_MAIN,
             RIGHT_THUMB,
-            start_x + right_offset,
+            right_start_x,
             start_y + 1,
             scale,
             key_char_width,
@@ -1023,7 +1069,7 @@ fn draw_half(
     for (idx, pos) in main_keys.iter().chain(thumb_keys.iter()) {
         // Use signed math to handle negative offsets (for right half stagger)
         let x = (base_x as i32 + (pos.x * scale * 3.0) as i32).max(0) as usize;
-        let y = base_y + (pos.y * scale) as usize;
+        let y = base_y + pos.y as usize;  // No vertical scaling - rows always 1 char apart
         let w = ((pos.w * scale * 3.0) as usize).max(1);  // 3 char label width
 
         // Get label from keymap with layer stacking (highest to lowest)
