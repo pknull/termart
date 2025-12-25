@@ -11,7 +11,7 @@ use crossterm::event::KeyCode;
 use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// Configuration for Dygma visualization
@@ -656,24 +656,26 @@ impl FocusConnection {
         }
     }
 
-    /// Query active layer - returns highest active layer number
+    /// Query active layers - returns all active layer indices from highest to lowest
     /// layer.state returns 32 space-separated values (0=inactive, 1=active)
-    fn active_layer(&mut self) -> Option<u8> {
+    fn active_layers(&mut self) -> Option<Vec<u8>> {
         let response = self.command("layer.state")?;
 
-        // Parse "0 0 1 0 0 ..." format - find highest active layer
+        // Parse "0 0 1 0 0 ..." format - collect all active layers
         let states: Vec<bool> = response
             .split_whitespace()
             .filter_map(|s| s.parse::<u8>().ok())
             .map(|v| v != 0)
             .collect();
 
-        // Return the highest active layer (layer stacking means multiple can be active)
-        states.iter()
+        // Return all active layers from highest to lowest (for proper layer stacking)
+        let mut active: Vec<u8> = states.iter()
             .enumerate()
             .filter(|(_, &active)| active)
             .map(|(i, _)| i as u8)
-            .last()
+            .collect();
+        active.reverse();  // Highest first for priority lookup
+        Some(active)
     }
 }
 
@@ -693,7 +695,7 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
     // Key heat tracking
     let key_heat: Arc<Mutex<HashMap<String, f32>>> = Arc::new(Mutex::new(HashMap::new()));
     let running = Arc::new(AtomicBool::new(true));
-    let current_layer = Arc::new(AtomicU8::new(0));
+    let active_layers = Arc::new(AtomicU32::new(1)); // Bitmask: bit N = layer N active, layer 0 always on
     let shift_held = Arc::new(AtomicBool::new(false));
 
     // Try to connect to keyboard via Focus protocol
@@ -808,28 +810,25 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
         if layer_query_timer > 0.5 {
             layer_query_timer = 0.0;
             if let Some(ref mut f) = focus {
-                // Get raw response for debug
-                if config.debug {
-                    if let Some(resp) = f.command("layer.state") {
+                if let Some(resp) = f.command("layer.state") {
+                    if config.debug {
                         debug_info = format!("layer.state: {}", resp);
-                        // Parse to find active layer
-                        let states: Vec<bool> = resp
-                            .split_whitespace()
-                            .filter_map(|s| s.parse::<u8>().ok())
-                            .map(|v| v != 0)
-                            .collect();
-                        if let Some(layer) = states.iter()
-                            .enumerate()
-                            .filter(|(_, &active)| active)
-                            .map(|(i, _)| i as u8)
-                            .last() {
-                            current_layer.store(layer, Ordering::Relaxed);
-                        }
-                    } else {
-                        debug_info = "layer.state: no response".to_string();
                     }
-                } else if let Some(layer) = f.active_layer() {
-                    current_layer.store(layer, Ordering::Relaxed);
+                    // Parse layer state into bitmask
+                    let mut mask: u32 = 0;
+                    for (i, s) in resp.split_whitespace().enumerate() {
+                        if i >= 32 { break; }
+                        if let Ok(v) = s.parse::<u8>() {
+                            if v != 0 {
+                                mask |= 1 << i;
+                            }
+                        }
+                    }
+                    // Ensure layer 0 is always in the mask (base layer fallback)
+                    if mask == 0 { mask = 1; }
+                    active_layers.store(mask, Ordering::Relaxed);
+                } else if config.debug {
+                    debug_info = "layer.state: no response".to_string();
                 }
             }
         }
@@ -843,8 +842,14 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
         }
 
         let heat_snapshot = key_heat.lock().map(|h| h.clone()).unwrap_or_default();
-        let layer = current_layer.load(Ordering::Relaxed);
+        let layer_mask = active_layers.load(Ordering::Relaxed);
         let shifted = shift_held.load(Ordering::Relaxed);
+
+        // Extract active layers from bitmask, highest first (for layer stacking)
+        let mut layer_stack: Vec<u8> = (0..32u8)
+            .filter(|&i| layer_mask & (1 << i) != 0)
+            .collect();
+        layer_stack.reverse(); // Highest layer first for priority lookup
 
         term.clear();
 
@@ -865,8 +870,9 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
         let start_x = (width as usize).saturating_sub(layout_width) / 2;
         let start_y = (height as usize).saturating_sub(layout_height) / 2;
 
-        // Draw layer indicator
-        let layer_text = format!("[ Layer {} ]", layer);
+        // Draw layer indicator (show highest active layer)
+        let top_layer = layer_stack.first().copied().unwrap_or(0);
+        let layer_text = format!("[ Layer {} ]", top_layer);
         let layer_x = (width as usize - layer_text.len()) / 2;
         let (layer_color, _) = scheme_color(state.color_scheme, 2, true);
         term.set_str(layer_x as i32, 0, &layer_text, Some(layer_color), true);
@@ -881,7 +887,7 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
             // Add keymap samples - scan for specific HID codes to find correct positions
             // Looking for: 0x29=ESC, 0x31=\, 0x28=Enter, 0x0B=H
             let km_samples = if let Some(ref km) = keymap {
-                let l = layer as usize;
+                let l = top_layer as usize;
                 if let Some(lk) = km.get(l) {
                     // Find positions of key codes
                     let find_pos = |target: u16| -> String {
@@ -918,7 +924,7 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
             &heat_snapshot,
             state.color_scheme,
             keymap.as_ref(),
-            layer,
+            &layer_stack,
             shifted,
         );
 
@@ -935,7 +941,7 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
             &heat_snapshot,
             state.color_scheme,
             keymap.as_ref(),
-            layer,
+            &layer_stack,
             shifted,
         );
 
@@ -963,7 +969,7 @@ fn draw_half(
     heat: &HashMap<String, f32>,
     scheme: u8,
     keymap: Option<&Vec<Vec<u16>>>,
-    layer: u8,
+    layers: &[u8],  // Active layers from highest to lowest for stacking
     shifted: bool,
 ) {
     for (idx, pos) in main_keys.iter().chain(thumb_keys.iter()) {
@@ -972,27 +978,32 @@ fn draw_half(
         let y = base_y + (pos.y * scale) as usize;
         let w = ((pos.w * scale * 3.0) as usize).max(1);  // 3 char label width
 
-        // Get label from keymap if available, otherwise use DEFAULT_LABELS
+        // Get label from keymap with layer stacking (highest to lowest)
         let label: String = if let Some(km) = keymap {
-            // Get keymap index for this physical position
             let keymap_idx = PHYSICAL_TO_KEYMAP.get(*idx).copied().unwrap_or(255);
             if keymap_idx != 255 {
-                // Get keycode from current layer
-                let layer_idx = (layer as usize).min(km.len().saturating_sub(1));
-                if let Some(layer_keys) = km.get(layer_idx) {
-                    if let Some(&keycode) = layer_keys.get(keymap_idx) {
-                        let label = keycode_to_label(keycode, shifted);
-                        if !label.is_empty() {
-                            label
-                        } else {
-                            // Transparent key - fall back to default
-                            DEFAULT_LABELS.get(*idx).copied().unwrap_or("").to_string()
+                // Try each active layer from highest to lowest
+                let mut found_label = String::new();
+                for &layer in layers {
+                    let layer_idx = (layer as usize).min(km.len().saturating_sub(1));
+                    if let Some(layer_keys) = km.get(layer_idx) {
+                        if let Some(&keycode) = layer_keys.get(keymap_idx) {
+                            // 0 and 65535 are transparent - try next layer
+                            if keycode != 0 && keycode != 65535 {
+                                let label = keycode_to_label(keycode, shifted);
+                                if !label.is_empty() {
+                                    found_label = label;
+                                    break;
+                                }
+                            }
                         }
-                    } else {
-                        DEFAULT_LABELS.get(*idx).copied().unwrap_or("").to_string()
                     }
-                } else {
+                }
+                if found_label.is_empty() {
+                    // All layers transparent - use default
                     DEFAULT_LABELS.get(*idx).copied().unwrap_or("").to_string()
+                } else {
+                    found_label
                 }
             } else {
                 DEFAULT_LABELS.get(*idx).copied().unwrap_or("").to_string()
