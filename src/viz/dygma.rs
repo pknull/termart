@@ -220,25 +220,19 @@ fn keycode_to_label(code: u16, shifted: bool) -> String {
         };
     }
 
-    // Handle shifted versions of other keys
-    if shifted {
-        if let Some(s) = shifted_label(code) {
-            return s;
-        }
+    // Numbers and common punctuation: handle shift inline
+    if (0x1E..=0x38).contains(&code) {
+        return if shifted {
+            shifted_label(code).unwrap_or_else(|| unshifted_label(code))
+        } else {
+            unshifted_label(code)
+        };
     }
 
     match code {
         // Transparent/blank
         0 | 65535 => String::new(),
-        0x1E => "1".into(), 0x1F => "2".into(), 0x20 => "3".into(), 0x21 => "4".into(),
-        0x22 => "5".into(), 0x23 => "6".into(), 0x24 => "7".into(), 0x25 => "8".into(),
-        0x26 => "9".into(), 0x27 => "0".into(),
 
-        0x28 => "ENT".into(), 0x29 => "ESC".into(), 0x2A => "BSP".into(),
-        0x2B => "TAB".into(), 0x2C => "SPC".into(),
-        0x2D => "-".into(), 0x2E => "=".into(), 0x2F => "[".into(), 0x30 => "]".into(),
-        0x31 => "\\".into(), 0x32 => "#".into(), 0x33 => ";".into(), 0x34 => "'".into(),
-        0x35 => "`".into(), 0x36 => ",".into(), 0x37 => ".".into(), 0x38 => "/".into(),
         0x39 => "CAP".into(),
 
         // Function keys
@@ -300,15 +294,16 @@ fn keycode_to_label(code: u16, shifted: bool) -> String {
 
         // Kaleidoscope/Bazecor layer keys
         // ShiftToLayer: 0x4429 + layer (hold to activate) - empirically determined from Bazecor
-        c if (0x4429..0x4439).contains(&c) => format!(">L{}", c - 0x4429),
-        // LockLayer: 0x4439 + layer (toggle layer on/off)
-        c if (0x4439..0x4449).contains(&c) => format!("=L{}", c - 0x4439),
-        // MoveToLayer: 0x4449 + layer (switch and stay)
-        c if (0x4449..0x4459).contains(&c) => format!("+L{}", c - 0x4449),
-        // Legacy ranges (in case some keymaps use old format)
-        c if (0x4400..0x4410).contains(&c) => format!(">L{}", c - 0x4400),
+        c if (0x4429..0x443F).contains(&c) => format!(">L{}", c - 0x4429),
+        // LockLayer: base 0x4400 (Bazecor: 17408)
+        c if (0x4400..0x4410).contains(&c) => format!("=L{}", c - 0x4400),
+        // MoveToLayer: base 0x4454 (Bazecor: 17492)
+        c if (0x4454..0x4464).contains(&c) => format!("+L{}", c - 0x4454),
+        // Extended MoveToLayer range (in case of different encoding)
+        c if (0x4449..0x4454).contains(&c) => format!("+L{}", c - 0x4449),
+        // Additional layer ranges (legacy/alternate encodings)
         c if (0x4410..0x4420).contains(&c) => format!("=L{}", c - 0x4410),
-        c if (0x4420..0x4429).contains(&c) => format!("+L{}", c - 0x4420),
+        c if (0x443F..0x4449).contains(&c) => format!("*L{}", c - 0x443F),  // Unknown layer op
 
         // OneShot layers: 49153+ (0xC001)
         c if (0xC001..0xC010).contains(&c) => format!("1L{}", c - 0xC001),
@@ -340,16 +335,64 @@ fn keycode_to_label(code: u16, shifted: bool) -> String {
             format!("G-{}", keycode_to_label(base, false))
         }
 
-        // Media/Consumer keys (0x00E8 range or 0x4Exx in Kaleidoscope)
+        // LED Effect keys (0x4300-0x4302)
+        0x4300 => "LED>".into(),  // Next LED effect
+        0x4301 => "LED<".into(),  // Previous LED effect
+        0x4302 => "LED~".into(),  // Toggle LED effect
+
+        // Media/Consumer keys - HID format (0x00xx)
         0x00E8 => "MUT".into(),
         0x00E9 => "V+".into(),
         0x00EA => "V-".into(),
+        0x00B5 => ">>".into(),   // Next track
+        0x00B6 => "<<".into(),   // Previous track
+        0x00B7 => "STP".into(),  // Stop
+        0x00CD => "P/P".into(),  // Play/Pause
+
+        // Media/Consumer keys - Bazecor format (decimal values from Bazecor source)
+        0x4CE2 => "MUT".into(),  // 19682 = Mute
+        0x58B5 => ">>".into(),   // 22709 = Next track
+        0x58B6 => "<<".into(),   // 22710 = Previous track
+        0x58B7 => "STP".into(),  // 22711 = Stop
+        0x58CD => "P/P".into(),  // 22733 = Play/Pause
+        0x5CE9 => "V+".into(),   // 23785 = Volume up
+        0x5CEA => "V-".into(),   // 23786 = Volume down
+        0x58B8 => "EJT".into(),  // 22712 = Eject
+        0x4878 => "CAM".into(),  // 18552 = Camera
+        0x5C6F => "BR+".into(),  // 23663 = Brightness up
+        0x5C70 => "BR-".into(),  // 23664 = Brightness down
+        0x4992 => "CAL".into(),  // 18834 = Calculator
+        0x58B9 => "SHF".into(),  // 22713 = Shuffle
+
         0x4E00..=0x4EFF => "MED".into(),
 
-        // Macro keys
+        // Macro keys (Bazecor: 53852 = 0xD24C base)
         c if (0x5000..0x5100).contains(&c) => format!("M{}", c - 0x5000),
+        // Extended macro range for Bazecor
+        c if (0xD24C..0xD2CC).contains(&c) => format!("M{}", c - 0xD24C),
 
-        // DualUse keys (tap/hold)
+        // DualUse modifier keys (Bazecor format: 0xC031-0xC5B1)
+        // These are tap-key/hold-modifier combinations
+        c if (0xC031..0xC040).contains(&c) => "D/C".into(),  // DualUse Ctrl
+        c if (0xC0C1..0xC0D0).contains(&c) => "D/S".into(),  // DualUse Shift
+        c if (0xC149..0xC158).contains(&c) => "D/A".into(),  // DualUse Alt
+        c if (0xC1D1..0xC1E0).contains(&c) => "D/G".into(),  // DualUse GUI
+        c if (0xC5B1..0xC5C0).contains(&c) => "D/R".into(),  // DualUse AltGr
+
+        // DualUse layer keys (Bazecor format: 0xC812-0xCCE2)
+        c if (0xC812..0xC8C2).contains(&c) => "DL1".into(),
+        c if (0xC8C2..0xC972).contains(&c) => "DL2".into(),
+        c if (0xC972..0xCA22).contains(&c) => "DL3".into(),
+        c if (0xCA22..0xCAD2).contains(&c) => "DL4".into(),
+        c if (0xCAD2..0xCB82).contains(&c) => "DL5".into(),
+        c if (0xCB82..0xCC32).contains(&c) => "DL6".into(),
+        c if (0xCC32..0xCCE2).contains(&c) => "DL7".into(),
+        c if (0xCCE2..0xCD92).contains(&c) => "DL8".into(),
+
+        // TapDance keys (Bazecor: 53267 = 0xD033 base, 64 slots)
+        c if (0xD033..0xD073).contains(&c) => format!("T{}", c - 0xD033),
+
+        // Legacy DualUse keys (0x51xx format)
         c if (0x5100..0x5200).contains(&c) => {
             let layer = (c >> 8) & 0xF;
             let key = c & 0xFF;
@@ -360,10 +403,11 @@ fn keycode_to_label(code: u16, shifted: bool) -> String {
             }
         }
 
-        // Dygma SuperKeys (0xD200-0xD2FF range) - tap/hold dual-function keys
-        c if (0xD200..0xD300).contains(&c) => "SK".into(),
 
-        // Dygma SuperKeys extended range (0xD000-0xDFFF)
+        // Dygma SuperKeys (0xD2CC base, range 0xD2CC-0xD300)
+        c if (0xD2CC..0xD300).contains(&c) => format!("S{}", c - 0xD2CC),
+
+        // Dygma SuperKeys extended range (0xD000-0xDFFF) - catch remaining
         c if (0xD000..0xE000).contains(&c) => "SK".into(),
 
         // Unknown - show abbreviated hex
@@ -403,6 +447,21 @@ fn shifted_label(code: u16) -> Option<String> {
         0x38 => "?".into(),  // / -> ?
         _ => return None,
     })
+}
+
+/// Get unshifted label for number/punctuation keys (0x1E-0x38)
+fn unshifted_label(code: u16) -> String {
+    match code {
+        0x1E => "1".into(), 0x1F => "2".into(), 0x20 => "3".into(), 0x21 => "4".into(),
+        0x22 => "5".into(), 0x23 => "6".into(), 0x24 => "7".into(), 0x25 => "8".into(),
+        0x26 => "9".into(), 0x27 => "0".into(),
+        0x28 => "ENT".into(), 0x29 => "ESC".into(), 0x2A => "BSP".into(),
+        0x2B => "TAB".into(), 0x2C => "SPC".into(),
+        0x2D => "-".into(), 0x2E => "=".into(), 0x2F => "[".into(), 0x30 => "]".into(),
+        0x31 => "\\".into(), 0x32 => "#".into(), 0x33 => ";".into(), 0x34 => "'".into(),
+        0x35 => "`".into(), 0x36 => ",".into(), 0x37 => ".".into(), 0x38 => "/".into(),
+        _ => format!("x{:02X}", code),
+    }
 }
 
 /// Width of each half (8 keys wide: x=0 to x=7 for row 1)
@@ -799,11 +858,9 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
                 // Promote pending modifiers that have waited long enough (real modifier press)
                 if let Ok(mut pending) = pending_mods_clone.lock() {
                     let mut promoted = Vec::new();
-                    let mut promoted_shift = false;
-                    pending.retain(|(label, time, is_s)| {
+                    pending.retain(|(label, time, _is_s)| {
                         if now.duration_since(*time).as_millis() > MOD_DELAY_MS {
                             promoted.push(label.clone());
-                            if *is_s { promoted_shift = true; }
                             false // Remove from pending
                         } else {
                             true // Keep waiting
@@ -816,21 +873,16 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
                                 heat.insert(label, 1.0);
                             }
                         }
-                        // Only set shift_held when Shift is promoted (real hold, not synthetic)
-                        if promoted_shift {
-                            shift_clone.store(true, Ordering::Relaxed);
-                        }
+                        // Note: shift_held is now tracked directly from key events, not promotion
                     }
                 }
 
                 if let Ok(events) = device.fetch_events() {
                     for ev in events {
                         if let evdev::InputEventKind::Key(key) = ev.kind() {
-                            // Track shift release - but NOT press (press goes through pending)
+                            // Track shift state directly from press/release
                             if key == evdev::Key::KEY_LEFTSHIFT || key == evdev::Key::KEY_RIGHTSHIFT {
-                                if ev.value() == 0 {
-                                    shift_clone.store(false, Ordering::Relaxed);
-                                }
+                                shift_clone.store(ev.value() != 0, Ordering::Relaxed);
                             }
 
                             if ev.value() == 1 || ev.value() == 2 {
@@ -885,6 +937,7 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
 
     // Layer query interval
     let mut layer_query_timer = 0.0f32;
+    let mut prev_layer_mask: u32 = 1;  // Track previous layer to detect changes
 
     loop {
         let (width, height) = crossterm::terminal::size().unwrap_or(term.size());
@@ -930,8 +983,13 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
                             }
                         }
                     }
-                    // Ensure layer 0 is always in the mask (base layer fallback)
-                    if mask == 0 { mask = 1; }
+                    // Ensure layer 0 is always in the mask (base layer fallback for transparent keys)
+                    mask |= 1;
+                    // Clear shift state when layer changes (prevents stuck shift)
+                    if mask != prev_layer_mask {
+                        shift_held.store(false, Ordering::Relaxed);
+                        prev_layer_mask = mask;
+                    }
                     active_layers.store(mask, Ordering::Relaxed);
                 } else if config.debug {
                     debug_info = "layer.state: no response".to_string();
@@ -990,16 +1048,27 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
         if config.debug {
             let (status_color, _) = scheme_color(state.color_scheme, 0, false);
             let _last_key_info = last_key.lock().map(|k| k.clone()).unwrap_or_default();
-            // Add keymap samples - show left thumb positions 67-71
+            // Show keycodes for number row positions (1-6) on active layer
             let km_samples = if let Some(ref km) = keymap {
-                if let Some(lk) = km.get(0) {
-                    let thumb_keys: Vec<String> = (67..=71)
-                        .filter_map(|pos| lk.get(pos).map(|&k| format!("{}:{:04X}", pos, k)))
-                        .collect();
-                    format!("LThumb: {}", thumb_keys.join(" "))
-                } else {
-                    "km: layer OOB".to_string()
-                }
+                // Physical positions 1-6 are number row keys
+                // PHYSICAL_TO_KEYMAP[1..7] gives keymap indices for "1" through "6"
+                let num_keys: Vec<String> = (1..=6)
+                    .filter_map(|phys| {
+                        let km_idx = PHYSICAL_TO_KEYMAP.get(phys).copied()?;
+                        // Get keycode from top active layer
+                        for &layer in &layer_stack {
+                            if let Some(layer_keys) = km.get(layer as usize) {
+                                if let Some(&keycode) = layer_keys.get(km_idx) {
+                                    if keycode != 0 && keycode != 65535 {
+                                        return Some(format!("{}:{:04X}", phys, keycode));
+                                    }
+                                }
+                            }
+                        }
+                        None
+                    })
+                    .collect();
+                format!("NumRow: {} shf:{}", num_keys.join(" "), shifted)
             } else {
                 "km: None".to_string()
             };

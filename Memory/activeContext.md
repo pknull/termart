@@ -1,5 +1,5 @@
 ---
-version: "2.0"
+version: "2.1"
 lastUpdated: "2025-12-25"
 lifecycle: core
 stakeholder: pknull
@@ -23,6 +23,23 @@ Project expanded with system monitors and utilities:
 - **Folding@home monitor** with real-time WebSocket updates
 
 ## Recent Changes
+
+### Session 2025-12-25 (Dygma Shift & Layer Fallback Fixes)
+- **Layer 0 always included in fallback stack**:
+  - Bug: Transparent keys on higher layers didn't fall through to base layer
+  - Root cause: `if mask == 0 { mask = 1; }` only added layer 0 when NO layers active
+  - Fix: Changed to `mask |= 1;` so layer 0 always available for transparent key fallback
+  - Result: Numbers/symbols now correctly show shifted versions on all layers
+- **Shift state fixes**:
+  - Simplified shift tracking to direct press/release events
+  - Shift clears on layer change (prevents stuck shift after layer switch)
+  - Numbers and symbols now show !@#$%^&*() when shift held on any layer
+- **Bazecor media keycodes added**:
+  - 0x4CE2 (19682) = Mute, 0x5CE9 (23785) = Volume Up, 0x5CEA (23786) = Volume Down
+  - 0x58B5-0x58CD = Next/Prev/Stop/Play, 0x5C6F-0x5C70 = Brightness
+- **Debug output improved**:
+  - Now shows `NumRow: 1:XXXX 2:XXXX ... shf:true/false` for number key diagnostics
+- **Key learning**: Layer bitmask must always include layer 0 for proper transparent key handling
 
 ### Session 2025-12-25 (Dygma Layout Polish & UI Fixes)
 - **Thumb cluster mappings finalized**:
@@ -190,10 +207,14 @@ Project expanded with system monitors and utilities:
 
 ## Next Steps
 
-- [ ] **Dygma visualization - transparent key handling**:
+- [ ] **Dygma visualization - transparent/no-key display**:
   - Currently shows default layer letter for "none"/transparent keys (confusing)
   - Should show something like "·" or empty or "T" for transparent
   - Need to detect keycode 0x0000 or 0xFFFF (whichever means transparent)
+- [ ] **Dygma visualization - LED color display**:
+  - Query actual keyboard LED colors via Focus protocol
+  - Commands: `led.theme`, `led.at <pos>`, `palette`
+  - Display real LED colors instead of/alongside heat map
 - [ ] **Dygma visualization**: Continue testing with real keyboard
   - Most mappings verified working
   - Watch for any additional Kaleidoscope keycodes still showing as hex
