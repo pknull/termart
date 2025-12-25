@@ -99,7 +99,7 @@ const RIGHT_MAIN: &[(usize, KeyPos)] = &[
     (36, KeyPos::new(4.0, 0.0, 1.0)),   // -
     (37, KeyPos::new(5.0, 0.0, 1.0)),   // =
     (38, KeyPos::new(6.0, 0.0, 1.0)),   // Backspace
-    // Row 1 (top letter): Y U I O P [ ] Enter (8 keys - Enter is red key on right edge)
+    // Row 1 (top letter): Y U I O P [ ] \ (8 keys - backslash on right edge)
     (39, KeyPos::new(0.0, 1.0, 1.0)),   // Y
     (40, KeyPos::new(1.0, 1.0, 1.0)),   // U
     (41, KeyPos::new(2.0, 1.0, 1.0)),   // I
@@ -107,15 +107,15 @@ const RIGHT_MAIN: &[(usize, KeyPos)] = &[
     (43, KeyPos::new(4.0, 1.0, 1.0)),   // P
     (44, KeyPos::new(5.0, 1.0, 1.0)),   // [
     (45, KeyPos::new(6.0, 1.0, 1.0)),   // ]
-    (46, KeyPos::new(7.0, 1.0, 1.0)),   // Enter (red key)
-    // Row 2 (home): H J K L ; ' \ (7 keys - backslash at end)
+    (46, KeyPos::new(7.0, 1.0, 1.0)),   // \ (backslash)
+    // Row 2 (home): H J K L ; ' Enter (7 keys - Enter at end)
     (47, KeyPos::new(0.0, 2.0, 1.0)),   // H
     (48, KeyPos::new(1.0, 2.0, 1.0)),   // J
     (49, KeyPos::new(2.0, 2.0, 1.0)),   // K
     (50, KeyPos::new(3.0, 2.0, 1.0)),   // L
     (51, KeyPos::new(4.0, 2.0, 1.0)),   // ;
     (52, KeyPos::new(5.0, 2.0, 1.0)),   // '
-    (53, KeyPos::new(6.0, 2.0, 1.0)),   // \ (backslash)
+    (53, KeyPos::new(6.0, 2.0, 1.0)),   // Enter
     // Row 3 (bottom): N-/, Shift (6 keys)
     (54, KeyPos::new(1.0, 3.0, 1.0)),   // N
     (55, KeyPos::new(2.0, 3.0, 1.0)),   // M
@@ -159,10 +159,10 @@ const PHYSICAL_TO_KEYMAP: &[usize] = &[
     // RIGHT HALF (indices 32-67) - 36 keys
     // Row 0: 7-=, Backspace (physical 32-38) → keymap row 0, cols 9-15
     9, 10, 11, 12, 13, 14, 15,
-    // Row 1: Y U I O P [ ] Enter (physical 39-46) → keymap row 1, cols 8-15
-    24, 25, 26, 27, 28, 29, 30, 31,
-    // Row 2: H J K L ; ' \ (physical 47-53) → keymap row 2, cols 9-15
-    41, 42, 43, 44, 45, 46, 47,
+    // Row 1: Y U I O P [ ] \ (physical 39-46) → keymap row 1, cols 8-15
+    24, 25, 26, 27, 28, 29, 30, 47,
+    // Row 2: H J K L ; ' Enter (physical 47-53) → keymap row 2, cols 9-15
+    41, 42, 43, 44, 45, 46, 31,
     // Row 3: N-/, Shift (physical 54-59) → keymap row 3, cols 10-15
     58, 59, 60, 61, 62, 63,
     // Row 4: Alt, FN, Meta, Ctrl (physical 60-63) → keymap row 4, cols 12-15
@@ -189,10 +189,10 @@ const DEFAULT_LABELS: &[&str] = &[
     // Right half (32-67) - 36 keys
     // Row 0: 7-=, Backspace (indices 32-38)
     "7", "8", "9", "0", "-", "=", "BSP",
-    // Row 1: Y U I O P [ ] Enter (indices 39-46) - Enter on right edge
-    "Y", "U", "I", "O", "P", "[", "]", "ENT",
-    // Row 2: H J K L ; ' \ (indices 47-53) - Backslash at end of home row
-    "H", "J", "K", "L", ";", "'", "\\",
+    // Row 1: Y U I O P [ ] \ (indices 39-46) - Backslash on right edge
+    "Y", "U", "I", "O", "P", "[", "]", "\\",
+    // Row 2: H J K L ; ' Enter (indices 47-53) - Enter at end of home row
+    "H", "J", "K", "L", ";", "'", "ENT",
     // Row 3: N-/, Shift (indices 54-59)
     "N", "M", ",", ".", "/", "SHF",
     // Row 4: Alt, FN, Meta, Ctrl (indices 60-63)
