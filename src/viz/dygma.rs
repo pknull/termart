@@ -742,13 +742,48 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
 
         let handle = std::thread::spawn(move || {
             use std::os::unix::io::AsRawFd;
+            use std::time::Instant;
+
             let fd = device.as_raw_fd();
             unsafe {
                 let flags = libc::fcntl(fd, libc::F_GETFL);
                 libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
             }
 
+            // Pending modifiers: (label, timestamp) - wait to see if they're synthetic
+            let mut pending_mods: Vec<(String, Instant)> = Vec::new();
+            const MOD_DELAY_MS: u128 = 50; // If another key follows within 50ms, modifier is synthetic
+
+            fn is_modifier(key: evdev::Key) -> bool {
+                matches!(key,
+                    evdev::Key::KEY_LEFTSHIFT | evdev::Key::KEY_RIGHTSHIFT |
+                    evdev::Key::KEY_LEFTCTRL | evdev::Key::KEY_RIGHTCTRL |
+                    evdev::Key::KEY_LEFTALT | evdev::Key::KEY_RIGHTALT |
+                    evdev::Key::KEY_LEFTMETA | evdev::Key::KEY_RIGHTMETA)
+            }
+
             while running_clone.load(Ordering::Relaxed) {
+                let now = Instant::now();
+
+                // Promote pending modifiers that have waited long enough (real modifier press)
+                let mut promoted = Vec::new();
+                pending_mods.retain(|(label, time)| {
+                    if now.duration_since(*time).as_millis() > MOD_DELAY_MS {
+                        promoted.push(label.clone());
+                        false // Remove from pending
+                    } else {
+                        true // Keep waiting
+                    }
+                });
+
+                if !promoted.is_empty() {
+                    if let Ok(mut heat) = heat_clone.lock() {
+                        for label in promoted {
+                            heat.insert(label, 1.0);
+                        }
+                    }
+                }
+
                 if let Ok(events) = device.fetch_events() {
                     for ev in events {
                         if let evdev::InputEventKind::Key(key) = ev.kind() {
@@ -758,13 +793,20 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
                             }
 
                             if ev.value() == 1 || ev.value() == 2 {
-                                // Get label or raw code for unknown keys
                                 let label = evdev_key_to_label(key)
                                     .map(|s| s.to_string())
                                     .unwrap_or_else(|| evdev_key_raw(key));
 
-                                if let Ok(mut heat) = heat_clone.lock() {
-                                    heat.insert(label.clone(), 1.0);
+                                if is_modifier(key) {
+                                    // Queue modifier - wait to see if it's synthetic
+                                    pending_mods.push((label.clone(), now));
+                                } else {
+                                    // Non-modifier key pressed - cancel any pending modifiers (they were synthetic)
+                                    pending_mods.clear();
+
+                                    if let Ok(mut heat) = heat_clone.lock() {
+                                        heat.insert(label.clone(), 1.0);
+                                    }
                                 }
 
                                 // Store for debug display
