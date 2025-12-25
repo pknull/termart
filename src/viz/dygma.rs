@@ -294,20 +294,20 @@ fn keycode_to_label(code: u16, shifted: bool) -> String {
 
         // Kaleidoscope layer keys (per Kaleidoscope layer_shift_flags)
         // ShiftToLayer: 0x4400 + layer (hold to activate)
-        c if (0x4400..0x4420).contains(&c) => format!("→L{}", c - 0x4400),
+        c if (0x4400..0x4420).contains(&c) => format!(">L{}", c - 0x4400),
         // LockLayer: 0x4420 + layer (toggle layer on/off)
-        c if (0x4420..0x4440).contains(&c) => format!("⇒L{}", c - 0x4420),
+        c if (0x4420..0x4440).contains(&c) => format!("=L{}", c - 0x4420),
         // MoveToLayer: 0x4440 + layer (switch and stay)
-        c if (0x4440..0x4460).contains(&c) => format!("⊕L{}", c - 0x4440),
+        c if (0x4440..0x4460).contains(&c) => format!("+L{}", c - 0x4440),
 
         // OneShot layers: 49153+ (0xC001)
-        c if (0xC001..0xC010).contains(&c) => format!("¹L{}", c - 0xC001),
+        c if (0xC001..0xC010).contains(&c) => format!("1L{}", c - 0xC001),
 
         // OneShot modifiers
-        0xC011 => "¹S".into(),  // OneShot Shift
-        0xC012 => "¹C".into(),  // OneShot Ctrl
-        0xC014 => "¹A".into(),  // OneShot Alt
-        0xC018 => "¹G".into(),  // OneShot GUI
+        0xC011 => "1S".into(),   // OneShot Shift
+        0xC012 => "1C".into(),   // OneShot Ctrl
+        0xC014 => "1A".into(),   // OneShot Alt
+        0xC018 => "1G".into(),   // OneShot GUI
 
         // Shifted keys (0xC1xx = Shift + HID key)
         c if (0xC100..0xC200).contains(&c) => {
