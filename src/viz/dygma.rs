@@ -259,7 +259,7 @@ fn keycode_to_label(code: u16, shifted: bool) -> String {
         0x59 => "N1".into(), 0x5A => "N2".into(), 0x5B => "N3".into(), 0x5C => "N4".into(),
         0x5D => "N5".into(), 0x5E => "N6".into(), 0x5F => "N7".into(), 0x60 => "N8".into(),
         0x61 => "N9".into(), 0x62 => "N0".into(), 0x63 => "N.".into(),
-        0x64 => "N\\".into(), 0x65 => "APP".into(), 0x66 => "PWR".into(), 0x67 => "N=".into(),
+        0x64 => "ISO".into(), 0x65 => "APP".into(), 0x66 => "PWR".into(), 0x67 => "KP=".into(),
 
         // Extended function keys (F13-F24)
         0x68 => "F13".into(), 0x69 => "F14".into(), 0x6A => "F15".into(), 0x6B => "F16".into(),
