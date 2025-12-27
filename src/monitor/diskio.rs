@@ -7,22 +7,22 @@ use crate::monitor::layout::{
 };
 use crossterm::style::Color;
 use crossterm::terminal::size;
-use std::collections::HashMap;
 use std::fs;
 use std::io;
 
+#[derive(Clone)]
 struct DiskStats {
+    name: String,
     read_bytes: u64,
     write_bytes: u64,
+    read_rate: f64,
+    write_rate: f64,
+    prev_read_bytes: u64,
+    prev_write_bytes: u64,
 }
 
 pub struct IoMonitor {
-    prev_stats: HashMap<String, DiskStats>,
-    disks: Vec<String>,
-    pub read_rates: HashMap<String, f64>,
-    pub write_rates: HashMap<String, f64>,
-    pub total_read: HashMap<String, u64>,
-    pub total_write: HashMap<String, u64>,
+    disks: Vec<DiskStats>,
     pub total_read_rate: f64,
     pub total_write_rate: f64,
     pub peak_read_rate: f64,
@@ -32,12 +32,7 @@ pub struct IoMonitor {
 impl IoMonitor {
     pub fn new() -> Self {
         Self {
-            prev_stats: HashMap::new(),
             disks: Vec::new(),
-            read_rates: HashMap::new(),
-            write_rates: HashMap::new(),
-            total_read: HashMap::new(),
-            total_write: HashMap::new(),
             total_read_rate: 0.0,
             total_write_rate: 0.0,
             peak_read_rate: 100.0 * 1024.0 * 1024.0, // Start with 100MB/s as minimum scale
@@ -47,8 +42,7 @@ impl IoMonitor {
 
     pub fn update(&mut self, interval: f32) -> io::Result<()> {
         let content = fs::read_to_string("/proc/diskstats")?;
-        let mut current_stats: HashMap<String, DiskStats> = HashMap::new();
-        let mut disks: Vec<String> = Vec::new();
+        let mut new_disks = Vec::new();
 
         for line in content.lines() {
             let parts: Vec<&str> = line.split_whitespace().collect();
@@ -82,32 +76,47 @@ impl IoMonitor {
                 continue;
             }
 
-            disks.push(name.to_string());
-            current_stats.insert(name.to_string(), DiskStats { read_bytes, write_bytes });
-            self.total_read.insert(name.to_string(), read_bytes);
-            self.total_write.insert(name.to_string(), write_bytes);
+            // Find existing disk or create new
+            let mut disk = if let Some(existing) = self.disks.iter()
+                .find(|d| d.name == name)
+                .cloned() {
+                existing
+            } else {
+                DiskStats {
+                    name: name.to_string(),
+                    read_bytes: 0,
+                    write_bytes: 0,
+                    read_rate: 0.0,
+                    write_rate: 0.0,
+                    prev_read_bytes: read_bytes, // Start with current for new disks
+                    prev_write_bytes: write_bytes,
+                }
+            };
+
+            // Calculate rates
+            let read_diff = read_bytes.saturating_sub(disk.prev_read_bytes);
+            let write_diff = write_bytes.saturating_sub(disk.prev_write_bytes);
+            disk.read_rate = read_diff as f64 / interval as f64;
+            disk.write_rate = write_diff as f64 / interval as f64;
+
+            // Update stats
+            disk.prev_read_bytes = disk.read_bytes;
+            disk.prev_write_bytes = disk.write_bytes;
+            disk.read_bytes = read_bytes;
+            disk.write_bytes = write_bytes;
+
+            new_disks.push(disk);
         }
 
-        self.disks = disks;
+        // Calculate totals
         self.total_read_rate = 0.0;
         self.total_write_rate = 0.0;
-
-        for (name, stats) in &current_stats {
-            if let Some(prev) = self.prev_stats.get(name) {
-                let read_diff = stats.read_bytes.saturating_sub(prev.read_bytes);
-                let write_diff = stats.write_bytes.saturating_sub(prev.write_bytes);
-                let read_rate = read_diff as f64 / interval as f64;
-                let write_rate = write_diff as f64 / interval as f64;
-
-                self.read_rates.insert(name.clone(), read_rate);
-                self.write_rates.insert(name.clone(), write_rate);
-
-                self.total_read_rate += read_rate;
-                self.total_write_rate += write_rate;
-            }
+        for disk in &new_disks {
+            self.total_read_rate += disk.read_rate;
+            self.total_write_rate += disk.write_rate;
         }
 
-        self.prev_stats = current_stats;
+        self.disks = new_disks;
 
         // Update peak rates for auto-scaling (with decay)
         if self.total_read_rate > self.peak_read_rate {
@@ -155,8 +164,8 @@ impl IoMonitor {
         let mut cy = start_y;
 
         // Title with total transferred
-        let total_read: u64 = self.total_read.values().sum();
-        let total_write: u64 = self.total_write.values().sum();
+        let total_read: u64 = self.disks.iter().map(|d| d.read_bytes).sum();
+        let total_write: u64 = self.disks.iter().map(|d| d.write_bytes).sum();
         term.set_str(x, cy, "Disk I/O", Some(text_color_scheme(colors)), true);
         let totals_str = format!("R:{} W:{}", format_bytes(total_read), format_bytes(total_write));
         term.set_str(x + w as i32 - totals_str.len() as i32, cy, &totals_str, Some(muted_color_scheme(colors)), false);
@@ -164,21 +173,18 @@ impl IoMonitor {
 
         // Per-disk breakdown
         for disk in self.disks.iter().take(num_disks) {
-            let disk_read = self.read_rates.get(disk).copied().unwrap_or(0.0);
-            let disk_write = self.write_rates.get(disk).copied().unwrap_or(0.0);
-
             // Disk name as label
-            term.set_str(x, cy, disk, Some(header_color_scheme(colors)), false);
+            term.set_str(x, cy, &disk.name, Some(header_color_scheme(colors)), false);
             cy += 1;
 
             // Read for this disk
-            let disk_read_pct = ((disk_read / self.peak_read_rate) * 100.0).min(100.0) as f32;
-            self.draw_io_row(term, x, cy, w, "  Read", disk_read_pct, disk_read, colors, true);
+            let disk_read_pct = ((disk.read_rate / self.peak_read_rate) * 100.0).min(100.0) as f32;
+            self.draw_io_row(term, x, cy, w, "  Read", disk_read_pct, disk.read_rate, colors, true);
             cy += 1;
 
             // Write for this disk
-            let disk_write_pct = ((disk_write / self.peak_write_rate) * 100.0).min(100.0) as f32;
-            self.draw_io_row(term, x, cy, w, "  Write", disk_write_pct, disk_write, colors, false);
+            let disk_write_pct = ((disk.write_rate / self.peak_write_rate) * 100.0).min(100.0) as f32;
+            self.draw_io_row(term, x, cy, w, "  Write", disk_write_pct, disk.write_rate, colors, false);
             cy += 1;
         }
     }

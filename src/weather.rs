@@ -417,32 +417,26 @@ impl WeatherDisplay {
                 term.set_str(start_x as i32, (start_y + i) as i32, line, Some(sun_color), true);
             }
         } else {
-            // Moon and stars
-            let moon = [
-                r"   _.---._ ",
-                r" .'       `.",
-                r"/   .---.   \\",
-                r"|  /     \\  |",
-                r"\\  \\.---./  /",
-                r" '.       .'",
-                r"   `'---'`  ",
-            ];
-
-            let moon_color = if colors.is_mono() { Color::White } else { scheme_color(colors.scheme, 3, true).0 };
-            let start_y = cy.saturating_sub(3);
-            for (i, line) in moon.iter().enumerate() {
-                let start_x = cx.saturating_sub(line.len() / 2);
-                term.set_str(start_x as i32, (start_y + i) as i32, line, Some(moon_color), false);
-            }
-
-            // Twinkling stars
+            // Just stars for nighttime - no moon
+            // Stable star field with twinkling effect
             let star_color = if colors.is_mono() { Color::White } else { scheme_color(colors.scheme, 2, false).0 };
-            let mut rng = rand::thread_rng();
-            for _ in 0..15 {
-                let sx = rng.gen_range(0..w);
-                let sy = rng.gen_range(0..h/2);
-                let star = if (self.frame + sx + sy) % 10 < 5 { '*' } else { '.' };
-                term.set(sx as i32, sy as i32, star, Some(star_color), false);
+            let star_positions = [
+                (w/8, h/8), (w/6, h/5), (w/4, h/10), (w/3, h/7),
+                (2*w/5, h/9), (w/2, h/6), (3*w/5, h/11), (2*w/3, h/8),
+                (3*w/4, h/5), (5*w/6, h/9), (7*w/8, h/7), (w/10, h/4),
+                (9*w/10, h/10), (w/7, h/3), (4*w/5, h/12)
+            ];
+            
+            for &(sx, sy) in &star_positions {
+                if sx < w && sy < h/2 {
+                    // Twinkle based on position and frame to create shimmer
+                    let twinkle = ((self.frame / 3 + sx + sy) % 17) < 12;
+                    let star = if twinkle { '✦' } else { '·' };
+                    let brightness = if twinkle { star_color } else {
+                        if colors.is_mono() { Color::Grey } else { scheme_color(colors.scheme, 1, false).0 }
+                    };
+                    term.set(sx as i32, sy as i32, star, Some(brightness), false);
+                }
             }
         }
     }

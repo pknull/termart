@@ -93,61 +93,45 @@ fn get_cpu_freq() -> Option<f32> {
     None
 }
 
-fn get_cpu_temp() -> Option<u32> {
-    // Try hwmon coretemp first (Intel)
-    if let Ok(entries) = fs::read_dir("/sys/class/hwmon") {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            // Check if this is a CPU temperature sensor
-            if let Ok(name) = fs::read_to_string(path.join("name")) {
-                let name = name.trim();
-                if name == "coretemp" || name == "k10temp" || name == "zenpower" {
-                    // Read Package/Tdie temperature (usually temp1)
-                    if let Ok(temp_str) = fs::read_to_string(path.join("temp1_input")) {
-                        if let Ok(millideg) = temp_str.trim().parse::<i64>() {
-                            return Some((millideg / 1000) as u32);
-                        }
-                    }
+fn get_cpu_temp_from_path(thermal_path: Option<&String>) -> Option<u32> {
+    if let Some(path) = thermal_path {
+        // Check if this is a hwmon path
+        if path.contains("/sys/class/hwmon") {
+            let temp_path = std::path::Path::new(path).join("temp1_input");
+            if let Ok(temp_str) = fs::read_to_string(temp_path) {
+                if let Ok(millideg) = temp_str.trim().parse::<i64>() {
+                    return Some((millideg / 1000) as u32);
                 }
             }
-        }
-    }
-
-    // Fallback to thermal zones
-    for i in 0..10 {
-        let zone_path = format!("/sys/class/thermal/thermal_zone{}/temp", i);
-        if let Ok(temp_str) = fs::read_to_string(&zone_path) {
-            if let Ok(millideg) = temp_str.trim().parse::<i64>() {
-                return Some((millideg / 1000) as u32);
+        } else {
+            // It's a thermal zone path
+            if let Ok(temp_str) = fs::read_to_string(path) {
+                if let Ok(millideg) = temp_str.trim().parse::<i64>() {
+                    return Some((millideg / 1000) as u32);
+                }
             }
         }
     }
     None
 }
 
-fn get_core_temps(num_logical: usize) -> Vec<Option<u32>> {
+fn get_core_temps_from_path(thermal_path: Option<&String>, num_logical: usize) -> Vec<Option<u32>> {
     let mut physical_temps = Vec::new();
 
-    // Try hwmon coretemp
-    if let Ok(entries) = fs::read_dir("/sys/class/hwmon") {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if let Ok(name) = fs::read_to_string(path.join("name")) {
-                let name = name.trim();
-                if name == "coretemp" || name == "k10temp" || name == "zenpower" {
-                    // Read per-core temps (temp2, temp3, etc. are usually cores)
-                    for i in 2..32 {
-                        let temp_path = path.join(format!("temp{}_input", i));
-                        if temp_path.exists() {
-                            if let Ok(temp_str) = fs::read_to_string(&temp_path) {
-                                if let Ok(millideg) = temp_str.trim().parse::<i64>() {
-                                    physical_temps.push(Some((millideg / 1000) as u32));
-                                }
-                            }
-                        } else {
-                            break;
+    // If we have a cached hwmon path, use it directly
+    if let Some(path) = thermal_path {
+        if path.contains("/sys/class/hwmon") {
+            let hwmon_path = std::path::Path::new(path);
+            // Read per-core temps (temp2, temp3, etc. are usually cores)
+            for i in 2..32 {
+                let temp_path = hwmon_path.join(format!("temp{}_input", i));
+                if temp_path.exists() {
+                    if let Ok(temp_str) = fs::read_to_string(&temp_path) {
+                        if let Ok(millideg) = temp_str.trim().parse::<i64>() {
+                            physical_temps.push(Some((millideg / 1000) as u32));
                         }
                     }
+                } else {
                     break;
                 }
             }
@@ -155,8 +139,6 @@ fn get_core_temps(num_logical: usize) -> Vec<Option<u32>> {
     }
 
     // Map physical core temps to logical cores (hyperthreading)
-    // Logical cores 0..N/2 map to physical 0..N/2
-    // Logical cores N/2..N also map to physical 0..N/2
     let num_physical = physical_temps.len();
     if num_physical == 0 {
         return vec![None; num_logical];
@@ -201,16 +183,62 @@ pub struct CpuMonitor {
     pub usage_per_core: Vec<f32>,
     pub usage_total: f32,
     pub iowait_pct: f32,
+    // Cached values for expensive operations
+    cpu_model: Option<String>,
+    cpu_model_short: Option<String>,
+    cpu_freq_ghz: Option<f32>,
+    freq_update_counter: u32,
+    thermal_zone_path: Option<String>, // Cache the working thermal zone
 }
 
 impl CpuMonitor {
     pub fn new() -> Self {
+        // Initialize with cached values
+        let cpu_model = get_cpu_model();
+        let cpu_model_short = cpu_model.as_ref().map(|m| {
+            let short = shorten_cpu_model(m, 40); // Pre-compute a reasonable default
+            short
+        });
+        
         Self {
             prev_state: None,
             usage_per_core: Vec::new(),
             usage_total: 0.0,
             iowait_pct: 0.0,
+            cpu_model: cpu_model,
+            cpu_model_short: cpu_model_short,
+            cpu_freq_ghz: get_cpu_freq(),
+            freq_update_counter: 0,
+            thermal_zone_path: Self::discover_thermal_zone(),
         }
+    }
+    
+    // Discover the thermal zone once at startup
+    fn discover_thermal_zone() -> Option<String> {
+        // Try hwmon coretemp first (Intel)
+        if let Ok(entries) = fs::read_dir("/sys/class/hwmon") {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if let Ok(name) = fs::read_to_string(path.join("name")) {
+                    let name = name.trim();
+                    if name == "coretemp" || name == "k10temp" || name == "zenpower" {
+                        // Verify temp1_input exists
+                        if path.join("temp1_input").exists() {
+                            return Some(path.to_string_lossy().into_owned());
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Fallback to thermal zones - find the first one that works
+        for i in 0..10 {
+            let zone_path = format!("/sys/class/thermal/thermal_zone{}/temp", i);
+            if fs::metadata(&zone_path).is_ok() {
+                return Some(zone_path);
+            }
+        }
+        None
     }
 
     fn read_state() -> io::Result<CpuState> {
@@ -286,6 +314,13 @@ impl CpuMonitor {
             }
         }
 
+        // Update CPU frequency every 10 updates (reduces file I/O)
+        self.freq_update_counter += 1;
+        if self.freq_update_counter >= 10 {
+            self.cpu_freq_ghz = get_cpu_freq();
+            self.freq_update_counter = 0;
+        }
+
         self.prev_state = Some(current);
         Ok(())
     }
@@ -324,22 +359,33 @@ impl CpuMonitor {
         // Use full width
         let core_section_w = info_w;
 
-        // CPU model and frequency
-        let model = get_cpu_model().unwrap_or_else(|| "Unknown CPU".to_string());
-        let freq = get_cpu_freq().map(|f| format!("{:.0} MHz", f * 1000.0)).unwrap_or_default();
+        // CPU model and frequency - use cached values
+        let freq_str = self.cpu_freq_ghz
+            .map(|f| format!("{:.0} MHz", f * 1000.0))
+            .unwrap_or_default();
 
-        let max_model_len = core_section_w.saturating_sub(freq.len() + 2);
-        let model_short = shorten_cpu_model(&model, max_model_len);
+        let max_model_len = core_section_w.saturating_sub(freq_str.len() + 2);
+        
+        // Recompute short model if width changed significantly
+        let model_short = if let Some(ref model) = self.cpu_model {
+            if self.cpu_model_short.as_ref().map_or(true, |s| s.len() > max_model_len) {
+                shorten_cpu_model(model, max_model_len)
+            } else {
+                self.cpu_model_short.clone().unwrap_or_else(|| model.clone())
+            }
+        } else {
+            "Unknown CPU".to_string()
+        };
 
         term.set_str(info_x, cy, &model_short, Some(text_color_scheme(colors)), true);
-        if !freq.is_empty() {
-            term.set_str(info_x + core_section_w as i32 - freq.len() as i32, cy, &freq, Some(cpu_gradient_color_scheme(30.0, colors)), false);
+        if !freq_str.is_empty() {
+            term.set_str(info_x + core_section_w as i32 - freq_str.len() as i32, cy, &freq_str, Some(cpu_gradient_color_scheme(30.0, colors)), false);
         }
         cy += 1;
 
         // Total CPU meter - align with core layout below
         // Layout: label(4) + meter(dynamic) + pct(5) + space(1) + temp_meter(5) + temp(6)
-        let pkg_temp = get_cpu_temp();
+        let pkg_temp = get_cpu_temp_from_path(self.thermal_zone_path.as_ref());
         let col_width = (info_w - 1) / 2;  // Match core column width
         let label_w = 4;
         let pct_w = 5;
@@ -379,7 +425,7 @@ impl CpuMonitor {
 
         // Per-core meters with temps (linear meter style)
         if !self.usage_per_core.is_empty() {
-            let core_temps = get_core_temps(self.usage_per_core.len());
+            let core_temps = get_core_temps_from_path(self.thermal_zone_path.as_ref(), self.usage_per_core.len());
             draw_core_graphs_scheme(
                 term, info_x, cy, info_w, cores_rows,
                 &self.usage_per_core,

@@ -1,5 +1,5 @@
 ---
-version: "2.2"
+version: "2.3"
 lastUpdated: "2025-12-27"
 lifecycle: core
 stakeholder: pknull
@@ -23,6 +23,27 @@ Project expanded with system monitors and utilities:
 - **Folding@home monitor** with real-time WebSocket updates
 
 ## Recent Changes
+
+### Session 2025-12-27 (Performance Optimizations)
+- **Critical performance bug fixed in process monitor (ps.rs)**:
+  - Was reading `/etc/passwd` for EVERY process to convert UID to username
+  - This data was never displayed in the UI - pure dead code
+  - Removed unused fields (state, mem_rss, uid, user) and functions
+  - Impact: Eliminated thousands of file reads per update cycle
+- **CPU monitor optimizations**:
+  - Added caching for CPU model and shortened model string
+  - CPU frequency updated every 10 cycles instead of every cycle
+  - Thermal zone path discovered once at startup and cached
+  - Impact: Reduced file I/O from every frame to periodic updates
+- **Network/Disk monitors data structure optimization**:
+  - Converted from HashMap<String, Stats> to Vec<Stats>
+  - Eliminated string allocations and hash operations in hot paths
+  - Better cache locality with contiguous memory
+- **Key learnings**:
+  - Dead code can cause severe performance issues
+  - HashMap with String keys in render loops is expensive
+  - Cache rarely-changing data (CPU model, thermal zones)
+  - Vec with stable ordering often better than HashMap for small collections
 
 ### Session 2025-12-27 (Weather Widget Moon/Stars Fix)
 - **Weather widget visual improvements**:
@@ -215,6 +236,8 @@ Project expanded with system monitors and utilities:
 
 ## Next Steps
 
+- [ ] **String allocation optimization**: Reduce allocations using `write!` instead of `format!` in render hot paths
+- [ ] **Performance profiling**: Measure actual CPU usage improvements in monitors
 - [ ] **Dygma visualization - transparent/no-key display**:
   - Currently shows default layer letter for "none"/transparent keys (confusing)
   - Should show something like "·" or empty or "T" for transparent

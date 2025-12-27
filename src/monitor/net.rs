@@ -7,22 +7,22 @@ use crate::monitor::layout::{
 };
 use crossterm::style::Color;
 use crossterm::terminal::size;
-use std::collections::HashMap;
 use std::fs;
 use std::io;
 
-struct NetStats {
+#[derive(Clone)]
+struct InterfaceStats {
+    name: String,
     rx_bytes: u64,
     tx_bytes: u64,
+    rx_rate: f64,
+    tx_rate: f64,
+    prev_rx_bytes: u64,
+    prev_tx_bytes: u64,
 }
 
 pub struct NetMonitor {
-    prev_stats: HashMap<String, NetStats>,
-    interfaces: Vec<String>,
-    pub rx_rates: HashMap<String, f64>,
-    pub tx_rates: HashMap<String, f64>,
-    pub total_rx: HashMap<String, u64>,
-    pub total_tx: HashMap<String, u64>,
+    interfaces: Vec<InterfaceStats>,
     pub total_rx_rate: f64,
     pub total_tx_rate: f64,
     pub peak_rx_rate: f64,
@@ -32,12 +32,7 @@ pub struct NetMonitor {
 impl NetMonitor {
     pub fn new() -> Self {
         Self {
-            prev_stats: HashMap::new(),
             interfaces: Vec::new(),
-            rx_rates: HashMap::new(),
-            tx_rates: HashMap::new(),
-            total_rx: HashMap::new(),
-            total_tx: HashMap::new(),
             total_rx_rate: 0.0,
             total_tx_rate: 0.0,
             peak_rx_rate: 1024.0 * 1024.0, // Start with 1MB/s as minimum scale
@@ -47,8 +42,7 @@ impl NetMonitor {
 
     pub fn update(&mut self, interval: f32) -> io::Result<()> {
         let content = fs::read_to_string("/proc/net/dev")?;
-        let mut current_stats: HashMap<String, NetStats> = HashMap::new();
-        let mut interfaces: Vec<String> = Vec::new();
+        let mut new_interfaces = Vec::new();
 
         for line in content.lines().skip(2) {
             let parts: Vec<&str> = line.split_whitespace().collect();
@@ -69,32 +63,47 @@ impl NetMonitor {
                 continue;
             }
 
-            interfaces.push(name.to_string());
-            current_stats.insert(name.to_string(), NetStats { rx_bytes, tx_bytes });
-            self.total_rx.insert(name.to_string(), rx_bytes);
-            self.total_tx.insert(name.to_string(), tx_bytes);
+            // Find existing interface or create new
+            let mut interface = if let Some(existing) = self.interfaces.iter()
+                .find(|i| i.name == name)
+                .cloned() {
+                existing
+            } else {
+                InterfaceStats {
+                    name: name.to_string(),
+                    rx_bytes: 0,
+                    tx_bytes: 0,
+                    rx_rate: 0.0,
+                    tx_rate: 0.0,
+                    prev_rx_bytes: rx_bytes, // Start with current for new interfaces
+                    prev_tx_bytes: tx_bytes,
+                }
+            };
+
+            // Calculate rates
+            let rx_diff = rx_bytes.saturating_sub(interface.prev_rx_bytes);
+            let tx_diff = tx_bytes.saturating_sub(interface.prev_tx_bytes);
+            interface.rx_rate = rx_diff as f64 / interval as f64;
+            interface.tx_rate = tx_diff as f64 / interval as f64;
+
+            // Update stats
+            interface.prev_rx_bytes = interface.rx_bytes;
+            interface.prev_tx_bytes = interface.tx_bytes;
+            interface.rx_bytes = rx_bytes;
+            interface.tx_bytes = tx_bytes;
+
+            new_interfaces.push(interface);
         }
 
-        self.interfaces = interfaces;
+        // Calculate totals
         self.total_rx_rate = 0.0;
         self.total_tx_rate = 0.0;
-
-        for (name, stats) in &current_stats {
-            if let Some(prev) = self.prev_stats.get(name) {
-                let rx_diff = stats.rx_bytes.saturating_sub(prev.rx_bytes);
-                let tx_diff = stats.tx_bytes.saturating_sub(prev.tx_bytes);
-                let rx_rate = rx_diff as f64 / interval as f64;
-                let tx_rate = tx_diff as f64 / interval as f64;
-
-                self.rx_rates.insert(name.clone(), rx_rate);
-                self.tx_rates.insert(name.clone(), tx_rate);
-
-                self.total_rx_rate += rx_rate;
-                self.total_tx_rate += tx_rate;
-            }
+        for iface in &new_interfaces {
+            self.total_rx_rate += iface.rx_rate;
+            self.total_tx_rate += iface.tx_rate;
         }
 
-        self.prev_stats = current_stats;
+        self.interfaces = new_interfaces;
 
         // Update peak rates for auto-scaling (with decay)
         if self.total_rx_rate > self.peak_rx_rate {
@@ -143,8 +152,8 @@ impl NetMonitor {
         let mut cy = start_y;
 
         // Title with total transferred
-        let total_rx: u64 = self.total_rx.values().sum();
-        let total_tx: u64 = self.total_tx.values().sum();
+        let total_rx: u64 = self.interfaces.iter().map(|i| i.rx_bytes).sum();
+        let total_tx: u64 = self.interfaces.iter().map(|i| i.tx_bytes).sum();
         term.set_str(start_x, cy, "Network", Some(text_color_scheme(colors)), true);
         let totals_str = format!("↓{} ↑{}", format_bytes(total_rx), format_bytes(total_tx));
         term.set_str(start_x + content_w as i32 - totals_str.len() as i32, cy, &totals_str, Some(muted_color_scheme(colors)), false);
@@ -165,21 +174,18 @@ impl NetMonitor {
             cy += 1; // Blank line
 
             for iface in self.interfaces.iter().take(4) {
-                let iface_rx = self.rx_rates.get(iface).copied().unwrap_or(0.0);
-                let iface_tx = self.tx_rates.get(iface).copied().unwrap_or(0.0);
-
                 // Interface name as label
-                term.set_str(start_x, cy, iface, Some(header_color_scheme(colors)), false);
+                term.set_str(start_x, cy, &iface.name, Some(header_color_scheme(colors)), false);
                 cy += 1;
 
                 // Download for this interface
-                let iface_rx_pct = ((iface_rx / self.peak_rx_rate) * 100.0).min(100.0) as f32;
-                self.draw_net_row(term, start_x, cy, content_w, "  ↓", iface_rx_pct, iface_rx, colors, true);
+                let iface_rx_pct = ((iface.rx_rate / self.peak_rx_rate) * 100.0).min(100.0) as f32;
+                self.draw_net_row(term, start_x, cy, content_w, "  ↓", iface_rx_pct, iface.rx_rate, colors, true);
                 cy += 1;
 
                 // Upload for this interface
-                let iface_tx_pct = ((iface_tx / self.peak_tx_rate) * 100.0).min(100.0) as f32;
-                self.draw_net_row(term, start_x, cy, content_w, "  ↑", iface_tx_pct, iface_tx, colors, false);
+                let iface_tx_pct = ((iface.tx_rate / self.peak_tx_rate) * 100.0).min(100.0) as f32;
+                self.draw_net_row(term, start_x, cy, content_w, "  ↑", iface_tx_pct, iface.tx_rate, colors, false);
                 cy += 1;
             }
         }

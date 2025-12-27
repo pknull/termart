@@ -1,1 +1,0 @@
-/home/pknull/Code/termart/asha/hooks/common.sh

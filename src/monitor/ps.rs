@@ -18,13 +18,9 @@ const CLK_TCK: f64 = 100.0; // Linux kernel ticks per second
 struct ProcessInfo {
     pid: u32,
     name: String,
-    state: char,
     cpu_pct: f32,
     mem_pct: f32,
-    mem_rss: u64,
     cpu_ticks: u64,  // Raw ticks for delta calculation
-    uid: u32,
-    user: String,
 }
 
 pub struct PsMonitor {
@@ -109,7 +105,6 @@ impl PsMonitor {
             return None;
         }
 
-        let state = fields[0].chars().next().unwrap_or('?');
         let utime: u64 = fields[11].parse().ok()?; // Field 14 in original (0-indexed after comm: 11)
         let stime: u64 = fields[12].parse().ok()?; // Field 15
         let rss_pages: u64 = fields[21].parse().ok()?; // Field 24 (RSS in pages)
@@ -133,10 +128,6 @@ impl PsMonitor {
         // Calculate MEM%
         let mem_pct = (rss_bytes as f64 / self.mem_total as f64 * 100.0) as f32;
 
-        // Get UID from status file
-        let uid = get_process_uid(pid).unwrap_or(0);
-        let user = uid_to_username(uid);
-
         // Get better command name from cmdline if available
         let cmdline_name = get_cmdline(pid).unwrap_or_default();
         let display_name = if cmdline_name.is_empty() {
@@ -148,13 +139,9 @@ impl PsMonitor {
         Some(ProcessInfo {
             pid,
             name: display_name,
-            state,
             cpu_pct,
             mem_pct,
-            mem_rss: rss_bytes,
             cpu_ticks,
-            uid,
-            user,
         })
     }
 
@@ -238,19 +225,7 @@ fn get_mem_total() -> Option<u64> {
     None
 }
 
-fn get_process_uid(pid: u32) -> Option<u32> {
-    let status_path = format!("/proc/{}/status", pid);
-    let content = fs::read_to_string(&status_path).ok()?;
-    for line in content.lines() {
-        if line.starts_with("Uid:") {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 2 {
-                return parts[1].parse().ok();
-            }
-        }
-    }
-    None
-}
+
 
 fn get_cmdline(pid: u32) -> Option<String> {
     let cmdline_path = format!("/proc/{}/cmdline", pid);
@@ -267,46 +242,9 @@ fn get_cmdline(pid: u32) -> Option<String> {
     Some(program.to_string())
 }
 
-fn uid_to_username(uid: u32) -> String {
-    // Simple cache-less lookup from /etc/passwd
-    if let Ok(content) = fs::read_to_string("/etc/passwd") {
-        for line in content.lines() {
-            let parts: Vec<&str> = line.split(':').collect();
-            if parts.len() >= 3 {
-                if let Ok(line_uid) = parts[2].parse::<u32>() {
-                    if line_uid == uid {
-                        return parts[0].to_string();
-                    }
-                }
-            }
-        }
-    }
-    uid.to_string()
-}
 
-fn truncate_str(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
-        format!("{:<width$}", s, width = max_len)
-    } else {
-        s.chars().take(max_len).collect()
-    }
-}
 
-fn format_bytes(bytes: u64) -> String {
-    const KB: u64 = 1024;
-    const MB: u64 = KB * 1024;
-    const GB: u64 = MB * 1024;
 
-    if bytes >= GB {
-        format!("{:.1}G", bytes as f64 / GB as f64)
-    } else if bytes >= MB {
-        format!("{:.0}M", bytes as f64 / MB as f64)
-    } else if bytes >= KB {
-        format!("{:.0}K", bytes as f64 / KB as f64)
-    } else {
-        format!("{}B", bytes)
-    }
-}
 
 pub struct PsConfig {
     pub time_step: f32,
