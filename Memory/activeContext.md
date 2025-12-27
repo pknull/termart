@@ -1,6 +1,6 @@
 ---
-version: "2.1"
-lastUpdated: "2025-12-25"
+version: "2.2"
+lastUpdated: "2025-12-27"
 lifecycle: core
 stakeholder: pknull
 changeTrigger: "session end, significant changes"
@@ -23,6 +23,14 @@ Project expanded with system monitors and utilities:
 - **Folding@home monitor** with real-time WebSocket updates
 
 ## Recent Changes
+
+### Session 2025-12-27 (Weather Widget Moon/Stars Fix)
+- **Weather widget visual improvements**:
+  - Improved star field: Fixed positions instead of random, gentle twinkling using ✦ and · characters
+  - Multiple moon design iterations attempted (simplified ASCII, alignment fixes)
+  - Ultimately removed moon entirely per user preference
+- **Key learning**: ASCII art alignment is precise - single character offsets break visual cohesion
+- **Pattern**: Sometimes removal is better than refinement when multiple iterations fail
 
 ### Session 2025-12-25 (Dygma Shift & Layer Fallback Fixes)
 - **Layer 0 always included in fallback stack**:
