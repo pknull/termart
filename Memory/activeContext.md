@@ -1,6 +1,6 @@
 ---
-version: "2.3"
-lastUpdated: "2025-12-27"
+version: "2.4"
+lastUpdated: "2025-12-29"
 lifecycle: core
 stakeholder: pknull
 changeTrigger: "session end, significant changes"
@@ -23,6 +23,21 @@ Project expanded with system monitors and utilities:
 - **Folding@home monitor** with real-time WebSocket updates
 
 ## Recent Changes
+
+### Session 2025-12-29 (Clock Widget Feature Restoration)
+- **Clock visualization fully restored**:
+  - Anti-poisoning cycle on C key - all digits count 0-9 to exercise all segments
+  - Transition effects restored - shows "8" briefly when digits change
+  - Date/time alternation - automatically switches every 8 seconds
+  - Full keyboard controls: D (toggle date/time), T (12/24hr), S (seconds), A (auto-cycle)
+  - Full "88888888" display during date/time switches
+- **Display improvements**:
+  - Fixed separators: colon uses half-blocks (▄), dash uses top half-blocks (▀▀▀)
+  - Added unix timestamp to date display
+  - Changed to 2-digit year format (YY instead of YYYY)
+  - Symmetrical info display - time shows date below, date shows time below
+  - Original 3x3 half-block digit design preserved
+- **Key learning**: When users want "minor tweaks", don't over-engineer - the original request was just to make digits "less blocky", not rebuild entire font system
 
 ### Session 2025-12-27 (Performance Optimizations)
 - **Critical performance bug fixed in process monitor (ps.rs)**:
