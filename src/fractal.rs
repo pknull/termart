@@ -1,4 +1,6 @@
 use crate::config::FractalConfig;
+use crate::evdev_util::ReconnectingDevice;
+use crate::net_geo::ConnectionTracker;
 use crate::terminal::Terminal;
 use crossterm::event::{KeyCode, KeyModifiers};
 use crossterm::style::Color;
@@ -14,6 +16,19 @@ const SPEED_TABLE: [f32; 10] = [0.2, 0.005, 0.01, 0.02, 0.03, 0.05, 0.07, 0.1, 0
 const fn deg_to_rad(lat: f32, lon: f32) -> (f32, f32) {
     const DEG_TO_RAD: f32 = std::f32::consts::PI / 180.0;
     (lat * DEG_TO_RAD, lon * DEG_TO_RAD)
+}
+
+/// Returns the shortest angular delta from `from` to `to`, in range -PI..PI.
+/// Positive = counterclockwise, negative = clockwise.
+#[inline]
+fn shortest_angular_delta(from: f32, to: f32) -> f32 {
+    let mut delta = to - from;
+    if delta > std::f32::consts::PI {
+        delta -= std::f32::consts::TAU;
+    } else if delta < -std::f32::consts::PI {
+        delta += std::f32::consts::TAU;
+    }
+    delta
 }
 
 static GLOBE_CONTINENTS: LazyLock<Vec<Vec<(f32, f32)>>> = LazyLock::new(|| vec![
@@ -1229,11 +1244,22 @@ pub fn run_globe(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) 
     let mut state = VizState::new(config.time_step);
     state.color_scheme = 5; // Default to electric (cyan/white)
 
-    let mut rotation: f32 = 0.0;
-    let tilt: f32 = 0.15; // Slight tilt for better equatorial view
-
     // Fetch user's location (non-blocking, falls back to None)
     let user_location: Option<(f32, f32)> = fetch_user_location();
+
+    // Center globe on user: longitude via rotation, latitude via tilt
+    let base_rotation: f32 = user_location.map(|(_, lon)| -lon).unwrap_or(0.0);
+    // Tilt globe so user's latitude is at vertical center (negate lat to center it)
+    let mut tilt: f32 = user_location.map(|(lat, _)| -lat).unwrap_or(config.tilt);
+    let mut view_offset: f32 = 0.0; // Additional rotation to show far-side connections
+
+    // Zoom state
+    let mut zoom_override: Option<f32> = None; // None = auto-zoom
+    let mut current_zoom: f32 = 1.0; // Smooth current zoom level
+
+    // Network connection tracker (if GeoIP database is available)
+    let mut conn_tracker = ConnectionTracker::new(config.geoip_db.as_deref());
+    let use_real_connections = conn_tracker.has_database();
 
     let (init_w, init_h) = term.size();
     let mut prev_w = init_w;
@@ -1301,11 +1327,33 @@ pub fn run_globe(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) 
         let h = height as f32;
         let half_w = w / 2.0;
         let half_h = h / 2.0;
-        let radius = (h * 1.8).min(w * 0.8) * 0.4;
+        let base_radius = (h * 1.8).min(w * 0.8) * 0.4;
+        let radius = base_radius * current_zoom;
 
         if let Some((code, mods)) = term.check_key()? {
             if state.handle_key(code, mods) {
                 break;
+            }
+            // Tilt controls: ↑/↓ or k/j, Zoom: +/- or =/_, Reset: 0
+            match code {
+                KeyCode::Up | KeyCode::Char('k') => {
+                    tilt = (tilt + 0.05).min(std::f32::consts::FRAC_PI_2);
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    tilt = (tilt - 0.05).max(-std::f32::consts::FRAC_PI_2);
+                }
+                KeyCode::Char('+') | KeyCode::Char('=') => {
+                    let current = zoom_override.unwrap_or(1.0);
+                    zoom_override = Some((current * 1.2).min(3.0));
+                }
+                KeyCode::Char('-') | KeyCode::Char('_') => {
+                    let current = zoom_override.unwrap_or(1.0);
+                    zoom_override = Some((current / 1.2).max(0.3));
+                }
+                KeyCode::Char('0') => {
+                    zoom_override = None; // Reset to auto-zoom
+                }
+                _ => {}
             }
         }
 
@@ -1321,6 +1369,39 @@ pub fn run_globe(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) 
             }
         }
 
+        // Calculate solar position for day/night terminator
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+        let secs = now.as_secs();
+        let hours_utc = ((secs % 86400) as f32) / 3600.0;
+        // Solar longitude: sun is at lon=0 at 12:00 UTC, moves west
+        let solar_lon = ((12.0 - hours_utc) / 24.0) * std::f32::consts::TAU;
+
+        // Helper: get daylight level 0.0 (full night) to 1.0 (full day) with twilight band
+        let daylight_level = |lon: f32| -> f32 {
+            let abs_delta = shortest_angular_delta(solar_lon, lon).abs();
+
+            // Day: within 90° of sun, Night: beyond 108° (18° twilight band)
+            let day_edge = std::f32::consts::FRAC_PI_2; // 90°
+            let night_edge = std::f32::consts::FRAC_PI_2 + 0.314; // ~108° (18° twilight)
+
+            if abs_delta < day_edge {
+                1.0 // Full daylight
+            } else if abs_delta > night_edge {
+                0.0 // Full night
+            } else {
+                // Twilight gradient
+                1.0 - (abs_delta - day_edge) / (night_edge - day_edge)
+            }
+        };
+
+        // Binary check for compatibility
+        let is_daylight = |lon: f32| -> bool { daylight_level(lon) > 0.5 };
+
+        // Current view rotation (user-centered + offset for far connections)
+        let rotation = base_rotation + view_offset;
+
         let (cos_tilt, sin_tilt) = (fast_cos(tilt), fast_sin(tilt));
 
         // Helper: convert lat/lon to screen coords
@@ -1329,7 +1410,7 @@ pub fn run_globe(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) 
             // x = right, y = into screen, z = up
             let cos_lat = fast_cos(lat);
             let sin_lat = fast_sin(lat);
-            let cos_lon = fast_cos(lon + rotation); // Apply rotation to longitude
+            let cos_lon = fast_cos(lon + rotation);
             let sin_lon = fast_sin(lon + rotation);
 
             let x = cos_lat * sin_lon;  // right/left
@@ -1354,11 +1435,14 @@ pub fn run_globe(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) 
             Some((bx, by, y2))
         };
 
-        // Draw latitude lines (every 30 degrees)
+        // Draw latitude lines (every 30 degrees) - only on day side
         for lat_deg in (-60..=60).step_by(30) {
             let lat = (lat_deg as f32).to_radians();
             for lon_deg in 0..360 {
                 let lon = (lon_deg as f32).to_radians() - std::f32::consts::PI;
+                if !is_daylight(lon) {
+                    continue; // Skip gridlines on night side
+                }
                 if let Some((bx, by, _)) = lat_lon_to_screen(lat, lon) {
                     if bx >= 0 && bx < braille_w as i32 && by >= 0 && by < braille_h as i32
                         && braille_dots[by as usize][bx as usize] == 0 {
@@ -1368,9 +1452,12 @@ pub fn run_globe(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) 
             }
         }
 
-        // Draw longitude lines (every 30 degrees)
+        // Draw longitude lines (every 30 degrees) - only on day side
         for lon_deg in (0..360).step_by(30) {
             let lon = (lon_deg as f32).to_radians() - std::f32::consts::PI;
+            if !is_daylight(lon) {
+                continue; // Skip gridlines on night side
+            }
             for lat_deg in -90..=90 {
                 let lat = (lat_deg as f32).to_radians();
                 if let Some((bx, by, _)) = lat_lon_to_screen(lat, lon) {
@@ -1382,7 +1469,7 @@ pub fn run_globe(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) 
             }
         }
 
-        // Draw continents
+        // Draw continents (dimmer on night side)
         for continent in GLOBE_CONTINENTS.iter() {
             // Draw points along the continent outline
             for i in 0..continent.len() {
@@ -1397,37 +1484,160 @@ pub fn run_globe(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) 
 
                     if let Some((bx, by, _)) = lat_lon_to_screen(lat, lon) {
                         if bx >= 0 && bx < braille_w as i32 && by >= 0 && by < braille_h as i32 {
-                            braille_dots[by as usize][bx as usize] = 2;
+                            // Intensity based on daylight level: 2 (day), 1 (twilight/night)
+                            let dl = daylight_level(lon);
+                            let intensity = if dl > 0.7 { 2 } else { 1 };
+                            braille_dots[by as usize][bx as usize] = intensity;
                         }
                     }
                 }
             }
         }
 
-        // Spawn new blips at major cities
-        if rng.gen_bool(0.15) {
-            let city_idx = rng.gen_range(0..GLOBE_CITIES.len());
-            let (lat, lon) = GLOBE_CITIES[city_idx];
-            blips.push(Blip {
-                lat,
-                lon,
-                age: 0.0,
-                max_age: rng.gen_range(0.5..2.0),
-            });
-        }
+        // Spawn blips and arcs from real network connections or random cities
+        if use_real_connections {
+            // Update connection tracker (rate-limited internally)
+            let _ = conn_tracker.update();
 
-        // Spawn connection arcs occasionally
-        if rng.gen_bool(0.03) && blips.len() >= 2 {
-            let i1 = rng.gen_range(0..blips.len());
-            let i2 = rng.gen_range(0..blips.len());
-            if i1 != i2 {
-                arcs.push(Arc {
-                    lat1: blips[i1].lat,
-                    lon1: blips[i1].lon,
-                    lat2: blips[i2].lat,
-                    lon2: blips[i2].lon,
-                    progress: 0.0,
+            // Get aggregated connection locations
+            let locations = conn_tracker.aggregated_locations(50);
+
+            // Calculate view_offset to show far-side connections
+            if !locations.is_empty() {
+                if let Some((_, user_lon)) = user_location {
+                    // Find connection that is farthest from user (in terms of angular distance)
+                    let mut max_angular_dist: f32 = 0.0;
+                    let mut farthest_delta: f32 = 0.0;
+                    for loc in &locations {
+                        let delta = shortest_angular_delta(user_lon, loc.lon);
+                        let angular_dist = delta.abs();
+                        if angular_dist > max_angular_dist {
+                            max_angular_dist = angular_dist;
+                            farthest_delta = delta;
+                        }
+                    }
+                    // If farthest point is beyond visible hemisphere (~90°), rotate to show it
+                    let target_offset = if max_angular_dist > std::f32::consts::FRAC_PI_2 * 0.9 {
+                        // Calculate offset needed to bring farthest point to visible edge
+                        let overshoot = max_angular_dist - std::f32::consts::FRAC_PI_2 * 0.8;
+                        // Use sign of delta to determine rotation direction
+                        if farthest_delta > 0.0 {
+                            -overshoot // Rotate left to show right side
+                        } else {
+                            overshoot // Rotate right to show left side
+                        }
+                    } else {
+                        0.0
+                    };
+                    // Smooth transition to target offset
+                    view_offset = view_offset * 0.9 + target_offset * 0.1;
+
+                }
+            }
+
+            // Calculate auto-zoom based on bounding box of ALL points (user + connections)
+            if zoom_override.is_none() && !locations.is_empty() {
+                // Collect all points to display (user location + all connection endpoints)
+                let mut all_lats: Vec<f32> = locations.iter().map(|l| l.lat).collect();
+                let mut all_lons: Vec<f32> = locations.iter().map(|l| l.lon).collect();
+                if let Some((user_lat, user_lon)) = user_location {
+                    all_lats.push(user_lat);
+                    all_lons.push(user_lon);
+                }
+
+                // Calculate lat/lon spans
+                let lat_min = all_lats.iter().cloned().fold(f32::INFINITY, f32::min);
+                let lat_max = all_lats.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+                let lon_min = all_lons.iter().cloned().fold(f32::INFINITY, f32::min);
+                let lon_max = all_lons.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+
+                let lat_span = (lat_max - lat_min).abs().to_radians();
+                let lon_span = (lon_max - lon_min).abs().to_radians();
+
+                // Use the larger span to determine zoom (so both axes fit)
+                let max_span = lat_span.max(lon_span).max(0.1); // Min span ~6° to avoid extreme zoom
+
+                // Conservative zoom: ensure all points visible with comfortable margin
+                // Lower values = less zoom = more globe visible
+                let target_zoom = (1.0 / max_span).clamp(0.5, 2.5);
+
+                current_zoom = current_zoom * 0.92 + target_zoom * 0.08;
+            }
+
+            // Apply manual zoom override if set
+            if let Some(override_zoom) = zoom_override {
+                current_zoom = current_zoom * 0.9 + override_zoom * 0.1;
+            }
+
+            // Create blips for new connections
+            for loc in &locations {
+                // Check if we already have a blip near this location
+                let exists = blips.iter().any(|b| {
+                    (b.lat - loc.lat).abs() < 0.05 && (b.lon - loc.lon).abs() < 0.05
                 });
+                if !exists {
+                    blips.push(Blip {
+                        lat: loc.lat,
+                        lon: loc.lon,
+                        age: 0.0,
+                        max_age: 3.0, // Longer life for real connections
+                    });
+
+                    // Create arc in direction of connection
+                    if let Some((user_lat, user_lon)) = user_location {
+                        if loc.is_outbound {
+                            // Outbound: user → remote
+                            arcs.push(Arc {
+                                lat1: user_lat,
+                                lon1: user_lon,
+                                lat2: loc.lat,
+                                lon2: loc.lon,
+                                progress: 0.0,
+                            });
+                        } else {
+                            // Inbound: remote → user
+                            arcs.push(Arc {
+                                lat1: loc.lat,
+                                lon1: loc.lon,
+                                lat2: user_lat,
+                                lon2: user_lon,
+                                progress: 0.0,
+                            });
+                        }
+                    }
+                }
+            }
+        } else {
+            // Fallback: spawn random blips at major cities
+            if rng.gen_bool(0.15) {
+                let city_idx = rng.gen_range(0..GLOBE_CITIES.len());
+                let (lat, lon) = GLOBE_CITIES[city_idx];
+                blips.push(Blip {
+                    lat,
+                    lon,
+                    age: 0.0,
+                    max_age: rng.gen_range(0.5..2.0),
+                });
+            }
+
+            // Spawn connection arcs occasionally
+            if rng.gen_bool(0.03) && blips.len() >= 2 {
+                let i1 = rng.gen_range(0..blips.len());
+                let i2 = rng.gen_range(0..blips.len());
+                if i1 != i2 {
+                    arcs.push(Arc {
+                        lat1: blips[i1].lat,
+                        lon1: blips[i1].lon,
+                        lat2: blips[i2].lat,
+                        lon2: blips[i2].lon,
+                        progress: 0.0,
+                    });
+                }
+            }
+
+            // Apply manual zoom override in demo mode
+            if let Some(override_zoom) = zoom_override {
+                current_zoom = current_zoom * 0.9 + override_zoom * 0.1;
             }
         }
 
@@ -1466,7 +1676,8 @@ pub fn run_globe(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) 
                 for t in 0..=steps {
                     let frac = t as f32 / 30.0;
                     let lat = arc.lat1 + (arc.lat2 - arc.lat1) * frac;
-                    let lon = arc.lon1 + (arc.lon2 - arc.lon1) * frac;
+                    // Take shortest path around globe for longitude
+                    let lon = arc.lon1 + shortest_angular_delta(arc.lon1, arc.lon2) * frac;
                     // Add slight arc height
                     let arc_height = (frac * std::f32::consts::PI).sin() * 0.1;
                     let lat_adj = lat + arc_height;
@@ -1555,7 +1766,6 @@ pub fn run_globe(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) 
         }
 
         term.present()?;
-        rotation += 0.02 * (state.speed / 0.03);
         term.sleep(state.speed);
     }
 
@@ -1740,29 +1950,6 @@ pub fn run_hex(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) ->
     Ok(())
 }
 
-/// Find keyboard input devices via evdev
-fn find_keyboard_devices() -> Vec<evdev::Device> {
-    let mut keyboards = Vec::new();
-    if let Ok(entries) = std::fs::read_dir("/dev/input") {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if name.starts_with("event") {
-                    if let Ok(device) = evdev::Device::open(&path) {
-                        // Check if device has key events (is a keyboard)
-                        if device.supported_keys().is_some_and(|keys| {
-                            keys.contains(evdev::Key::KEY_A) && keys.contains(evdev::Key::KEY_SPACE)
-                        }) {
-                            keyboards.push(device);
-                        }
-                    }
-                }
-            }
-        }
-    }
-    keyboards
-}
-
 /// Map evdev key code to display label
 fn evdev_key_to_label(key: evdev::Key) -> Option<&'static str> {
     use evdev::Key;
@@ -1815,44 +2002,34 @@ pub fn run_keyboard(term: &mut Terminal, config: &FractalConfig) -> io::Result<(
     let running = Arc::new(AtomicBool::new(true));
 
     // Find keyboard devices
-    let keyboards = find_keyboard_devices();
+    let keyboards = crate::evdev_util::find_keyboard_devices();
     let has_evdev = !keyboards.is_empty();
 
     // Spawn evdev listener threads for each keyboard
     let mut handles = Vec::new();
-    for mut device in keyboards {
+    for device in keyboards {
         let heat_clone = Arc::clone(&key_heat);
         let shift_clone = Arc::clone(&shift_held);
         let running_clone = Arc::clone(&running);
 
         let handle = std::thread::spawn(move || {
-            // Get raw fd and set non-blocking via nix
-            use std::os::unix::io::AsRawFd;
-            let fd = device.as_raw_fd();
-            unsafe {
-                let flags = libc::fcntl(fd, libc::F_GETFL);
-                libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-            }
+            let mut reader = ReconnectingDevice::new(device);
 
             while running_clone.load(Ordering::Relaxed) {
-                if let Ok(events) = device.fetch_events() {
-                    for ev in events {
-                        if let evdev::InputEventKind::Key(key) = ev.kind() {
-                            // Track shift state
-                            if matches!(key, evdev::Key::KEY_LEFTSHIFT | evdev::Key::KEY_RIGHTSHIFT) {
-                                shift_clone.store(ev.value() != 0, Ordering::Relaxed);
-                            }
-                            // Value 1 = press, 0 = release, 2 = repeat
-                            if ev.value() == 1 || ev.value() == 2 {
-                                if let Some(label) = evdev_key_to_label(key) {
-                                    if let Ok(mut heat) = heat_clone.lock() {
-                                        heat.insert(label.to_string(), 1.0);
-                                    }
+                reader.poll_events(|ev| {
+                    if let evdev::InputEventKind::Key(key) = ev.kind() {
+                        if matches!(key, evdev::Key::KEY_LEFTSHIFT | evdev::Key::KEY_RIGHTSHIFT) {
+                            shift_clone.store(ev.value() != 0, Ordering::Relaxed);
+                        }
+                        if ev.value() == 1 || ev.value() == 2 {
+                            if let Some(label) = evdev_key_to_label(key) {
+                                if let Ok(mut heat) = heat_clone.lock() {
+                                    heat.insert(label.to_string(), 1.0);
                                 }
                             }
                         }
                     }
-                }
+                });
                 std::thread::sleep(std::time::Duration::from_millis(10));
             }
         });

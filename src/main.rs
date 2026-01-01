@@ -9,11 +9,14 @@ mod weather;
 mod pomodoro;
 mod fah;
 mod settings;
+mod net_geo;
+mod evdev_util;
 
 use clap::{Parser, Subcommand, Args};
 use config::{BonsaiConfig, FractalConfig, FractalType};
 use monitor::{MonitorConfig, MonitorType};
 use std::io;
+use std::path::PathBuf;
 
 #[derive(Args, Clone)]
 struct VizOptions {
@@ -162,6 +165,14 @@ enum Commands {
     Globe {
         #[command(flatten)]
         opts: VizOptions,
+
+        /// Path to GeoLite2-City.mmdb for real network visualization
+        #[arg(long)]
+        geoip: Option<PathBuf>,
+
+        /// Initial tilt angle in degrees (-90 to 90, default: 8)
+        #[arg(long, default_value = "8")]
+        tilt: f32,
     },
 
     /// Hexagonal grid pattern
@@ -197,7 +208,7 @@ enum Commands {
         opts: VizOptions,
     },
 
-    /// Clock display with block letters
+    /// Clock display with nixie tube effects - alternates between time and date
     Clock {
         /// Animation speed (seconds per frame)
         #[arg(short, long, default_value = "0.1")]
@@ -315,13 +326,15 @@ enum Commands {
     },
 }
 
-fn run_viz(ftype: FractalType, opts: VizOptions, draw_char: char) -> io::Result<()> {
+fn run_viz(ftype: FractalType, opts: VizOptions, draw_char: char, geoip_db: Option<PathBuf>, tilt_deg: f32) -> io::Result<()> {
     let config = FractalConfig {
         fractal_type: ftype,
         time_step: opts.time,
         seed: opts.seed,
         draw_char,
         debug: opts.debug,
+        geoip_db,
+        tilt: tilt_deg.to_radians(),
     };
     fractal::run(config)
 }
@@ -368,20 +381,24 @@ fn main() -> io::Result<()> {
             };
             bonsai::run(config)?;
         }
-        Commands::Matrix { opts } => run_viz(FractalType::Matrix, opts, '#')?,
+        Commands::Matrix { opts } => run_viz(FractalType::Matrix, opts, '#', None, 0.0)?,
         Commands::Life { opts, char: c } => {
-            run_viz(FractalType::Life, opts, c.chars().next().unwrap_or('#'))?
+            run_viz(FractalType::Life, opts, c.chars().next().unwrap_or('#'), None, 0.0)?
         }
-        Commands::Plasma { opts } => run_viz(FractalType::Plasma, opts, '#')?,
-        Commands::Fire { opts } => run_viz(FractalType::Fire, opts, '#')?,
-        Commands::Rain { opts } => run_viz(FractalType::Rain, opts, '#')?,
-        Commands::Waves { opts } => run_viz(FractalType::Waves, opts, '#')?,
-        Commands::Cube { opts } => run_viz(FractalType::Cube, opts, '#')?,
-        Commands::Pipes { opts } => run_viz(FractalType::Pipes, opts, '#')?,
-        Commands::Donut { opts } => run_viz(FractalType::Donut, opts, '#')?,
-        Commands::Globe { opts } => run_viz(FractalType::Globe, opts, '#')?,
-        Commands::Hex { opts } => run_viz(FractalType::Hex, opts, '#')?,
-        Commands::Keyboard { opts } => run_viz(FractalType::Keyboard, opts, '#')?,
+        Commands::Plasma { opts } => run_viz(FractalType::Plasma, opts, '#', None, 0.0)?,
+        Commands::Fire { opts } => run_viz(FractalType::Fire, opts, '#', None, 0.0)?,
+        Commands::Rain { opts } => run_viz(FractalType::Rain, opts, '#', None, 0.0)?,
+        Commands::Waves { opts } => run_viz(FractalType::Waves, opts, '#', None, 0.0)?,
+        Commands::Cube { opts } => run_viz(FractalType::Cube, opts, '#', None, 0.0)?,
+        Commands::Pipes { opts } => run_viz(FractalType::Pipes, opts, '#', None, 0.0)?,
+        Commands::Donut { opts } => run_viz(FractalType::Donut, opts, '#', None, 0.0)?,
+        Commands::Globe { opts, geoip, tilt } => {
+            let settings = settings::Settings::load();
+            let geoip_db = geoip.or(settings.globe.geoip_db);
+            run_viz(FractalType::Globe, opts, '#', geoip_db, tilt)?
+        }
+        Commands::Hex { opts } => run_viz(FractalType::Hex, opts, '#', None, 0.0)?,
+        Commands::Keyboard { opts } => run_viz(FractalType::Keyboard, opts, '#', None, 0.0)?,
         Commands::Dygma { time, port, debug } => {
             let config = viz::dygma::DygmaConfig {
                 time_step: time,
@@ -390,11 +407,12 @@ fn main() -> io::Result<()> {
             };
             viz::dygma::run(config)?;
         }
-        Commands::Invaders { opts } => run_viz(FractalType::Invaders, opts, '#')?,
+        Commands::Invaders { opts } => run_viz(FractalType::Invaders, opts, '#', None, 0.0)?,
         Commands::Clock { time, no_seconds } => {
             let config = viz::clock::ClockConfig {
                 time_step: time,
                 show_seconds: !no_seconds,
+                ..Default::default()
             };
             viz::clock::run(config)?;
         }

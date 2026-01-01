@@ -5,6 +5,7 @@
 //! - Active layer detection via Focus serial protocol
 //! - Per-layer key labels from keyboard firmware
 
+use crate::evdev_util::ReconnectingDevice;
 use crate::terminal::Terminal;
 use crate::viz::{scheme_color, VizState};
 use crossterm::event::KeyCode;
@@ -474,28 +475,6 @@ const TOTAL_HEIGHT: f32 = 6.0;
 // evdev Key Detection
 // ============================================================================
 
-/// Find keyboard input devices via evdev
-fn find_keyboard_devices() -> Vec<evdev::Device> {
-    let mut keyboards = Vec::new();
-    if let Ok(entries) = std::fs::read_dir("/dev/input") {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if name.starts_with("event") {
-                    if let Ok(device) = evdev::Device::open(&path) {
-                        if device.supported_keys().is_some_and(|keys| {
-                            keys.contains(evdev::Key::KEY_A) && keys.contains(evdev::Key::KEY_SPACE)
-                        }) {
-                            keyboards.push(device);
-                        }
-                    }
-                }
-            }
-        }
-    }
-    keyboards
-}
-
 /// Map evdev key code to label string
 fn evdev_key_to_label(key: evdev::Key) -> Option<&'static str> {
     use evdev::Key;
@@ -783,7 +762,7 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
     };
 
     // Spawn evdev listener threads
-    let keyboards = find_keyboard_devices();
+    let keyboards = crate::evdev_util::find_keyboard_devices();
     let has_evdev = !keyboards.is_empty();
     let mut handles = Vec::new();
 
@@ -834,7 +813,7 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
         })
     }
 
-    for mut device in keyboards {
+    for device in keyboards {
         let heat_clone = Arc::clone(&key_heat);
         let running_clone = Arc::clone(&running);
         let last_key_clone = Arc::clone(&last_key);
@@ -843,14 +822,9 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
         let debug_mode = config.debug;
 
         let handle = std::thread::spawn(move || {
-            use std::os::unix::io::AsRawFd;
             use std::time::Instant;
 
-            let fd = device.as_raw_fd();
-            unsafe {
-                let flags = libc::fcntl(fd, libc::F_GETFL);
-                libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-            }
+            let mut reader = ReconnectingDevice::new(device);
 
             while running_clone.load(Ordering::Relaxed) {
                 let now = Instant::now();
@@ -873,62 +847,59 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
                                 heat.insert(label, 1.0);
                             }
                         }
-                        // Note: shift_held is now tracked directly from key events, not promotion
                     }
                 }
 
-                if let Ok(events) = device.fetch_events() {
-                    for ev in events {
-                        if let evdev::InputEventKind::Key(key) = ev.kind() {
-                            // Track shift state directly from press/release
-                            if key == evdev::Key::KEY_LEFTSHIFT || key == evdev::Key::KEY_RIGHTSHIFT {
-                                shift_clone.store(ev.value() != 0, Ordering::Relaxed);
+                reader.poll_events(|ev| {
+                    if let evdev::InputEventKind::Key(key) = ev.kind() {
+                        // Track shift state directly from press/release
+                        if key == evdev::Key::KEY_LEFTSHIFT || key == evdev::Key::KEY_RIGHTSHIFT {
+                            shift_clone.store(ev.value() != 0, Ordering::Relaxed);
+                        }
+
+                        if ev.value() == 1 || ev.value() == 2 {
+                            let label = evdev_key_to_label(key)
+                                .map(|s| s.to_string())
+                                .unwrap_or_else(|| evdev_key_raw(key));
+
+                            if is_modifier(key) {
+                                // Queue modifier - wait to see if it's synthetic
+                                if let Ok(mut pending) = pending_mods_clone.lock() {
+                                    pending.push((label.clone(), now, is_shift(key)));
+                                }
+                            } else {
+                                // Non-modifier key pressed - check if Shift was pending (synthetic)
+                                let had_synthetic_shift = if let Ok(mut pending) = pending_mods_clone.lock() {
+                                    let had_shift = pending.iter().any(|(_, _, is_s)| *is_s);
+                                    pending.clear();
+                                    had_shift
+                                } else {
+                                    false
+                                };
+
+                                // Use shifted label if Shift was synthetic, otherwise use raw label
+                                let heat_label = if had_synthetic_shift {
+                                    evdev_shifted_label(key)
+                                        .map(|s| s.to_string())
+                                        .unwrap_or_else(|| label.clone())
+                                } else {
+                                    label.clone()
+                                };
+
+                                if let Ok(mut heat) = heat_clone.lock() {
+                                    heat.insert(heat_label, 1.0);
+                                }
                             }
 
-                            if ev.value() == 1 || ev.value() == 2 {
-                                let label = evdev_key_to_label(key)
-                                    .map(|s| s.to_string())
-                                    .unwrap_or_else(|| evdev_key_raw(key));
-
-                                if is_modifier(key) {
-                                    // Queue modifier - wait to see if it's synthetic
-                                    if let Ok(mut pending) = pending_mods_clone.lock() {
-                                        pending.push((label.clone(), now, is_shift(key)));
-                                    }
-                                } else {
-                                    // Non-modifier key pressed - check if Shift was pending (synthetic)
-                                    let had_synthetic_shift = if let Ok(mut pending) = pending_mods_clone.lock() {
-                                        let had_shift = pending.iter().any(|(_, _, is_s)| *is_s);
-                                        pending.clear();
-                                        had_shift
-                                    } else {
-                                        false
-                                    };
-
-                                    // Use shifted label if Shift was synthetic, otherwise use raw label
-                                    let heat_label = if had_synthetic_shift {
-                                        evdev_shifted_label(key)
-                                            .map(|s| s.to_string())
-                                            .unwrap_or_else(|| label.clone())
-                                    } else {
-                                        label.clone()
-                                    };
-
-                                    if let Ok(mut heat) = heat_clone.lock() {
-                                        heat.insert(heat_label, 1.0);
-                                    }
-                                }
-
-                                // Store for debug display
-                                if debug_mode {
-                                    if let Ok(mut lk) = last_key_clone.lock() {
-                                        *lk = format!("{:?} -> {}", key, label);
-                                    }
+                            // Store for debug display
+                            if debug_mode {
+                                if let Ok(mut lk) = last_key_clone.lock() {
+                                    *lk = format!("{:?} -> {}", key, label);
                                 }
                             }
                         }
                     }
-                }
+                });
                 std::thread::sleep(std::time::Duration::from_millis(10));
             }
         });
