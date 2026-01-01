@@ -1,6 +1,6 @@
 ---
-version: "2.4"
-lastUpdated: "2025-12-29"
+version: "2.5"
+lastUpdated: "2026-01-01"
 lifecycle: core
 stakeholder: pknull
 changeTrigger: "session end, significant changes"
@@ -23,6 +23,25 @@ Project expanded with system monitors and utilities:
 - **Folding@home monitor** with real-time WebSocket updates
 
 ## Recent Changes
+
+### Session 2026-01-01 (evdev Device Reconnection Fix)
+- **Keyboard indicator fix**: Device occasionally stopped reporting keypresses
+  - Root cause: evdev listener silently ignored ALL errors from `fetch_events()`
+  - Including device disconnection - thread kept running but received no events
+- **Fix applied to both keyboard and Dygma visualizations**:
+  - `src/fractal.rs:run_keyboard()` - keyboard visualization
+  - `src/viz/dygma.rs` - Dygma Raise visualization
+- **Reconnection strategy**:
+  - Store physical_path at thread start for device identification
+  - Set non-blocking mode, filter EAGAIN/EWOULDBLOCK (normal for non-blocking)
+  - Track consecutive real errors
+  - After 50+ consecutive errors, trigger reconnection
+  - Find device with same physical_path, or fallback to first keyboard
+- **Borrow checker workaround**:
+  - Problem: Can't reassign `device` in `Err` arm while `fetch_events()` borrows it
+  - Solution: Use `need_reconnect` flag, handle reconnection at loop START (before borrow)
+- **User verified**: Disconnect/reconnect test passed
+- **Code duplication note**: Same ~40-line pattern now in two files (potential future refactor)
 
 ### Session 2025-12-29 (Clock Widget Feature Restoration)
 - **Clock visualization fully restored**:
@@ -251,6 +270,9 @@ Project expanded with system monitors and utilities:
 
 ## Next Steps
 
+- [ ] **Optional refactor**: Extract evdev reconnection logic into shared module
+  - Currently duplicated in `src/fractal.rs` and `src/viz/dygma.rs` (~40 lines each)
+  - Low priority - only 2 use cases, may be premature abstraction
 - [ ] **String allocation optimization**: Reduce allocations using `write!` instead of `format!` in render hot paths
 - [ ] **Performance profiling**: Measure actual CPU usage improvements in monitors
 - [ ] **Dygma visualization - transparent/no-key display**:

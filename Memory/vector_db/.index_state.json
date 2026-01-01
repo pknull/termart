@@ -1,16 +1,16 @@
 {
-  "git_hash": "4428fede1c48de1d66ca1ceb7eb4a120a2bb1ed0",
+  "git_hash": "4b57a8211218b18a5c1dea1edb5dcedf98b0d9b9",
   "files": {
     ".claude/commands/index.md": "381883e4d1f49f9ebf9f984611b259ca",
     ".claude/commands/save.md": "5af3680d3fd90935fb9c271373085828",
     "Memory/CLAUDE.md": "badcced6b4b06efc1e556a664c429915",
-    "Memory/activeContext.md": "9c26b9ae40c4ec35b56b3b5d7212e140",
+    "Memory/activeContext.md": "aec7f9635149eba3fab86d672483e778",
     "Memory/communicationStyle.md": "9fc75a1a4a5125f72fe025e92f930b8f",
     "Memory/projectbrief.md": "66a7f7b0b3452a747fb2f18ac94867f3",
     "Memory/techEnvironment.md": "871fe88a1a600dbad831332b5dd11579",
     "Memory/workflowProtocols.md": "e76575ac9a528c1455dd986fe1cb2204",
     "asha/CORE-monolith.md": "502c2ed109bf333b1294238ea53c8cff",
-    "asha/CORE.md": "9592e872bdd911b4b0f065e0998b0b13",
+    "asha/CORE.md": "ba3890c8a856ce8fa8b48a25ff08d67b",
     "asha/README.md": "fa37f54ed9011e0278d363d81300f9b6",
     "asha/commands/index.md": "381883e4d1f49f9ebf9f984611b259ca",
     "asha/commands/save.md": "5af3680d3fd90935fb9c271373085828",
@@ -28,9 +28,13 @@
     "asha/templates/communicationStyle.md": "1de7f5db78bf15e0a429159b5ad1244a",
     "asha/templates/projectbrief.md": "cb2ed98f63ccd7018fce355b1cf0863d",
     "asha/templates/techEnvironment.md": "340a52996fa5dba249523df90318a5b3",
-    "asha/templates/workflowProtocols.md": "f885133b385d20dbcb21ec5d480ee939"
+    "asha/templates/workflowProtocols.md": "f885133b385d20dbcb21ec5d480ee939",
+    ".claude/commands/save-react.md": "6331bdcbaed0e12970b8db8dc58c2f05",
+    "asha/commands/save-react.md": "6331bdcbaed0e12970b8db8dc58c2f05",
+    "asha/docs/SESSION-SAVE-REACT.md": "8f637895db3708313de7fb3b7d1893d3",
+    "asha/docs/react-comparison.md": "e2585ca856b04a19d075a492907c24c7"
   },
-  "last_ingest": "2025-12-29T04:38:13.111159",
+  "last_ingest": "2026-01-01T03:34:19.170870",
   "config": {
     "chunk_size": 4000,
     "chunk_overlap": 400,
