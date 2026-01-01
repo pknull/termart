@@ -24,6 +24,25 @@ Project expanded with system monitors and utilities:
 
 ## Recent Changes
 
+### Session 2026-01-01 (Globe Visualization Improvements)
+- **Zoom formula refined** through iterative user feedback:
+  - Initial: distance from user to farthest connection (too zoomed out)
+  - Bounding box approach with lat/lon spans introduced
+  - Final formula: `(1.0 / max_span).clamp(0.5, 2.5)` - conservative, shows all traffic
+- **Twilight gradient** replaces binary day/night:
+  - `daylight_level()` returns 0.0-1.0 with 18° (0.314 rad) twilight band
+  - Continents render bright (>0.7) or dim based on gradient
+  - Grid lines only on day side (>0.5)
+- **City lights attempted then removed**:
+  - Drew GLOBE_CITIES on night side when daylight_level < 0.3
+  - Visual result: appeared as artifacts rather than city lights
+  - Pattern reinforced: "sometimes removal is better than refinement"
+- **Arc shortest path fixed**:
+  - Bug: China traffic drew going west (long way) instead of east
+  - Fix: Wrap longitude delta at ±π before interpolation
+  - Same pattern as view_offset calculation (potential abstraction: `shortest_angular_delta()`)
+- **Keyboard controls added**: ↑/↓ tilt, +/- zoom, 0 reset to auto-zoom
+
 ### Session 2026-01-01 (evdev Device Reconnection Fix)
 - **Keyboard indicator fix**: Device occasionally stopped reporting keypresses
   - Root cause: evdev listener silently ignored ALL errors from `fetch_events()`
@@ -270,6 +289,9 @@ Project expanded with system monitors and utilities:
 
 ## Next Steps
 
+- [ ] **Optional refactor**: Extract `shortest_angular_delta()` helper
+  - Same wrap-at-±π pattern used in: arc rendering, view_offset, farthest point detection
+  - Three use cases now - worth abstracting
 - [ ] **Optional refactor**: Extract evdev reconnection logic into shared module
   - Currently duplicated in `src/fractal.rs` and `src/viz/dygma.rs` (~40 lines each)
   - Low priority - only 2 use cases, may be premature abstraction
