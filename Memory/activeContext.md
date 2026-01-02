@@ -1,5 +1,5 @@
 ---
-version: "2.5"
+version: "2.6"
 lastUpdated: "2026-01-01"
 lifecycle: core
 stakeholder: pknull
@@ -23,6 +23,30 @@ Project expanded with system monitors and utilities:
 - **Folding@home monitor** with real-time WebSocket updates
 
 ## Recent Changes
+
+### Session 2026-01-01 (Dygma LED Color Mapping Fix)
+- **LED color display implemented and fixed**:
+  - Initial implementation showed wrong colors for multiple keys (Z, \, Enter, ALT, CTL)
+  - Root cause: Simple offset calculations don't work - layout has gaps and position swaps
+  - Fix: Created `LED_MAP` lookup table from Bazecor source code (led_map in Keymap-ANSI.jsx)
+- **Correct mapping chain discovered**:
+  - Physical index → PHYSICAL_TO_KEYMAP → (row, col) → LED_MAP → LED index
+  - PHYSICAL_TO_KEYMAP already handles quirks: ISO key gap, Enter/\ position swap
+  - LED_MAP handles right side reverse ordering per row
+- **LED_MAP structure** (from Bazecor):
+  ```rust
+  const LED_MAP: [[u8; 16]; 5] = [
+      [0,1,2,3,4,5,6,255,255,39,38,37,36,35,34,33],     // Row 0
+      [7,8,9,10,11,12,255,255,47,46,45,44,43,42,41,40], // Row 1
+      [13,14,15,16,17,18,255,29,255,54,53,52,51,50,49,48], // Row 2
+      [19,20,21,22,23,24,25,255,255,255,60,59,58,57,56,55], // Row 3
+      [26,27,28,29,30,255,31,32,68,67,66,65,64,63,62,61],   // Row 4
+  ];
+  ```
+  - Right side LEDs in **reverse order** per row (39,38,37... not 33,34,35...)
+  - 255 = no LED at position
+- **Key insight**: Enter is at keymap 31 (row 1), backslash at keymap 47 (row 2) - swapped from visual expectation
+- **User verified**: Colors now display correctly
 
 ### Session 2026-01-01 (Globe Visualization Improvements)
 - **Zoom formula refined** through iterative user feedback:
@@ -297,14 +321,14 @@ Project expanded with system monitors and utilities:
   - Low priority - only 2 use cases, may be premature abstraction
 - [ ] **String allocation optimization**: Reduce allocations using `write!` instead of `format!` in render hot paths
 - [ ] **Performance profiling**: Measure actual CPU usage improvements in monitors
+- [x] **Dygma visualization - LED color display**: ✅ COMPLETED
+  - Queries `palette` and `colormap.map` via Focus protocol
+  - Uses LED_MAP lookup table from Bazecor for correct physical→LED mapping
+  - Displays actual keyboard LED colors on keys
 - [ ] **Dygma visualization - transparent/no-key display**:
   - Currently shows default layer letter for "none"/transparent keys (confusing)
   - Should show something like "·" or empty or "T" for transparent
   - Need to detect keycode 0x0000 or 0xFFFF (whichever means transparent)
-- [ ] **Dygma visualization - LED color display**:
-  - Query actual keyboard LED colors via Focus protocol
-  - Commands: `led.theme`, `led.at <pos>`, `palette`
-  - Display real LED colors instead of/alongside heat map
 - [ ] **Dygma visualization**: Continue testing with real keyboard
   - Most mappings verified working
   - Watch for any additional Kaleidoscope keycodes still showing as hex
