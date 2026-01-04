@@ -164,14 +164,14 @@ impl DiskMonitor {
         let mut pos = x;
 
         // Mount point (truncated if needed)
-        let mount_display: String = if mount.len() <= mount_w - 1 {
+        let mount_display: String = if mount.len() < mount_w {
             format!("{:<width$}", mount, width = mount_w)
         } else if mount == "/" {
             format!("{:<width$}", "/", width = mount_w)
         } else {
             // Show last component
             let short = mount.split('/').last().unwrap_or("?");
-            if short.len() <= mount_w - 1 {
+            if short.len() < mount_w {
                 format!("{:<width$}", short, width = mount_w)
             } else {
                 format!("{:<width$}", &short[..mount_w - 1], width = mount_w)

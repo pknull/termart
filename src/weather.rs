@@ -432,8 +432,12 @@ impl WeatherDisplay {
                     // Twinkle based on position and frame to create shimmer
                     let twinkle = ((self.frame / 3 + sx + sy) % 17) < 12;
                     let star = if twinkle { '✦' } else { '·' };
-                    let brightness = if twinkle { star_color } else {
-                        if colors.is_mono() { Color::Grey } else { scheme_color(colors.scheme, 1, false).0 }
+                    let brightness = if twinkle {
+                        star_color
+                    } else if colors.is_mono() {
+                        Color::Grey
+                    } else {
+                        scheme_color(colors.scheme, 1, false).0
                     };
                     term.set(sx as i32, sy as i32, star, Some(brightness), false);
                 }
