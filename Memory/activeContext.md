@@ -1,6 +1,6 @@
 ---
-version: "2.6"
-lastUpdated: "2026-01-01"
+version: "2.7"
+lastUpdated: "2026-01-04"
 lifecycle: core
 stakeholder: pknull
 changeTrigger: "session end, significant changes"
@@ -23,6 +23,18 @@ Project expanded with system monitors and utilities:
 - **Folding@home monitor** with real-time WebSocket updates
 
 ## Recent Changes
+
+### Session 2026-01-04 (Docker Sorting Feature)
+- **Sorting added to Docker monitor**:
+  - Press `m` to cycle: CPU% → MEM% → NAME → CPU%
+  - Header shows `[m]Sort:CPU%` indicator (or MEM%, NAME)
+  - Default sort is CPU% descending
+  - Hint line updated to include `m:Sort`
+- **Pattern follows ps.rs implementation**:
+  - `SortBy` enum with `next()` and `label()` methods
+  - `cycle_sort()` and `sort_containers()` methods on DockerMonitor
+  - Sorting applied after collecting containers in `update()`
+- **Docker context usage**: Confirmed `docker context use remote` is preferred over DOCKER_HOST env var for users with existing context setup
 
 ### Session 2026-01-01 (Dygma LED Color Mapping Fix)
 - **LED color display implemented and fixed**:

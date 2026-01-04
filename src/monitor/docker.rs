@@ -11,6 +11,31 @@ use crossterm::terminal::size;
 use std::io;
 use std::process::Command;
 
+#[derive(Clone, Copy, PartialEq)]
+enum SortBy {
+    Cpu,
+    Mem,
+    Name,
+}
+
+impl SortBy {
+    fn next(self) -> Self {
+        match self {
+            SortBy::Cpu => SortBy::Mem,
+            SortBy::Mem => SortBy::Name,
+            SortBy::Name => SortBy::Cpu,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            SortBy::Cpu => "CPU%",
+            SortBy::Mem => "MEM%",
+            SortBy::Name => "NAME",
+        }
+    }
+}
+
 #[derive(Clone)]
 struct ContainerInfo {
     name: String,
@@ -24,6 +49,7 @@ pub struct DockerMonitor {
     containers: Vec<ContainerInfo>,
     docker_available: bool,
     error_msg: Option<String>,
+    sort_by: SortBy,
 }
 
 impl DockerMonitor {
@@ -32,6 +58,24 @@ impl DockerMonitor {
             containers: Vec::new(),
             docker_available: true,
             error_msg: None,
+            sort_by: SortBy::Cpu,
+        }
+    }
+
+    pub fn cycle_sort(&mut self) {
+        self.sort_by = self.sort_by.next();
+        self.sort_containers();
+    }
+
+    fn sort_containers(&mut self) {
+        match self.sort_by {
+            SortBy::Cpu => self.containers.sort_by(|a, b| {
+                b.cpu_pct.partial_cmp(&a.cpu_pct).unwrap_or(std::cmp::Ordering::Equal)
+            }),
+            SortBy::Mem => self.containers.sort_by(|a, b| {
+                b.mem_pct.partial_cmp(&a.mem_pct).unwrap_or(std::cmp::Ordering::Equal)
+            }),
+            SortBy::Name => self.containers.sort_by(|a, b| a.name.cmp(&b.name)),
         }
     }
 
@@ -69,6 +113,7 @@ impl DockerMonitor {
                     .filter(|line| !line.is_empty())
                     .filter_map(|line| parse_container_line(line))
                     .collect();
+                self.sort_containers();
             }
             Err(e) => {
                 if e.kind() == io::ErrorKind::NotFound {
@@ -92,10 +137,13 @@ impl DockerMonitor {
         let header_y = 0;
         let mut y = 1;
 
-        // Title
+        // Title with sort indicator
         let title = "Docker Containers";
+        let sort_str = format!("[m]Sort:{}", self.sort_by.label());
         let count_str = format!("[{}]", self.containers.len());
         term.set_str(0, header_y, title, Some(text_color_scheme(colors)), true);
+        let sort_x = (w - sort_str.len() - count_str.len() - 2) as i32;
+        term.set_str(sort_x, header_y, &sort_str, Some(muted_color_scheme(colors)), false);
         term.set_str((w - count_str.len()) as i32, header_y, &count_str, Some(muted_color_scheme(colors)), false);
 
         // Error state
@@ -147,7 +195,7 @@ impl DockerMonitor {
         }
 
         // Hint line at bottom
-        let hint = "q:Quit  Space:Pause  0-9:Speed";
+        let hint = "q:Quit  Space:Pause  m:Sort  0-9:Speed";
         let hint_y = (h - 1) as i32;
         term.set_str(0, hint_y, hint, Some(muted_color_scheme(colors)), false);
     }
@@ -193,7 +241,10 @@ pub fn run(config: DockerConfig) -> io::Result<()> {
 
     loop {
         if let Ok(Some((code, mods))) = term.check_key() {
-            if state.handle_key(code, mods) {
+            use crossterm::event::KeyCode;
+            if code == KeyCode::Char('m') {
+                monitor.cycle_sort();
+            } else if state.handle_key(code, mods) {
                 break;
             }
         }
