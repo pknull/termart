@@ -44,6 +44,7 @@ pub fn draw_meter_btop_scheme(
 }
 
 /// Draw per-core meters with temps and color scheme support
+#[allow(clippy::too_many_arguments)]
 pub fn draw_core_graphs_scheme(
     term: &mut Terminal,
     x: i32,
@@ -61,7 +62,7 @@ pub fn draw_core_graphs_scheme(
 
     let cols = 2;
     let col_width = (width - 1) / cols;
-    let rows_per_col = (cores + cols - 1) / cols;
+    let rows_per_col = cores.div_ceil(cols);
     let actual_rows = rows_per_col.min(height);
 
     let label_w = 4;

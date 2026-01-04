@@ -196,8 +196,8 @@ impl CpuMonitor {
         // Initialize with cached values
         let cpu_model = get_cpu_model();
         let cpu_model_short = cpu_model.as_ref().map(|m| {
-            let short = shorten_cpu_model(m, 40); // Pre-compute a reasonable default
-            short
+             // Pre-compute a reasonable default
+            shorten_cpu_model(m, 40)
         });
         
         Self {
@@ -348,7 +348,7 @@ impl CpuMonitor {
 
         // Calculate info panel height: header(1) + CPU meter(1) + cores + load(1)
         let num_cores = self.usage_per_core.len();
-        let cores_rows = (num_cores + 1) / 2;  // 2 columns
+        let cores_rows = num_cores.div_ceil(2);  // 2 columns
         let info_height = 2 + cores_rows + 1;  // header + CPU + cores + load
 
         // Position info panel vertically centered
@@ -368,7 +368,7 @@ impl CpuMonitor {
         
         // Recompute short model if width changed significantly
         let model_short = if let Some(ref model) = self.cpu_model {
-            if self.cpu_model_short.as_ref().map_or(true, |s| s.len() > max_model_len) {
+            if self.cpu_model_short.as_ref().is_none_or(|s| s.len() > max_model_len) {
                 shorten_cpu_model(model, max_model_len)
             } else {
                 self.cpu_model_short.clone().unwrap_or_else(|| model.clone())

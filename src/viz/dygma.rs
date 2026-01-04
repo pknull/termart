@@ -298,27 +298,27 @@ fn keycode_to_label(code: u16, shifted: bool) -> String {
         // Bazecor modifier offsets: Ctrl=0x0100, Alt=0x0200, AltGr=0x0400, Shift=0x0800, GUI=0x1000
         // 0x01xx = Ctrl + key
         c if (0x0100..0x0200).contains(&c) => {
-            let base = (c & 0xFF) as u16;
+            let base = c & 0xFF;
             if base == 0 { "CTL".into() } else { format!("C-{}", keycode_to_label(base, false)) }
         }
         // 0x02xx = Alt + key
         c if (0x0200..0x0400).contains(&c) => {
-            let base = (c & 0xFF) as u16;
+            let base = c & 0xFF;
             if base == 0 { "ALT".into() } else { format!("A-{}", keycode_to_label(base, false)) }
         }
         // 0x04xx = AltGr + key
         c if (0x0400..0x0800).contains(&c) => {
-            let base = (c & 0xFF) as u16;
+            let base = c & 0xFF;
             if base == 0 { "AGR".into() } else { format!("R-{}", keycode_to_label(base, false)) }
         }
         // 0x08xx = Shift + key
         c if (0x0800..0x1000).contains(&c) => {
-            let base = (c & 0xFF) as u16;
+            let base = c & 0xFF;
             if base == 0 { "SHF".into() } else { shifted_label(base).unwrap_or_else(|| format!("S-{}", keycode_to_label(base, false))) }
         }
         // 0x10xx = GUI + key
         c if (0x1000..0x1100).contains(&c) => {
-            let base = (c & 0xFF) as u16;
+            let base = c & 0xFF;
             if base == 0 { "GUI".into() } else { format!("G-{}", keycode_to_label(base, false)) }
         }
 
@@ -346,22 +346,22 @@ fn keycode_to_label(code: u16, shifted: bool) -> String {
 
         // Shifted keys (0xC1xx = Shift + HID key)
         c if (0xC100..0xC200).contains(&c) => {
-            let base = (c & 0xFF) as u16;
+            let base = c & 0xFF;
             format!("S-{}", keycode_to_label(base, false))
         }
         // Ctrl keys (0xC2xx = Ctrl + HID key)
         c if (0xC200..0xC300).contains(&c) => {
-            let base = (c & 0xFF) as u16;
+            let base = c & 0xFF;
             format!("C-{}", keycode_to_label(base, false))
         }
         // Alt keys (0xC4xx = Alt + HID key)
         c if (0xC400..0xC500).contains(&c) => {
-            let base = (c & 0xFF) as u16;
+            let base = c & 0xFF;
             format!("A-{}", keycode_to_label(base, false))
         }
         // GUI keys (0xC8xx = GUI + HID key)
         c if (0xC800..0xC900).contains(&c) => {
-            let base = (c & 0xFF) as u16;
+            let base = c & 0xFF;
             format!("G-{}", keycode_to_label(base, false))
         }
 
@@ -429,7 +429,7 @@ fn keycode_to_label(code: u16, shifted: bool) -> String {
             if key == 0 {
                 format!("DL{}", layer)
             } else {
-                keycode_to_label(key as u16, false)
+                keycode_to_label(key, false)
             }
         }
 
@@ -1129,7 +1129,7 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
 
         // Calculate scaling based on available space for each half
         let half_char_width = HALF_WIDTH * 3.0;  // Each half in character units
-        let available_per_half = (w * 0.45) as f32;  // ~45% of width per half
+        let available_per_half = w * 0.45;  // ~45% of width per half
         let scale_x = available_per_half / half_char_width;
         // Keep vertical scale at 1.0 to avoid gaps between rows
         let scale = scale_x.min(1.5); // Cap horizontal scale, vertical is always 1.0
@@ -1182,7 +1182,7 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
             // Debug: show LED info for H key (physical 47 → LED 54)
             let h_led_info = if let (Some(ref p), Some(ref c)) = (&led_palette, &led_colormap) {
                 if let Some(h_led_idx) = physical_to_led_index(47) { // H key
-                    let layer0 = c.get(0).map(|l| {
+                    let layer0 = c.first().map(|l| {
                         let led_info = l.get(h_led_idx as usize).map(|&pi| {
                             let color = p.get(pi as usize).map(|(r,g,b)| format!("{:02X}{:02X}{:02X}", r, g, b)).unwrap_or("?".into());
                             format!("H:L{}→p{}={}", h_led_idx, pi, color)
@@ -1249,6 +1249,7 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_half(
     term: &mut Terminal,
     main_keys: &[(usize, KeyPos)],
@@ -1364,6 +1365,7 @@ fn draw_half(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_key(
     term: &mut Terminal,
     x: usize,

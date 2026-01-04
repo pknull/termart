@@ -332,12 +332,11 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
                 // Find the leading edge of the alien formation
                 let mut leading_x = if game.alien_dir > 0.0 { 0.0f32 } else { w as f32 };
                 for alien in &game.aliens {
-                    if alien.alive {
-                        if game.alien_dir > 0.0 && alien.x > leading_x {
-                            leading_x = alien.x;
-                        } else if game.alien_dir < 0.0 && alien.x < leading_x {
-                            leading_x = alien.x;
-                        }
+                    if alien.alive
+                        && ((game.alien_dir > 0.0 && alien.x > leading_x)
+                            || (game.alien_dir < 0.0 && alien.x < leading_x))
+                    {
+                        leading_x = alien.x;
                     }
                 }
                 // Position slightly ahead of where aliens are heading

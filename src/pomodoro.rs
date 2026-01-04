@@ -160,7 +160,7 @@ fn draw_tomato(term: &mut Terminal, cx: usize, cy: usize, progress: f32, color: 
 
     for (i, line) in tomato.iter().enumerate() {
         let y = cy + i;
-        let is_fillable = i >= 2 && i <= 5;
+        let is_fillable = (2..=5).contains(&i);
         let fill_index = if is_fillable { 5 - i } else { 0 }; // Fill from bottom up
         let should_fill = is_fillable && fill_index < filled;
 

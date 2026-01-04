@@ -43,7 +43,7 @@ fn derive_fah_password(email: &str, passphrase: &str) -> String {
 
     // Step 3: hash = SHA256(key)
     let mut hasher = Sha256::new();
-    hasher.update(&key);
+    hasher.update(key);
     let hash = hasher.finalize();
 
     // Step 4: base64 encode
@@ -544,7 +544,7 @@ impl FahDisplay {
 
         // Base64url encode IV and ciphertext
         let iv_b64 = base64url_encode(&iv);
-        let payload_b64 = base64url_encode(&ciphertext);
+        let payload_b64 = base64url_encode(ciphertext);
 
         // Create outer message: {"type":"message","id":"machineId","iv":"...","payload":"..."}
         let outer_msg = format!(
@@ -591,7 +591,7 @@ impl FahDisplay {
 
         // Parse messages
         for text in messages {
-            self.parse_remote_ws_message(&text, &private_key);
+            self.parse_remote_ws_message(&text, private_key);
         }
 
         if disconnected {
@@ -881,7 +881,7 @@ impl FahDisplay {
             // Delta update: ["units", 0, "wu_progress", 0.5]
             if content_arr.len() >= 4 {
                 if let (Some("units"), Some(unit_idx), Some(field), Some(value)) = (
-                    content_arr.get(0).and_then(|v| v.as_str()),
+                    content_arr.first().and_then(|v| v.as_str()),
                     content_arr.get(1).and_then(|v| v.as_u64()).map(|v| v as usize),
                     content_arr.get(2).and_then(|v| v.as_str()),
                     content_arr.get(3),

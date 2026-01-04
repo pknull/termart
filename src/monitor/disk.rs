@@ -89,9 +89,9 @@ impl DiskMonitor {
         if result == 0 {
             let stat = unsafe { stat.assume_init() };
             Ok(StatVfs {
-                frsize: stat.f_frsize as u64,
-                blocks: stat.f_blocks as u64,
-                bfree: stat.f_bfree as u64,
+                frsize: stat.f_frsize,
+                blocks: stat.f_blocks,
+                bfree: stat.f_bfree,
             })
         } else {
             Err(io::Error::last_os_error())
@@ -154,6 +154,7 @@ impl DiskMonitor {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn draw_disk_row(&self, term: &mut Terminal, x: i32, y: i32, width: usize, mount: &str, percent: f32, size_str: &str, colors: &ColorState) {
         // Layout: Mount(12) + Meter(dynamic) + Pct(6) + Size(18)
         let mount_w = 12;
@@ -170,7 +171,7 @@ impl DiskMonitor {
             format!("{:<width$}", "/", width = mount_w)
         } else {
             // Show last component
-            let short = mount.split('/').last().unwrap_or("?");
+            let short = mount.split('/').next_back().unwrap_or("?");
             if short.len() < mount_w {
                 format!("{:<width$}", short, width = mount_w)
             } else {

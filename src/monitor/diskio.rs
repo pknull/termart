@@ -189,6 +189,7 @@ impl IoMonitor {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn draw_io_row(&self, term: &mut Terminal, x: i32, y: i32, width: usize, label: &str, percent: f32, rate: f64, colors: &ColorState, is_read: bool) {
         // Layout: Label(10) + Meter(dynamic) + Pct(6) + Rate(12)
         let label_w = 10;

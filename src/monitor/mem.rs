@@ -125,7 +125,7 @@ impl MemMonitor {
         let info_height = if has_swap { 8 } else { 5 };
 
         // Position info panel vertically centered
-        let info_y = y + ((h as i32 - info_height as i32) / 2).max(0);
+        let info_y = y + ((h as i32 - info_height) / 2).max(0);
 
         let mut cy = info_y;
 
@@ -173,6 +173,7 @@ impl MemMonitor {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn draw_mem_row(&self, term: &mut Terminal, x: i32, y: i32, width: usize, label: &str, bytes: u64, percent: f32, colors: &ColorState, use_gradient: bool) {
         // Layout: Label(8) + Meter(dynamic) + Pct(6) + Size(9)
         // Meter fills space between label and pct+size

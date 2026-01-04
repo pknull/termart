@@ -362,6 +362,7 @@ impl GpuMonitor {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn draw_gpu_row(&self, term: &mut Terminal, x: i32, y: i32, width: usize, label: &str, percent: f32, value_str: Option<&str>, colors: &ColorState, is_util: bool) {
         // Layout: Label(8) + Meter(dynamic) + Pct(6) + Value(16) - always reserve value space
         let label_w = 8;

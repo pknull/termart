@@ -15,4 +15,8 @@ Thumbs.db
 
 # Debug
 *.pdb
+
+# AI assistant files
 asha/
+.claude/commands/save-react.md
+.opencode/command/save-react.md

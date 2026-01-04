@@ -111,7 +111,7 @@ impl DockerMonitor {
                 self.containers = stdout
                     .lines()
                     .filter(|line| !line.is_empty())
-                    .filter_map(|line| parse_container_line(line))
+                    .filter_map(parse_container_line)
                     .collect();
                 self.sort_containers();
             }

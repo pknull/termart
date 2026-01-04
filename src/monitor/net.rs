@@ -191,6 +191,7 @@ impl NetMonitor {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn draw_net_row(&self, term: &mut Terminal, x: i32, y: i32, width: usize, label: &str, percent: f32, rate: f64, colors: &ColorState, is_download: bool) {
         // Layout: Label(10) + Meter(dynamic) + Pct(6) + Rate(12)
         let label_w = 10;

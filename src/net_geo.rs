@@ -166,12 +166,7 @@ impl GeoIpLookup {
             Some(PathBuf::from("./GeoLite2-City.mmdb")),
         ];
 
-        for candidate in candidates.into_iter().flatten() {
-            if candidate.exists() {
-                return Some(candidate);
-            }
-        }
-        None
+        candidates.into_iter().flatten().find(|p| p.exists())
     }
 
     fn lookup(&self, ip: IpAddr) -> Option<(f32, f32)> {

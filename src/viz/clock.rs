@@ -17,7 +17,7 @@ fn get_tz_abbrev() -> &'static str {
     TZ_ABBREV.get_or_init(|| {
         // Try TZ environment variable first
         if let Ok(tz) = env::var("TZ") {
-            let tz_name = if tz.starts_with(':') { &tz[1..] } else { &tz };
+            let tz_name = tz.strip_prefix(':').unwrap_or(&tz);
             if !tz_name.starts_with('/') {
                 return tz_to_abbrev(tz_name);
             }
@@ -63,7 +63,7 @@ fn tz_to_abbrev(tz: &str) -> String {
         "UTC" | "Etc/UTC" => "UTC",
         _ => {
             // Fallback: extract uppercase letters
-            let abbrev: String = tz.split('/').last().unwrap_or(tz)
+            let abbrev: String = tz.split('/').next_back().unwrap_or(tz)
                 .chars()
                 .filter(|c| c.is_uppercase())
                 .take(3)
@@ -125,6 +125,7 @@ const DASH_WIDTH: usize = 3;
 const SPACING: usize = 1;
 
 #[inline]
+#[allow(clippy::too_many_arguments)]
 fn draw_big_time(term: &mut Terminal, cx: usize, cy: usize, time_str: &str, color: Color,
                  state: &ClockState, old_time: &str, show_seconds: bool, cycling: bool, cycle_digit: usize) {
     // Calculate total width
@@ -193,7 +194,7 @@ fn draw_big_time(term: &mut Terminal, cx: usize, cy: usize, time_str: &str, colo
             _ => {
                 // Check if digit changed and we're in transition
                 let old_ch = old_time.chars().nth(i).unwrap_or(' ');
-                if ch != old_ch && state.transition_frame > 0 && ch.is_digit(10) {
+                if ch != old_ch && state.transition_frame > 0 && ch.is_ascii_digit() {
                     // Show 8 during transition
                     (&DIGITS[8], DIGIT_WIDTH)
                 } else {
