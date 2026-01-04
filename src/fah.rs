@@ -103,12 +103,14 @@ fn chrono_now_iso() -> String {
 
 // Remote WebSocket message types
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]  // Serde struct - fields needed for deserialization
 struct WsLoginPayload {
     time: String,
     session: String,
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]  // Serde struct - fields needed for deserialization
 struct WsConnectMessage {
     #[serde(rename = "type")]
     msg_type: String,
@@ -117,6 +119,7 @@ struct WsConnectMessage {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]  // Serde struct - fields needed for deserialization
 struct WsEncryptedMessage {
     #[serde(rename = "type")]
     msg_type: String,
@@ -141,6 +144,7 @@ struct RemoteWsUnit {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]  // Serde struct - fields needed for deserialization
 struct RemoteWsInfo {
     version: Option<String>,
     os: Option<String>,
@@ -148,6 +152,7 @@ struct RemoteWsInfo {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]  // Serde struct - fields needed for deserialization
 struct RemoteWsContent {
     info: Option<RemoteWsInfo>,
     units: Option<Vec<RemoteWsUnit>>,
@@ -160,6 +165,7 @@ struct RemoteWsState {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]  // Serde struct - fields needed for deserialization
 struct FahTeam {
     team: u64,
     name: String,
@@ -167,6 +173,7 @@ struct FahTeam {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]  // Serde struct - fields needed for deserialization
 struct FahUser {
     name: String,
     id: u64,
@@ -178,6 +185,7 @@ struct FahUser {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]  // Serde struct - fields needed for deserialization
 struct FahMachine {
     id: String,  // API returns string ID like "KxgiNjSY..."
     name: Option<String>,
@@ -195,6 +203,7 @@ struct FahAccount {
 
 // WebSocket JSON structures for local FAH client
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]  // Serde struct - fields needed for deserialization
 struct WsInfo {
     mach_name: Option<String>,
     cpu_brand: Option<String>,
@@ -238,6 +247,7 @@ pub struct FahData {
 }
 
 #[derive(Default)]
+#[allow(dead_code)]  // Some fields reserved for future detailed views
 pub struct LocalWorkUnit {
     pub project: u32,
     pub run: u32,
@@ -345,7 +355,7 @@ impl FahDisplay {
 
         // Build request with Authorization header (browser sends fah-sid here too)
         // Include Origin header like the browser does
-        let mut request = tungstenite::http::Request::builder()
+        let request = tungstenite::http::Request::builder()
             .uri(ws_url)
             .header("Host", "node1.foldingathome.org")
             .header("Origin", "https://v8-4.foldingathome.org")
@@ -624,11 +634,13 @@ impl FahDisplay {
         // Parse connect message - machine connections have client object with pubkey/signature/payload
         // Structure: {"type":"connect","client":{"pubkey":"...","signature":"...","payload":{"account":"...","key":"..."}}}
         #[derive(Deserialize, Debug)]
+        #[allow(dead_code)]  // Serde struct - fields needed for deserialization
         struct MachineConnectPayload {
             account: Option<String>,
             key: Option<String>,
         }
         #[derive(Deserialize, Debug)]
+        #[allow(dead_code)]  // Serde struct - fields needed for deserialization
         struct MachineConnectClient {
             pubkey: Option<String>,
             signature: Option<String>,

@@ -76,6 +76,8 @@ fn tz_to_abbrev(tz: &str) -> String {
 pub struct ClockConfig {
     pub time_step: f32,
     pub show_seconds: bool,
+    pub show_date_cycle: bool,
+    pub twelve_hour: bool,
 }
 
 impl Default for ClockConfig {
@@ -83,8 +85,22 @@ impl Default for ClockConfig {
         Self {
             time_step: 0.1,
             show_seconds: true,
+            show_date_cycle: true,
+            twelve_hour: false,
         }
     }
+}
+
+// Track state for transitions and effects
+struct ClockState {
+    last_time: String,
+    transition_frame: usize,
+    showing_date: bool,
+    was_showing_date: bool,
+    last_switch: std::time::Instant,
+    cycling: bool,
+    cycle_digit: usize,
+    last_cycle: std::time::Instant,
 }
 
 // Compact 3-line digits (same as pomodoro)
@@ -101,29 +117,90 @@ const DIGITS: [[&str; 3]; 10] = [
     ["█▀█", "▀▀█", "▀▀▀"],  // 9
 ];
 
-const COLON: [&str; 3] = ["   ", " ● ", " ● "];
+const COLON: [&str; 3] = [" ▄ ", " ▄ ", "   "];
+const DASH: [&str; 3] = ["   ", "▀▀▀", "   "];
 const DIGIT_WIDTH: usize = 3;
 const COLON_WIDTH: usize = 3;
+const DASH_WIDTH: usize = 3;
 const SPACING: usize = 1;
 
 #[inline]
-fn draw_big_time(term: &mut Terminal, cx: usize, cy: usize, time_str: &str, color: Color) {
-    // Calculate total width based on time format
-    let total_width = if time_str.len() == 5 {
-        4 * (DIGIT_WIDTH + SPACING) + COLON_WIDTH
-    } else {
-        6 * (DIGIT_WIDTH + SPACING) + 2 * (COLON_WIDTH + SPACING) - SPACING
-    };
+fn draw_big_time(term: &mut Terminal, cx: usize, cy: usize, time_str: &str, color: Color,
+                 state: &ClockState, old_time: &str, show_seconds: bool, cycling: bool, cycle_digit: usize) {
+    // Calculate total width
+    let mut total_width = 0;
+    let mut first = true;
+    for ch in time_str.chars() {
+        if !first {
+            total_width += SPACING;
+        }
+        total_width += match ch {
+            ':' => COLON_WIDTH,
+            '-' => DASH_WIDTH,
+            _ => DIGIT_WIDTH,
+        };
+        first = false;
+    }
 
     let start_x = cx.saturating_sub(total_width / 2);
     let mut x_pos = start_x;
 
-    for ch in time_str.chars() {
-        let (pattern, width) = if ch == ':' {
-            (&COLON, COLON_WIDTH)
-        } else {
-            let digit = (ch as u8 - b'0') as usize;
-            (&DIGITS[digit.min(9)], DIGIT_WIDTH)
+    // Special case: show cycling digits during anti-poisoning
+    if cycling {
+        // Show all positions with the same digit
+        let digit_count = if show_seconds || state.showing_date { 8 } else { 6 };
+        x_pos = cx.saturating_sub((digit_count * (DIGIT_WIDTH + SPACING) - SPACING) / 2);
+        
+        for _ in 0..digit_count {
+            for (row, line) in DIGITS[cycle_digit].iter().enumerate() {
+                let y = (cy + row) as i32;
+                for (col, pch) in line.chars().enumerate() {
+                    if pch != ' ' {
+                        term.set((x_pos + col) as i32, y, pch, Some(color), false);
+                    }
+                }
+            }
+            x_pos += DIGIT_WIDTH + SPACING;
+        }
+        return;
+    }
+
+    // Special case: show all 8s during date/time transition
+    if state.transition_frame > 0 && state.showing_date != state.was_showing_date {
+        // Show 8 8s in a row during transition
+        let eight_str = if show_seconds || state.showing_date { "88888888" } else { "888888" };
+        x_pos = cx.saturating_sub((eight_str.len() * (DIGIT_WIDTH + SPACING) - SPACING) / 2);
+        
+        for _ in eight_str.chars() {
+            for (row, line) in DIGITS[8].iter().enumerate() {
+                let y = (cy + row) as i32;
+                for (col, pch) in line.chars().enumerate() {
+                    if pch != ' ' {
+                        term.set((x_pos + col) as i32, y, pch, Some(color), false);
+                    }
+                }
+            }
+            x_pos += DIGIT_WIDTH + SPACING;
+        }
+        return;
+    }
+
+    // Normal display
+    for (i, ch) in time_str.chars().enumerate() {
+        let (pattern, width) = match ch {
+            ':' => (&COLON, COLON_WIDTH),
+            '-' => (&DASH, DASH_WIDTH),
+            _ => {
+                // Check if digit changed and we're in transition
+                let old_ch = old_time.chars().nth(i).unwrap_or(' ');
+                if ch != old_ch && state.transition_frame > 0 && ch.is_digit(10) {
+                    // Show 8 during transition
+                    (&DIGITS[8], DIGIT_WIDTH)
+                } else {
+                    let digit = (ch as u8 - b'0') as usize;
+                    (&DIGITS[digit.min(9)], DIGIT_WIDTH)
+                }
+            }
         };
 
         for (row, line) in pattern.iter().enumerate() {
@@ -145,7 +222,7 @@ fn draw_date(term: &mut Terminal, cx: usize, y: usize, date_str: &str, color: Co
     term.set_str(start_x as i32, y as i32, date_str, Some(color), false);
 }
 
-pub fn run(config: ClockConfig) -> io::Result<()> {
+pub fn run(mut config: ClockConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
     let mut colors = ColorState::new(7); // Default to mono
 
@@ -166,12 +243,51 @@ pub fn run(config: ClockConfig) -> io::Result<()> {
     let mut time_color = Color::Cyan;
     let mut date_color = Color::DarkGrey;
 
+    // Initialize state
+    let mut state = ClockState {
+        last_time: String::new(),
+        transition_frame: 0,
+        showing_date: false,
+        was_showing_date: false,
+        last_switch: std::time::Instant::now(),
+        cycling: false,
+        cycle_digit: 0,
+        last_cycle: std::time::Instant::now(),
+    };
+
+    const TRANSITION_FRAMES: usize = 2;
+
     loop {
         // Handle input
         if let Ok(Some((code, _mods))) = term.check_key() {
             if !colors.handle_key(code) {
                 match code {
                     KeyCode::Char('q') | KeyCode::Esc => break,
+                    KeyCode::Char('d') | KeyCode::Char('D') => {
+                        // Toggle date/time display
+                        state.showing_date = !state.showing_date;
+                        state.transition_frame = TRANSITION_FRAMES;
+                    }
+                    KeyCode::Char('t') | KeyCode::Char('T') => {
+                        // Toggle 12/24 hour format
+                        config.twelve_hour = !config.twelve_hour;
+                        state.transition_frame = TRANSITION_FRAMES;
+                    }
+                    KeyCode::Char('s') | KeyCode::Char('S') => {
+                        // Toggle seconds display
+                        config.show_seconds = !config.show_seconds;
+                        state.transition_frame = TRANSITION_FRAMES;
+                    }
+                    KeyCode::Char('a') | KeyCode::Char('A') => {
+                        // Toggle auto date/time cycling
+                        config.show_date_cycle = !config.show_date_cycle;
+                    }
+                    KeyCode::Char('c') | KeyCode::Char('C') => {
+                        // Trigger anti-poisoning cycle
+                        state.cycling = true;
+                        state.cycle_digit = 0;
+                        state.last_cycle = std::time::Instant::now();
+                    }
                     _ => {}
                 }
             }
@@ -201,28 +317,98 @@ pub fn run(config: ClockConfig) -> io::Result<()> {
             }
         }
 
+        // Auto-switch between date and time
+        if config.show_date_cycle && state.last_switch.elapsed().as_secs() >= 8 {
+            state.showing_date = !state.showing_date;
+            state.last_switch = std::time::Instant::now();
+            state.transition_frame = TRANSITION_FRAMES;
+        }
+
         // Format time into reused buffer
         let now = Local::now();
         time_buf.clear();
         use std::fmt::Write;
-        if config.show_seconds {
-            let _ = write!(time_buf, "{:02}:{:02}:{:02}",
-                now.hour(), now.minute(), now.second());
+        
+        if state.showing_date {
+            // Show date instead of time
+            let _ = write!(time_buf, "{:02}-{:02}-{:02}", 
+                now.month(), now.day(), now.year() % 100);
         } else {
-            let _ = write!(time_buf, "{:02}:{:02}", now.hour(), now.minute());
+            // Show time
+            let hour = if config.twelve_hour {
+                let h = now.hour() % 12;
+                if h == 0 { 12 } else { h }
+            } else {
+                now.hour()
+            };
+            
+            if config.show_seconds {
+                let _ = write!(time_buf, "{:02}:{:02}:{:02}",
+                    hour, now.minute(), now.second());
+            } else {
+                let _ = write!(time_buf, "{:02}:{:02}", hour, now.minute());
+            }
         }
 
-        // Format date into reused buffer
+        // Format date into reused buffer with unix timestamp
         date_buf.clear();
-        let _ = write!(date_buf, "{:02}-{:02}-{} {}",
-            now.day(), now.month(), now.year(), tz_name);
+        let _ = write!(date_buf, "{:02}-{:02}-{:02} {} {}",
+            now.day(), now.month(), now.year() % 100, tz_name, now.timestamp());
+
+        // Update transition state
+        if state.last_time != time_buf && !state.last_time.is_empty() {
+            state.transition_frame = TRANSITION_FRAMES;
+        }
 
         // Render
         term.clear();
-        draw_big_time(&mut term, cx, start_y, &time_buf, time_color);
-        draw_date(&mut term, cx, start_y + 4, &date_buf, date_color);
+        draw_big_time(&mut term, cx, start_y, &time_buf, time_color, &state, &state.last_time, 
+                      config.show_seconds, state.cycling, state.cycle_digit);
+        
+        // Show inverse information below
+        if state.showing_date {
+            // When showing date, display time below (with timezone and unix timestamp)
+            let hour = if config.twelve_hour {
+                let h = now.hour() % 12;
+                if h == 0 { 12 } else { h }
+            } else {
+                now.hour()
+            };
+            
+            let time_info = if config.twelve_hour {
+                format!("{:02}:{:02}:{:02} {} {} {}", hour, now.minute(), now.second(),
+                    if now.hour() >= 12 { "PM" } else { "AM" }, tz_name, now.timestamp())
+            } else {
+                format!("{:02}:{:02}:{:02} {} {}", hour, now.minute(), now.second(), 
+                    tz_name, now.timestamp())
+            };
+            
+            let x = cx.saturating_sub(time_info.len() / 2);
+            term.set_str(x as i32, (start_y + 4) as i32, &time_info, Some(date_color), false);
+        } else {
+            // When showing time, display date below
+            draw_date(&mut term, cx, start_y + 4, &date_buf, date_color);
+        }
 
         term.present()?;
+        
+        // Update cycling animation
+        if state.cycling && state.last_cycle.elapsed().as_millis() >= 100 {
+            state.cycle_digit += 1;
+            if state.cycle_digit > 9 {
+                state.cycling = false;
+                state.cycle_digit = 0;
+            }
+            state.last_cycle = std::time::Instant::now();
+        }
+        
+        // Update state
+        state.last_time = time_buf.clone();
+        if state.transition_frame > 0 {
+            state.transition_frame -= 1;
+        }
+        state.was_showing_date = state.showing_date;
+        
         term.sleep(config.time_step);
     }
 

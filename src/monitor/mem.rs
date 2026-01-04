@@ -2,8 +2,8 @@ use crate::colors::ColorState;
 use crate::terminal::Terminal;
 use crate::monitor::{MonitorConfig, MonitorState};
 use crate::monitor::layout::{
-    draw_meter_btop_scheme, format_bytes,
-    cpu_gradient_color_scheme, text_color_scheme, muted_color_scheme, Box,
+    Box, draw_meter_btop_scheme, format_bytes,
+    cpu_gradient_color_scheme, text_color_scheme, muted_color_scheme,
 };
 use crossterm::style::Color;
 use crossterm::terminal::size;

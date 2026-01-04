@@ -14,14 +14,6 @@ pub enum PomodoroPhase {
 }
 
 impl PomodoroPhase {
-    fn name(&self) -> &'static str {
-        match self {
-            PomodoroPhase::Work => "WORK",
-            PomodoroPhase::ShortBreak => "SHORT BREAK",
-            PomodoroPhase::LongBreak => "LONG BREAK",
-        }
-    }
-
     fn color(&self) -> Color {
         match self {
             PomodoroPhase::Work => Color::Red,

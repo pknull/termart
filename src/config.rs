@@ -40,6 +40,8 @@ pub struct FractalConfig {
     pub seed: Option<u64>,
     pub draw_char: char,
     pub debug: bool,
+    pub geoip_db: Option<std::path::PathBuf>,
+    pub tilt: f32,  // Globe tilt in radians
 }
 
 /// Branch types for bonsai tree

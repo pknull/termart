@@ -31,6 +31,7 @@ Terminal-based generative art, system monitors, and utilities.
 - **GPU**: NVIDIA GPU stats (utilization, memory, temperature)
 
 ### Utilities
+- **Clock**: Digital clock with nixie tube effects and date display
 - **Weather**: Live weather display with ASCII art animations
 - **Pomodoro**: Timer with ASCII tomato visualization
 - **FAH**: Folding@home stats with real-time work unit progress
@@ -90,6 +91,7 @@ termart donut                     # Rotating torus
 termart globe                     # Globe with network nodes
 termart hex                       # Hexagon grid
 termart keyboard                  # Keyboard visualization
+termart clock                     # Digital clock with nixie effects
 ```
 
 **Common Options:**
@@ -146,6 +148,44 @@ termart gpu                       # NVIDIA GPU stats
 | Key | Action |
 |-----|--------|
 | `q` / `Esc` | Quit |
+
+### Clock
+
+```bash
+termart clock                     # Digital clock with nixie effects
+termart clock --no-seconds        # Hide seconds display
+```
+
+**Features:**
+- Alternates between time (8 seconds) and date (2 seconds)
+- Nixie tube anti-poisoning effect (cycles through all digits)
+- Blinking separators (colons/dashes)
+- Unix timestamp display
+- 12/24 hour format support
+- Block-style digit display
+
+**Display Format:**
+- Time mode: `23:45:12` with `29-12-24 EST @1735519543` below
+- Date mode: `29-12-24` with `23:45:12 EST @1735519543` below
+- 12-hour mode shows AM/PM indicator
+
+**Controls:**
+| Key | Action |
+|-----|--------|
+| `C` | Trigger nixie tube cycling (all digits 0-9) |
+| `+/-` | Adjust cycling speed |
+| `D` | Toggle between date and time display |
+| `S` | Toggle seconds display |
+| `T` | Toggle 12/24 hour format |
+| `A` | Toggle automatic date/time cycling |
+| `1-9` | Change color schemes |
+| `Space` | Pause/Resume |
+| `q` / `Esc` | Quit |
+
+**Nixie Tube Effects:**
+- Digit transitions briefly show "8" (all segments lit)
+- Anti-poisoning cycle runs every 5 minutes automatically
+- Manual cycle with 'C' shows all digits counting 0-9 simultaneously
 
 ### Weather
 
@@ -290,6 +330,12 @@ termart globe
 
 # Live keyboard heatmap
 termart keyboard
+
+# Digital clock with nixie effects
+termart clock
+
+# Clock without seconds, 12-hour format
+termart clock --no-seconds  # Then press 'T' for 12-hour
 ```
 
 ## License

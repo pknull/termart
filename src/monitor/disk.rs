@@ -12,10 +12,8 @@ use std::io;
 
 pub struct DiskInfo {
     pub mount_point: String,
-    pub device: String,
     pub total: u64,
     pub used: u64,
-    pub free: u64,
 }
 
 impl DiskInfo {
@@ -68,10 +66,8 @@ impl DiskMonitor {
                 if total > 0 {
                     self.disks.push(DiskInfo {
                         mount_point: mount_point.to_string(),
-                        device: device.to_string(),
                         total,
                         used,
-                        free,
                     });
                 }
             }

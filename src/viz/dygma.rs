@@ -202,8 +202,37 @@ const DEFAULT_LABELS: &[&str] = &[
     "T5", "T6", "T7", "T8",
 ];
 
-/// Gap between keyboard halves (in key units)
-const SPLIT_GAP: f32 = 2.5;
+/// Bazecor led_map: maps (row, col) grid position to LED index
+/// 255 = no LED at this position
+const LED_MAP: [[u8; 16]; 5] = [
+    // Row 0: [0,1,2,3,4,5,6,XX,XX,39,38,37,36,35,34,33]
+    [0, 1, 2, 3, 4, 5, 6, 255, 255, 39, 38, 37, 36, 35, 34, 33],
+    // Row 1: [7,8,9,10,11,12,XX,XX,47,46,45,44,43,42,41,40]
+    [7, 8, 9, 10, 11, 12, 255, 255, 47, 46, 45, 44, 43, 42, 41, 40],
+    // Row 2: [13,14,15,16,17,18,XX,29,XX,54,53,52,51,50,49,48]
+    [13, 14, 15, 16, 17, 18, 255, 29, 255, 54, 53, 52, 51, 50, 49, 48],
+    // Row 3: [19,20,21,22,23,24,25,XX,XX,XX,60,59,58,57,56,55]
+    [19, 20, 21, 22, 23, 24, 25, 255, 255, 255, 60, 59, 58, 57, 56, 55],
+    // Row 4: [26,27,28,29,30,XX,31,32,68,67,66,65,64,63,62,61]
+    [26, 27, 28, 29, 30, 255, 31, 32, 68, 67, 66, 65, 64, 63, 62, 61],
+];
+
+/// Convert physical key index to LED colormap index via keymap position
+#[inline]
+fn physical_to_led_index(physical_idx: usize) -> Option<u8> {
+    // Get keymap index for this physical key
+    let keymap_idx = PHYSICAL_TO_KEYMAP.get(physical_idx)?;
+    // Convert keymap index to (row, col) in 5x16 grid
+    let row = keymap_idx / 16;
+    let col = keymap_idx % 16;
+    // Look up LED index from led_map
+    if row < 5 {
+        let led = LED_MAP[row][col];
+        if led != 255 { Some(led) } else { None }
+    } else {
+        None
+    }
+}
 
 // ============================================================================
 // Kaleidoscope Keycode Conversion
@@ -698,26 +727,106 @@ impl FocusConnection {
         }
     }
 
-    /// Query active layers - returns all active layer indices from highest to lowest
-    /// layer.state returns 32 space-separated values (0=inactive, 1=active)
-    fn active_layers(&mut self) -> Option<Vec<u8>> {
-        let response = self.command("layer.state")?;
+    /// Query the LED palette (16 RGB colors)
+    /// Returns Vec of (R, G, B) tuples
+    fn palette(&mut self) -> Option<Vec<(u8, u8, u8)>> {
+        use std::io::{Read, Write};
 
-        // Parse "0 0 1 0 0 ..." format - collect all active layers
-        let states: Vec<bool> = response
+        let _ = self.port.clear(serialport::ClearBuffer::Input);
+        writeln!(self.port, "palette").ok()?;
+        self.port.flush().ok()?;
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        let mut buffer = vec![0u8; 1024];
+        let mut response = String::new();
+
+        loop {
+            match self.port.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(n) => {
+                    if let Ok(s) = std::str::from_utf8(&buffer[..n]) {
+                        response.push_str(s);
+                        if response.contains("\r\n.\r\n") {
+                            break;
+                        }
+                    }
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => break,
+                Err(_) => break,
+            }
+        }
+
+        // Parse space-separated R G B values (16 colors = 48 values)
+        let values: Vec<u8> = response
             .split_whitespace()
-            .filter_map(|s| s.parse::<u8>().ok())
-            .map(|v| v != 0)
+            .filter(|s| *s != ".")
+            .filter_map(|s| s.parse().ok())
             .collect();
 
-        // Return all active layers from highest to lowest (for proper layer stacking)
-        let mut active: Vec<u8> = states.iter()
-            .enumerate()
-            .filter(|(_, &active)| active)
-            .map(|(i, _)| i as u8)
+        if values.len() >= 48 {
+            let mut colors = Vec::with_capacity(16);
+            for i in 0..16 {
+                colors.push((values[i * 3], values[i * 3 + 1], values[i * 3 + 2]));
+            }
+            Some(colors)
+        } else {
+            None
+        }
+    }
+
+    /// Query the LED colormap (per-key palette indices for each layer)
+    /// Returns Vec of layers, each layer is Vec of palette indices (0-15)
+    fn colormap(&mut self) -> Option<Vec<Vec<u8>>> {
+        use std::io::{Read, Write};
+
+        let _ = self.port.clear(serialport::ClearBuffer::Input);
+        writeln!(self.port, "colormap.map").ok()?;
+        self.port.flush().ok()?;
+
+        std::thread::sleep(std::time::Duration::from_millis(500));
+
+        let mut buffer = vec![0u8; 8192];
+        let mut response = String::new();
+
+        loop {
+            match self.port.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(n) => {
+                    if let Ok(s) = std::str::from_utf8(&buffer[..n]) {
+                        response.push_str(s);
+                        if response.contains("\r\n.\r\n") {
+                            break;
+                        }
+                    }
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => break,
+                Err(_) => break,
+            }
+        }
+
+        // Parse space-separated palette indices
+        // Dygma Raise: 132 LEDs per layer (keys + underglow), 10 layers
+        let indices: Vec<u8> = response
+            .split_whitespace()
+            .filter(|s| *s != ".")
+            .filter_map(|s| s.parse().ok())
             .collect();
-        active.reverse();  // Highest first for priority lookup
-        Some(active)
+
+        // Try to detect layer count (132 LEDs per layer for Raise)
+        let leds_per_layer = 132;
+        if indices.len() >= leds_per_layer {
+            let num_layers = indices.len() / leds_per_layer;
+            let mut layers = Vec::with_capacity(num_layers);
+            for layer in 0..num_layers {
+                let start = layer * leds_per_layer;
+                let end = start + leds_per_layer;
+                layers.push(indices[start..end].to_vec());
+            }
+            Some(layers)
+        } else {
+            None
+        }
     }
 }
 
@@ -752,6 +861,19 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
         None
     };
 
+    // Query LED palette and colormap
+    let led_palette: Option<Vec<(u8, u8, u8)>> = if let Some(ref mut f) = focus {
+        f.palette()
+    } else {
+        None
+    };
+
+    let led_colormap: Option<Vec<Vec<u8>>> = if let Some(ref mut f) = focus {
+        f.colormap()
+    } else {
+        None
+    };
+
     // Store keymap status for debug display
     let keymap_status = match &keymap {
         Some(km) => {
@@ -759,6 +881,20 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
             format!("KM:{}/{}", km.len(), total_keys)
         }
         None => "KM:FAIL".to_string(),
+    };
+
+    // Store LED status for debug display
+    let led_status = match (&led_palette, &led_colormap) {
+        (Some(p), Some(c)) => {
+            // Show first 4 palette colors for debugging
+            let colors: Vec<String> = p.iter().take(4)
+                .map(|(r, g, b)| format!("{:02X}{:02X}{:02X}", r, g, b))
+                .collect();
+            format!("LED:{}c/{}L [{}]", p.len(), c.len(), colors.join(","))
+        }
+        (Some(p), None) => format!("LED:{}c/nomap", p.len()),
+        (None, Some(c)) => format!("LED:nopal/{}L", c.len()),
+        (None, None) => "LED:FAIL".to_string(),
     };
 
     // Spawn evdev listener threads
@@ -989,7 +1125,7 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
         term.clear();
 
         let w = width as f32;
-        let h = height as f32;
+        let _h = height as f32;
 
         // Calculate scaling based on available space for each half
         let half_char_width = HALF_WIDTH * 3.0;  // Each half in character units
@@ -1043,7 +1179,24 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
             } else {
                 "km: None".to_string()
             };
-            let debug_status = format!("{} | {} | {}", keymap_status, km_samples, debug_info);
+            // Debug: show LED info for H key (physical 47 → LED 54)
+            let h_led_info = if let (Some(ref p), Some(ref c)) = (&led_palette, &led_colormap) {
+                if let Some(h_led_idx) = physical_to_led_index(47) { // H key
+                    let layer0 = c.get(0).map(|l| {
+                        let led_info = l.get(h_led_idx as usize).map(|&pi| {
+                            let color = p.get(pi as usize).map(|(r,g,b)| format!("{:02X}{:02X}{:02X}", r, g, b)).unwrap_or("?".into());
+                            format!("H:L{}→p{}={}", h_led_idx, pi, color)
+                        }).unwrap_or(format!("H:L{}:?", h_led_idx));
+                        led_info
+                    }).unwrap_or_default();
+                    layer0
+                } else {
+                    "H:NoLED".to_string()
+                }
+            } else {
+                String::new()
+            };
+            let debug_status = format!("{} | {} | {} | {} | {}", keymap_status, led_status, h_led_info, km_samples, debug_info);
             term.set_str(1, height as i32 - 1, &debug_status, Some(status_color), false);
         }
 
@@ -1061,6 +1214,8 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
             keymap.as_ref(),
             &layer_stack,
             shifted,
+            led_palette.as_ref(),
+            led_colormap.as_ref(),
         );
 
         // Draw right half (aligned to right edge)
@@ -1077,6 +1232,8 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
             keymap.as_ref(),
             &layer_stack,
             shifted,
+            led_palette.as_ref(),
+            led_colormap.as_ref(),
         );
 
         term.present()?;
@@ -1105,6 +1262,8 @@ fn draw_half(
     keymap: Option<&Vec<Vec<u16>>>,
     layers: &[u8],  // Active layers from highest to lowest for stacking
     shifted: bool,
+    led_palette: Option<&Vec<(u8, u8, u8)>>,
+    led_colormap: Option<&Vec<Vec<u8>>>,
 ) {
     for (idx, pos) in main_keys.iter().chain(thumb_keys.iter()) {
         // Use signed math to handle negative offsets (for right half stagger)
@@ -1112,16 +1271,20 @@ fn draw_half(
         let y = base_y + pos.y as usize;  // No vertical scaling - rows always 1 char apart
         let w = ((pos.w * scale * 3.0) as usize).max(1);  // 3 char label width
 
+        // Get keymap index for this physical key
+        let keymap_idx = PHYSICAL_TO_KEYMAP.get(*idx).copied().unwrap_or(255);
+
         // Get label from keymap with layer stacking (highest to lowest)
         let label: String = if let Some(km) = keymap {
-            let keymap_idx = PHYSICAL_TO_KEYMAP.get(*idx).copied().unwrap_or(255);
             if keymap_idx != 255 {
                 // Try each active layer from highest to lowest
                 let mut found_label = String::new();
+                let mut found_any_keycode = false;  // Track if we found keymap data (even transparent)
                 for &layer in layers {
                     let layer_idx = (layer as usize).min(km.len().saturating_sub(1));
                     if let Some(layer_keys) = km.get(layer_idx) {
                         if let Some(&keycode) = layer_keys.get(keymap_idx) {
+                            found_any_keycode = true;
                             // 0 and 65535 are transparent - try next layer
                             if keycode != 0 && keycode != 65535 {
                                 let label = keycode_to_label(keycode, shifted);
@@ -1134,8 +1297,13 @@ fn draw_half(
                     }
                 }
                 if found_label.is_empty() {
-                    // All layers transparent - use default
-                    DEFAULT_LABELS.get(*idx).copied().unwrap_or("").to_string()
+                    if found_any_keycode {
+                        // All layers had transparent keycodes - show transparent indicator
+                        "·".to_string()
+                    } else {
+                        // No keymap data at this position - use default
+                        DEFAULT_LABELS.get(*idx).copied().unwrap_or("").to_string()
+                    }
                 } else {
                     found_label
                 }
@@ -1161,11 +1329,38 @@ fn draw_half(
             continue;
         }
 
+        // Get LED color for this key from colormap (use top active layer)
+        // Uses Bazecor led_map: left 0-32, right 33-68 (reverse order per row)
+        let led_color: Option<(u8, u8, u8)> = if let (Some(palette), Some(colormap)) = (led_palette, led_colormap) {
+            if let Some(led_idx) = physical_to_led_index(*idx) {
+                // Use top active layer for LED color
+                let top_layer = layers.first().copied().unwrap_or(0) as usize;
+                if let Some(layer_colors) = colormap.get(top_layer) {
+                    if let Some(&palette_idx) = layer_colors.get(led_idx as usize) {
+                        // Palette index 255 often means "off" or "transparent"
+                        if palette_idx < 16 {
+                            palette.get(palette_idx as usize).copied()
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         // Get heat for this key (match by uppercase label for consistency)
         let heat_key = label.to_uppercase();
         let key_heat = heat.get(&heat_key).copied().unwrap_or(0.0);
 
-        draw_key(term, x, y, w, &label, key_heat, scheme);
+        draw_key(term, x, y, w, &label, key_heat, scheme, led_color);
     }
 }
 
@@ -1177,13 +1372,28 @@ fn draw_key(
     label: &str,
     heat: f32,
     scheme: u8,
+    led_color: Option<(u8, u8, u8)>,
 ) {
-    let intensity = if heat > 0.7 { 3 }
-        else if heat > 0.3 { 2 }
-        else if heat > 0.0 { 1 }
-        else { 0 };
+    use crossterm::style::Color;
 
-    let (color, bold) = scheme_color(scheme, intensity, heat > 0.7);
+    // Determine color: LED color if available and not pressed, scheme color otherwise
+    let (color, bold) = if let Some((r, g, b)) = led_color {
+        if heat > 0.0 {
+            // Key is pressed - brighten the LED color
+            let brighten = |c: u8| -> u8 { c.saturating_add(80) };
+            (Color::Rgb { r: brighten(r), g: brighten(g), b: brighten(b) }, true)
+        } else {
+            // Use LED color directly
+            (Color::Rgb { r, g, b }, false)
+        }
+    } else {
+        // Fallback to scheme color
+        let intensity = if heat > 0.7 { 3 }
+            else if heat > 0.3 { 2 }
+            else if heat > 0.0 { 1 }
+            else { 0 };
+        scheme_color(scheme, intensity, heat > 0.7)
+    };
 
     // Truncate and center label
     let display: String = label.chars().take(width).collect();

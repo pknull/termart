@@ -6,6 +6,8 @@ use std::path::PathBuf;
 pub struct Settings {
     #[serde(default)]
     pub fah: FahSettings,
+    #[serde(default)]
+    pub globe: GlobeSettings,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -15,6 +17,11 @@ pub struct FahSettings {
     pub password: Option<String>,
     pub fah_secret: Option<String>,  // Base64-encoded PKCS#8 RSA private key from browser localStorage
     pub fah_sid: Option<String>,     // Session ID from browser localStorage (fah-sid)
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct GlobeSettings {
+    pub geoip_db: Option<PathBuf>,   // Path to GeoLite2-City.mmdb database
 }
 
 impl Settings {
@@ -35,11 +42,5 @@ impl Settings {
             .unwrap_or_else(|| PathBuf::from("."))
             .join("termart")
             .join("config.toml")
-    }
-
-    pub fn config_dir() -> PathBuf {
-        dirs::config_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("termart")
     }
 }

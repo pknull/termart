@@ -8,9 +8,8 @@ pub mod gpu;
 pub mod ps;
 pub mod docker;
 
-use crate::colors::{ColorState, scheme_color};
+use crate::colors::ColorState;
 use crossterm::event::{KeyCode, KeyModifiers};
-use crossterm::style::Color;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum MonitorType {
@@ -73,55 +72,6 @@ impl MonitorState {
             _ => {}
         }
         false
-    }
-
-    /// Get color based on value percentage (0-100) - semantic in mono, scheme otherwise
-    pub fn value_color(&self, pct: f32) -> Color {
-        if self.colors.is_mono() {
-            // Semantic colors: green < 50%, yellow 50-80%, red > 80%
-            if pct < 50.0 {
-                Color::Green
-            } else if pct < 80.0 {
-                Color::Yellow
-            } else {
-                Color::Red
-            }
-        } else {
-            let intensity = if pct < 30.0 { 1 } else if pct < 60.0 { 2 } else { 3 };
-            scheme_color(self.colors.scheme, intensity, pct > 80.0).0
-        }
-    }
-
-    /// Get bar color for progress bars
-    pub fn bar_color(&self, pct: f32) -> Color {
-        self.value_color(pct)
-    }
-
-    /// Get text/label color
-    pub fn text_color(&self) -> Color {
-        if self.colors.is_mono() {
-            Color::White
-        } else {
-            scheme_color(self.colors.scheme, 2, false).0
-        }
-    }
-
-    /// Get muted/secondary text color
-    pub fn muted_color(&self) -> Color {
-        if self.colors.is_mono() {
-            Color::DarkGrey
-        } else {
-            scheme_color(self.colors.scheme, 0, false).0
-        }
-    }
-
-    /// Get header/title color
-    pub fn header_color(&self) -> Color {
-        if self.colors.is_mono() {
-            Color::Cyan
-        } else {
-            scheme_color(self.colors.scheme, 3, true).0
-        }
     }
 }
 

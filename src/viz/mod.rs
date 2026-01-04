@@ -20,7 +20,9 @@ pub mod pong;
 pub mod dygma;
 
 use crossterm::event::{KeyCode, KeyModifiers};
-use crossterm::style::Color;
+
+// Re-export scheme_color from colors module for viz users
+pub use crate::colors::scheme_color;
 
 /// Runtime state for interactive controls (shared by all visualizations)
 pub struct VizState {
@@ -77,68 +79,3 @@ impl VizState {
     }
 }
 
-/// Get color based on scheme and intensity
-pub fn scheme_color(scheme: u8, intensity: u8, bold: bool) -> (Color, bool) {
-    match scheme {
-        1 => match intensity {  // Red/Yellow (fire)
-            0 => (Color::DarkRed, false),
-            1 => (Color::Red, false),
-            2 => (Color::DarkYellow, bold),
-            _ => (Color::Yellow, true),
-        },
-        2 => match intensity {  // Blue/Cyan (ice)
-            0 => (Color::DarkBlue, false),
-            1 => (Color::Blue, false),
-            2 => (Color::DarkCyan, bold),
-            _ => (Color::Cyan, true),
-        },
-        3 => match intensity {  // Magenta/Red (pink)
-            0 => (Color::DarkMagenta, false),
-            1 => (Color::Magenta, false),
-            2 => (Color::Red, bold),
-            _ => (Color::White, true),
-        },
-        4 => match intensity {  // Yellow/White (gold)
-            0 => (Color::DarkYellow, false),
-            1 => (Color::Yellow, false),
-            2 => (Color::White, bold),
-            _ => (Color::White, true),
-        },
-        5 => match intensity {  // Cyan/White (electric)
-            0 => (Color::DarkCyan, false),
-            1 => (Color::Cyan, false),
-            2 => (Color::White, bold),
-            _ => (Color::White, true),
-        },
-        6 => match intensity {  // Red/Magenta (lava)
-            0 => (Color::DarkRed, false),
-            1 => (Color::Red, false),
-            2 => (Color::Magenta, bold),
-            _ => (Color::White, true),
-        },
-        7 => match intensity {  // White/Grey (mono)
-            0 => (Color::DarkGrey, false),
-            1 => (Color::Grey, false),
-            2 => (Color::White, bold),
-            _ => (Color::White, true),
-        },
-        8 => match intensity {  // Rainbow cycling
-            0 => (Color::Red, false),
-            1 => (Color::Yellow, false),
-            2 => (Color::Green, bold),
-            _ => (Color::Cyan, true),
-        },
-        9 => match intensity {  // Blue/Magenta (neon)
-            0 => (Color::DarkBlue, false),
-            1 => (Color::Blue, false),
-            2 => (Color::Magenta, bold),
-            _ => (Color::White, true),
-        },
-        _ => match intensity {  // Default: Green (matrix) - classic cmatrix look
-            0 => (Color::DarkGreen, false),
-            1 => (Color::Green, false),
-            2 => (Color::Green, true),
-            _ => (Color::White, true),  // Bright white for head
-        },
-    }
-}

@@ -101,37 +101,3 @@ pub fn scheme_color(scheme: u8, intensity: u8, bold: bool) -> (Color, bool) {
         },
     }
 }
-
-/// Map semantic status color to scheme color
-/// Used when not in mono mode to theme status indicators
-pub fn status_to_scheme(scheme: u8, status: StatusColor) -> Color {
-    if scheme == 7 {
-        // Mono mode - use semantic colors
-        match status {
-            StatusColor::Good => Color::Green,
-            StatusColor::Warning => Color::Yellow,
-            StatusColor::Critical => Color::Red,
-            StatusColor::Info => Color::Cyan,
-            StatusColor::Muted => Color::DarkGrey,
-        }
-    } else {
-        // Themed mode - map to scheme intensity
-        let intensity = match status {
-            StatusColor::Muted => 0,
-            StatusColor::Info => 1,
-            StatusColor::Good => 2,
-            StatusColor::Warning => 2,
-            StatusColor::Critical => 3,
-        };
-        scheme_color(scheme, intensity, false).0
-    }
-}
-
-#[derive(Clone, Copy)]
-pub enum StatusColor {
-    Good,      // Green in mono
-    Warning,   // Yellow in mono
-    Critical,  // Red in mono
-    Info,      // Cyan in mono
-    Muted,     // DarkGrey in mono
-}
