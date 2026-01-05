@@ -8,6 +8,8 @@ pub struct Settings {
     pub fah: FahSettings,
     #[serde(default)]
     pub globe: GlobeSettings,
+    #[serde(default)]
+    pub sunlight: SunlightSettings,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -22,6 +24,12 @@ pub struct FahSettings {
 #[derive(Debug, Default, Deserialize)]
 pub struct GlobeSettings {
     pub geoip_db: Option<PathBuf>,   // Path to GeoLite2-City.mmdb database
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct SunlightSettings {
+    pub latitude: Option<f64>,       // Latitude in degrees (-90 to 90)
+    pub longitude: Option<f64>,      // Longitude in degrees (-180 to 180)
 }
 
 impl Settings {

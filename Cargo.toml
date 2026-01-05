@@ -29,6 +29,7 @@ cbc = "0.1"
 chrono = "0.4"
 serialport = "4.3"
 maxminddb = "0.24"
+sunrise-sunset-calculator = "1.0"
 
 [profile.release]
 opt-level = 3

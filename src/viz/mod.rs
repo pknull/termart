@@ -18,6 +18,7 @@ pub mod keyboard;
 pub mod clock;
 pub mod pong;
 pub mod dygma;
+pub mod sunlight;
 
 use crossterm::event::{KeyCode, KeyModifiers};
 

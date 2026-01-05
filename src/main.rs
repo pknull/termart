@@ -219,6 +219,25 @@ enum Commands {
         no_seconds: bool,
     },
 
+    /// Sunlight cycle visualization with screen temperature control
+    Sunlight {
+        /// Animation speed (seconds per frame)
+        #[arg(short, long, default_value = "0.1")]
+        time: f32,
+
+        /// Latitude in degrees (-90 to 90)
+        #[arg(long)]
+        lat: Option<f64>,
+
+        /// Longitude in degrees (-180 to 180)
+        #[arg(long)]
+        lon: Option<f64>,
+
+        /// Disable screen gamma adjustment
+        #[arg(long)]
+        no_gamma: bool,
+    },
+
     /// Pong - two player game
     Pong {
         /// Game speed (seconds per frame)
@@ -415,6 +434,25 @@ fn main() -> io::Result<()> {
                 ..Default::default()
             };
             viz::clock::run(config)?;
+        }
+        Commands::Sunlight { time, lat, lon, no_gamma } => {
+            let settings = settings::Settings::load();
+
+            // Location: CLI > config file > NYC default
+            let latitude = lat
+                .or(settings.sunlight.latitude)
+                .unwrap_or(40.7128);
+            let longitude = lon
+                .or(settings.sunlight.longitude)
+                .unwrap_or(-74.0060);
+
+            let config = viz::sunlight::SunlightConfig {
+                time_step: time,
+                latitude,
+                longitude,
+                adjust_gamma: !no_gamma,
+            };
+            viz::sunlight::run(config)?;
         }
         Commands::Pong { time } => {
             viz::pong::run(time)?;
