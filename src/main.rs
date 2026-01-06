@@ -236,6 +236,26 @@ enum Commands {
         /// Disable screen gamma adjustment
         #[arg(long)]
         no_gamma: bool,
+
+        /// Demo mode: cycle through day quickly
+        #[arg(long)]
+        demo: bool,
+
+        /// Demo speed: hours per second (default 2.0 = full day in 12s)
+        #[arg(long, default_value = "2.0")]
+        demo_speed: f32,
+
+        /// Night color temperature in Kelvin (1900-6500, default 3400 like f.lux)
+        #[arg(long)]
+        night_temp: Option<u32>,
+
+        /// Night blue gamma (0.0-1.0, overridden by --night-temp)
+        #[arg(long)]
+        night_blue: Option<f64>,
+
+        /// Night green gamma (0.0-1.0, overridden by --night-temp)
+        #[arg(long)]
+        night_green: Option<f64>,
     },
 
     /// Pong - two player game
@@ -435,7 +455,7 @@ fn main() -> io::Result<()> {
             };
             viz::clock::run(config)?;
         }
-        Commands::Sunlight { time, lat, lon, no_gamma } => {
+        Commands::Sunlight { time, lat, lon, no_gamma, demo, demo_speed, night_temp, night_blue, night_green } => {
             let settings = settings::Settings::load();
 
             // Location: CLI > config file > NYC default
@@ -446,11 +466,27 @@ fn main() -> io::Result<()> {
                 .or(settings.sunlight.longitude)
                 .unwrap_or(-74.0060);
 
+            // Night temperature: --night-temp in Kelvin, or individual --night-blue/--night-green
+            // Default is 3400K (f.lux default)
+            let default_kelvin = 3400;
+            let (_, default_g, default_b) = viz::sunlight::kelvin_to_gamma(default_kelvin);
+
+            let (night_green_val, night_blue_val) = if let Some(kelvin) = night_temp {
+                let (_, g, b) = viz::sunlight::kelvin_to_gamma(kelvin);
+                (g, b)
+            } else {
+                (night_green.unwrap_or(default_g), night_blue.unwrap_or(default_b))
+            };
+
             let config = viz::sunlight::SunlightConfig {
                 time_step: time,
                 latitude,
                 longitude,
                 adjust_gamma: !no_gamma,
+                demo,
+                demo_speed,
+                night_blue: night_blue_val,
+                night_green: night_green_val,
             };
             viz::sunlight::run(config)?;
         }

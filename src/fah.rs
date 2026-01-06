@@ -16,7 +16,7 @@ use base64::Engine;
 use crossterm::event::KeyCode;
 use crossterm::terminal::size;
 use pbkdf2::pbkdf2_hmac;
-use rsa::{RsaPrivateKey, Oaep, pkcs8::DecodePrivateKey, pkcs8::EncodePublicKey, traits::PublicKeyParts};
+use rsa::{RsaPrivateKey, RsaPublicKey, Oaep, pkcs8::DecodePrivateKey, pkcs8::DecodePublicKey, pkcs8::EncodePublicKey, traits::PublicKeyParts};
 use rsa::pkcs1v15::SigningKey;
 use rsa::signature::{Signer, SignatureEncoding};
 use serde::Deserialize;
@@ -462,34 +462,9 @@ impl FahDisplay {
         self.remote_ws = Some(ws);
         self.remote_ws_keys.clear();
 
-        // Process initial messages (this may trigger session-open sends)
+        // Process initial messages (this triggers session-open sends via machine connect flow)
         for text in &initial_msgs {
             self.parse_remote_ws_message(text, &private_key);
-        }
-
-        // TEMPORARY: Hardcode AES keys extracted from browser for testing
-        // TODO: Fix machine connect flow to derive keys properly
-        if self.remote_ws_keys.is_empty() {
-            debug_log!("[WS] No keys from machine connects, using hardcoded keys for testing");
-
-            fn hex_to_bytes(s: &str) -> Vec<u8> {
-                (0..s.len()).step_by(2)
-                    .map(|i| u8::from_str_radix(&s[i..i+2], 16).unwrap())
-                    .collect()
-            }
-
-            // pk-lintop
-            let key1 = hex_to_bytes("cac9560e8a4f7e448a1f14e5599dfc9be96f1f8c4135a64c147e33b96b9ef8b6");
-            self.remote_ws_keys.insert("KxgiNjSY3-3El_A2OUQY5oV4SNk1YBh9cSSu-bYGUO8".to_string(), key1);
-            // PKWintop
-            let key2 = hex_to_bytes("45bafc144556fa844aabb55d364e2b6575f6dd4c87d8bb2002794a4a18d4a970");
-            self.remote_ws_keys.insert("aH6iJbamDjGPiuupobkf73ATwbBBUM_oKqkdFdyIYjA".to_string(), key2);
-            debug_log!("[WS] Injected 2 hardcoded AES keys");
-
-            // Send session-open to both machines
-            for machine_id in self.remote_machine_ids.clone() {
-                self.send_session_open(&machine_id);
-            }
         }
 
         // Set non-blocking for ongoing updates
@@ -670,18 +645,27 @@ impl FahDisplay {
                     // Machine connection - extract key from payload
                     if let Some(payload) = client.payload {
                         if let Some(key_b64) = payload.key {
-                            // Compute machine ID from public key (SHA-256 of SPKI DER, base64url encoded)
-                            // Browser uses: pubkey_id = SHA256(spki_der_bytes)
-                            // The pubkey is in STANDARD base64 (not URL-safe)
+                            // Compute machine ID from public key (SHA-256 of RSA modulus N, base64url encoded)
+                            // Same as account ID: FAH uses SHA256(modulus_bytes), not SHA256(spki_der)
                             let machine_id = if let Some(ref pubkey_b64) = client.pubkey {
                                 // Try standard base64 first (FAH uses standard for pubkeys)
                                 let pubkey_bytes = base64::engine::general_purpose::STANDARD.decode(pubkey_b64)
                                     .or_else(|_| base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(pubkey_b64));
                                 if let Ok(pubkey_bytes) = pubkey_bytes {
-                                    let mut hasher = Sha256::new();
-                                    hasher.update(&pubkey_bytes);
-                                    let hash = hasher.finalize();
-                                    base64url_encode(&hash)
+                                    // Parse the SPKI DER to extract RSA public key
+                                    match RsaPublicKey::from_public_key_der(&pubkey_bytes) {
+                                        Ok(rsa_pubkey) => {
+                                            // Machine ID = SHA256(modulus N), same as account ID
+                                            let modulus_bytes = rsa_pubkey.n().to_bytes_be();
+                                            let mut hasher = Sha256::new();
+                                            hasher.update(&modulus_bytes);
+                                            base64url_encode(&hasher.finalize())
+                                        }
+                                        Err(e) => {
+                                            debug_log!("[WS] Failed to parse pubkey DER: {:?}", e);
+                                            "unknown".to_string()
+                                        }
+                                    }
                                 } else {
                                     debug_log!("[WS] Failed to decode pubkey base64");
                                     "unknown".to_string()
