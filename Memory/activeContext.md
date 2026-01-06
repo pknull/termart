@@ -1,6 +1,6 @@
 ---
-version: "2.7"
-lastUpdated: "2026-01-04"
+version: "2.8"
+lastUpdated: "2026-01-06"
 lifecycle: core
 stakeholder: pknull
 changeTrigger: "session end, significant changes"
@@ -23,6 +23,26 @@ Project expanded with system monitors and utilities:
 - **Folding@home monitor** with real-time WebSocket updates
 
 ## Recent Changes
+
+### Session 2026-01-06 (Sunlight Visualization Enhancements)
+- **Demo mode added**: `--demo` flag cycles through day quickly
+  - `--demo-speed` controls hours per second (default 2.0 = full day in 12 seconds)
+  - Demo starts at current time, not midnight
+  - Immediate gamma application on startup
+- **f.lux-style phases implemented**:
+  - Phase enum: Night, Sunrise, Day, Sunset
+  - 1-hour smooth transitions using smoothstep easing (3t² - 2t³)
+  - Phase displayed in colored text on visualization
+- **Kelvin-based temperature control**:
+  - `--night-temp` accepts Kelvin value (1900-6500)
+  - Default 3400K matches f.lux default
+  - Uses Tanner Helland algorithm (same as redshift/f.lux)
+  - Individual `--night-blue` and `--night-green` still available for manual tuning
+- **Critical xrandr fix**:
+  - Bug: xrandr rejects gamma values of 0 ("gamma correction factors must be positive")
+  - Low Kelvin values (1000K) produced blue=0.0
+  - Fix: Clamp all gamma values to minimum 0.1 in both `kelvin_to_gamma()` and `temp_to_gamma()`
+- **Public API**: `kelvin_to_gamma()` exported for CLI to convert --night-temp to gamma values
 
 ### Session 2026-01-04 (Docker Sorting Feature)
 - **Sorting added to Docker monitor**:
