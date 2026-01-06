@@ -1,5 +1,5 @@
 ---
-version: "2.8"
+version: "2.9"
 lastUpdated: "2026-01-06"
 lifecycle: core
 stakeholder: pknull
@@ -23,6 +23,23 @@ Project expanded with system monitors and utilities:
 - **Folding@home monitor** with real-time WebSocket updates
 
 ## Recent Changes
+
+### Session 2026-01-06 (FAH Machine ID Fix)
+- **Bug**: New machines (homebox) not appearing in FAH monitor
+- **Root cause**: Machine ID computed from SHA256(full_SPKI_DER) instead of SHA256(RSA_modulus_N)
+  - Same bug pattern as comparing `hash(serialized_object)` vs `hash(object.key_field)`
+  - Account ID computation (working) used modulus N; machine ID (broken) used full SPKI bytes
+- **Fix**: Parse SPKI DER → extract RSA public key → get modulus N → SHA256 → base64url
+  - Added `RsaPublicKey` and `DecodePublicKey` imports
+  - Machine ID computation now matches account ID pattern (lines 415-418 vs 680-687)
+- **Hardcoded keys removed**: Dynamic key derivation works for all machines
+  - Removed ~25 lines of temporary hardcoded AES session keys
+  - All 3 machines (pk-lintop, PKWintop, homebox) now connect automatically
+- **Security assessment**: Previously committed ephemeral AES keys assessed as no-risk
+  - Keys are session-derived (rotate on reconnect) - those specific keys already stale
+  - Require RSA private key (never committed) to decrypt new sessions
+  - Panel consensus: No history rewrite needed
+- **Sunlight tweak**: Demo mode displays HH:MM:00 instead of computed seconds
 
 ### Session 2026-01-06 (Sunlight Visualization Enhancements)
 - **Demo mode added**: `--demo` flag cycles through day quickly
