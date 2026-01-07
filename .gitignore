@@ -20,3 +20,9 @@ Thumbs.db
 asha/
 .claude/commands/save-react.md
 .opencode/command/save-react.md
+
+# Asha runtime
+.asha/
+Memory/sessions/
+Memory/vector_db/
+Memory/reasoning_bank/

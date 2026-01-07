@@ -1,1 +1,0 @@
-/home/pknull/Code/termart/asha/commands/index.md
