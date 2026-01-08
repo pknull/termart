@@ -1,6 +1,6 @@
 ---
-version: "2.9"
-lastUpdated: "2026-01-06"
+version: "3.0"
+lastUpdated: "2026-01-08"
 lifecycle: core
 stakeholder: pknull
 changeTrigger: "session end, significant changes"
@@ -23,6 +23,32 @@ Project expanded with system monitors and utilities:
 - **Folding@home monitor** with real-time WebSocket updates
 
 ## Recent Changes
+
+### Session 2026-01-08 (N-Dimensional Hypercube Visualization)
+- **New visualization**: `termart hypercube` - N-dimensional rotating hypercube
+  - Supports 1D through 16D (2^16 = 65,536 vertices max)
+  - Uses braille characters for high-resolution rendering
+  - Dynamic vertex/edge generation via bit manipulation
+- **Key algorithms implemented**:
+  - Vertex generation: Each vertex is combination of ±1 in each dimension (2^n total)
+  - Edge generation: Connect vertices differing by exactly one coordinate (XOR single bit)
+  - Multi-stage perspective projection: nD → 3D → 2D with clamped factors
+  - Normalization: Project all vertices, find max extent, normalize for consistent scale
+- **Controls**:
+  - ↑/↓: Change dimension (1D-16D)
+  - ←/→ or +/-: Zoom in/out (0.1x to 100x)
+  - Space: Pause/resume
+  - q: Quit
+- **Iterative fixes through user feedback**:
+  - Initial scaling inconsistent across dimensions → implemented max-extent normalization
+  - High dimensions (9D+) collapsed due to compounded perspective → clamped factors to [0.2, 2.0]
+  - Added manual zoom controls as fallback for edge cases
+- **Code review and fixes**:
+  - Added max_dim=16 to prevent memory exhaustion
+  - Added max_zoom=100.0 to prevent overflow
+  - Removed redundant `if d >= 1` condition (loop starts at d=3)
+  - Updated doc comment from "3D-6D" to "1D through 16D"
+- **Files modified**: `src/viz/hypercube.rs` (new), `src/config.rs`, `src/fractal.rs`, `src/main.rs`, `src/viz/mod.rs`
 
 ### Session 2026-01-06 (FAH Machine ID Fix)
 - **Bug**: New machines (homebox) not appearing in FAH monitor
@@ -362,6 +388,9 @@ Project expanded with system monitors and utilities:
 
 ## Next Steps
 
+- [ ] **Optional refactor**: Consider consolidating cube.rs into hypercube.rs
+  - hypercube.rs now handles 3D (same as cube.rs)
+  - Could remove separate `cube` command or make it alias to `hypercube` with dim=3
 - [ ] **Optional refactor**: Extract `shortest_angular_delta()` helper
   - Same wrap-at-±π pattern used in: arc rendering, view_offset, farthest point detection
   - Three use cases now - worth abstracting
