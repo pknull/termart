@@ -1,10 +1,10 @@
 {
-  "git_hash": "b51d3f53d2b944dbd843cea6e6e4735af22f79e2",
+  "git_hash": "bcdd9a54512cb96db8cc1a7fb8af429f880b8bcb",
   "files": {
     ".claude/commands/index.md": "381883e4d1f49f9ebf9f984611b259ca",
     ".claude/commands/save.md": "5af3680d3fd90935fb9c271373085828",
     "Memory/CLAUDE.md": "badcced6b4b06efc1e556a664c429915",
-    "Memory/activeContext.md": "aac881b186f1d5c27a7620df5ddc8b8c",
+    "Memory/activeContext.md": "10e67c733c5d006d05de6163730240eb",
     "Memory/communicationStyle.md": "9fc75a1a4a5125f72fe025e92f930b8f",
     "Memory/projectbrief.md": "66a7f7b0b3452a747fb2f18ac94867f3",
     "Memory/techEnvironment.md": "871fe88a1a600dbad831332b5dd11579",
@@ -34,7 +34,7 @@
     "asha/docs/SESSION-SAVE-REACT.md": "8f637895db3708313de7fb3b7d1893d3",
     "asha/docs/react-comparison.md": "e2585ca856b04a19d075a492907c24c7"
   },
-  "last_ingest": "2026-01-07T20:28:15.908424",
+  "last_ingest": "2026-01-08T01:19:42.866391",
   "config": {
     "chunk_size": 4000,
     "chunk_overlap": 400,

@@ -1,5 +1,5 @@
 ---
-version: "3.0"
+version: "3.1"
 lastUpdated: "2026-01-08"
 lifecycle: core
 stakeholder: pknull
@@ -23,6 +23,54 @@ Project expanded with system monitors and utilities:
 - **Folding@home monitor** with real-time WebSocket updates
 
 ## Recent Changes
+
+### Session 2026-01-08 (Audio Visualizer & Code Quality Refactoring)
+
+**Goal**: Create CAVA-style audio spectrum visualizer + improve code quality via local reviews
+
+**Accomplishments**:
+
+1. **Audio visualizer (`termart audio`)** - CAVA-style spectrum display
+   - Uses cpal + spectrum-analyzer for real-time FFT analysis
+   - Auto-detects PulseAudio/PipeWire monitor source via `pactl`
+   - Hann windowing, logarithmic frequency mapping (20Hz-16kHz)
+   - Smoothed bar animation with decay/attack rates
+   - Per-cell gradient coloring, rainbow mode support
+   - Controls: ←/→ bar count (8-200), standard speed/color keys
+
+2. **Code reviews executed via /local-review** (4 parallel agents):
+   - Security, Logic, Edge Cases, Style reviews for both files
+   - All recommendations implemented
+
+3. **audio.rs refactoring** (all 10 recommendations):
+   - Added `constants` module with 15 documented magic numbers
+   - Fixed dup2 error checking in `StderrSuppressor`
+   - Fixed logarithmic mapping off-by-one bug
+   - Fixed gap distribution integer division
+   - Added channels==0 validation
+   - Extracted `display_error_and_wait()` helper
+   - Extracted `get_bar_color()` helper
+   - Fixed abbreviated variable names
+   - Added doc comments
+
+4. **hypercube.rs refactoring** (matching treatment):
+   - Added `constants` module with 25 documented magic numbers
+   - Extracted `encode_braille()` helper function
+   - Extracted `draw_line()` (Bresenham) helper function
+   - Updated all code to use constants
+   - Reduced run() from ~218 to ~177 lines
+
+**Key Learnings**:
+- **Validated Pattern**: Constants modules dramatically improve readability
+- **Validated Pattern**: Helper function extraction reduces cognitive load
+- **Validated Pattern**: Parallel code review agents (Security/Logic/Edge/Style) provide comprehensive coverage
+- **Pitfall**: dup2 can fail silently - always check return value
+
+**Files modified**:
+- `src/viz/audio.rs` (created, 562 lines)
+- `src/viz/hypercube.rs` (refactored, 422 lines)
+- `Cargo.toml` (added cpal, spectrum-analyzer)
+- `src/config.rs`, `src/fractal.rs`, `src/main.rs`, `src/viz/mod.rs` (integration)
 
 ### Session 2026-01-08 (N-Dimensional Hypercube Visualization)
 - **New visualization**: `termart hypercube` - N-dimensional rotating hypercube
@@ -388,6 +436,8 @@ Project expanded with system monitors and utilities:
 
 ## Next Steps
 
+- [ ] **Consider**: Apply same constants/helper extraction pattern to other viz files
+  - cube.rs, donut.rs, globe.rs may benefit from similar treatment
 - [ ] **Optional refactor**: Consider consolidating cube.rs into hypercube.rs
   - hypercube.rs now handles 3D (same as cube.rs)
   - Could remove separate `cube` command or make it alias to `hypercube` with dim=3
