@@ -1,6 +1,6 @@
 ---
-version: "3.1"
-lastUpdated: "2026-01-08"
+version: "3.2"
+lastUpdated: "2026-01-10"
 lifecycle: core
 stakeholder: pknull
 changeTrigger: "session end, significant changes"
@@ -23,6 +23,55 @@ Project expanded with system monitors and utilities:
 - **Folding@home monitor** with real-time WebSocket updates
 
 ## Recent Changes
+
+### Session 2026-01-09/10 (Audio Visualizer Stereo + Decay Animation + Code Reviews)
+
+**Goal**: Enhance audio visualizer with stereo separation, animated decay, and address all code review findings
+
+**Accomplishments**:
+
+1. **Stereo audio separation**:
+   - Left channel displays on top half (grows upward from center)
+   - Right channel displays on bottom half (grows downward from center)
+   - Independent FFT processing per channel
+
+2. **4-tier color decay animation**:
+   - On audio "hit": Bar expands in brightest color (tier 3)
+   - Decay progresses: tier 3 → 2 → 1 → 0 → collapse
+   - Each tier lasts progressively longer (0.04s → 0.07s → 0.10s → 0.13s)
+   - Visual height shrinks smoothly alongside color decay
+   - Partial block characters (▁▄█ / ▔▀█) for sub-cell resolution
+
+3. **Code reviews executed** (5 rounds via /local-review with 4 parallel agents):
+   - Security, Logic, Edge Cases, Style reviews
+   - All findings addressed across multiple iterations
+
+4. **Security fixes**:
+   - TOCTOU race: Changed delete/recreate to truncate(true) - atomic operation
+   - Command injection: Added `is_valid_source_name()` validator for pactl source names
+   - Debug log permissions: Added `mode(0o600)` for restrictive file permissions
+
+5. **Code quality improvements** (audio.rs):
+   - Created `DebugLogger` struct - moved logging logic outside run()
+   - Created `detect_and_set_monitor_source()` helper (~70 lines extracted)
+   - Created `restore_original_source()` helper
+   - Removed duplicate `resize_tracking_arrays()` calls from key handlers
+   - Extracted `DEBUG_LOG_PATH` and `DEBUG_LOG_MODE` constants
+   - Moved `dbg_log!` macro to module level with explicit logger parameter
+   - `run()` reduced from ~400 to ~302 lines
+
+6. **Edge case fix** (hypercube.rs):
+   - Added guard clause in `project_to_2d()` for empty coords (returns `(0.0, 0.0)`)
+
+**Key Learnings**:
+- **Validated Pattern**: DebugLogger struct cleaner than function-scoped macros
+- **Validated Pattern**: Extracting PulseAudio detection logic improves testability
+- **Validated Pattern**: Frame-loop size checks eliminate need for immediate resize on keypress
+- **Pitfall**: Debug logs in /tmp should use restrictive permissions (security)
+
+**Files modified**:
+- `src/viz/audio.rs` (grew to ~990 lines with stereo + decay features)
+- `src/viz/hypercube.rs` (guard clause added)
 
 ### Session 2026-01-08 (Audio Visualizer & Code Quality Refactoring)
 
