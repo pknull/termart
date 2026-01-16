@@ -27,12 +27,23 @@ const SPIN_FACTOR: f32 = 10.0;
 const MAX_VX: f32 = 50.0;
 const MAX_VY: f32 = 30.0;
 
+// Collision constants
+const PADDLE_COLLISION_WIDTH: f32 = 1.0;
+const BALL_NUDGE_DISTANCE: f32 = 0.1;
+
 // Static UI strings
 const HINT: &str = "1:P1 AI  W/S:P1 move  |  2:P2 AI  ↑/↓:P2 move  |  Space:pause  R:reset";
 const MSG_PAUSED: &str = "PAUSED";
 const MSG_P1_WINS: &str = "PLAYER 1 WINS!";
 const MSG_P2_WINS: &str = "PLAYER 2 WINS!";
 const MSG_RESTART: &str = "Press SPACE to restart";
+
+#[derive(Clone, Copy, PartialEq)]
+enum Winner {
+    None,
+    Left,
+    Right,
+}
 
 #[derive(Clone, Copy)]
 struct Ball {
@@ -54,7 +65,7 @@ struct Game {
     right: Paddle,
     paused: bool,
     game_over: bool,
-    winner: u8, // 0 = none, 1 = left, 2 = right
+    winner: Winner,
 }
 
 impl Game {
@@ -66,7 +77,7 @@ impl Game {
             right: Paddle { y: cy, score: 0, ai: true },
             paused: false,
             game_over: false,
-            winner: 0,
+            winner: Winner::None,
         }
     }
 
@@ -84,7 +95,7 @@ impl Game {
         self.left.score = 0;
         self.right.score = 0;
         self.game_over = false;
-        self.winner = 0;
+        self.winner = Winner::None;
         self.paused = false;
         self.reset_ball(cx, cy, 1.0);
     }
@@ -204,23 +215,23 @@ pub fn run(time_step: f32) -> io::Result<()> {
                 game.ball.vy = -game.ball.vy;
             }
 
-            // Left paddle collision
-            let left_x = PADDLE_X_LEFT as f32 + 1.0;
-            if game.ball.x <= left_x && game.ball.x >= PADDLE_X_LEFT as f32 {
+            // Left paddle collision - symmetric collision zone
+            let left_x = PADDLE_X_LEFT as f32;
+            if game.ball.x >= left_x - PADDLE_COLLISION_WIDTH && game.ball.x <= left_x + PADDLE_COLLISION_WIDTH {
                 let dy = game.ball.y - game.left.y;
                 if dy.abs() <= PADDLE_HALF {
-                    game.ball.x = left_x + 0.1;
+                    game.ball.x = left_x + PADDLE_COLLISION_WIDTH + BALL_NUDGE_DISTANCE;
                     game.ball.vx = game.ball.vx.abs() * 1.05;
                     game.ball.vy += (dy / PADDLE_HALF) * SPIN_FACTOR;
                 }
             }
 
-            // Right paddle collision
+            // Right paddle collision - symmetric collision zone
             let right_x = paddle_x_right as f32;
-            if game.ball.x >= right_x - 1.0 && game.ball.x <= right_x + 1.0 {
+            if game.ball.x >= right_x - PADDLE_COLLISION_WIDTH && game.ball.x <= right_x + PADDLE_COLLISION_WIDTH {
                 let dy = game.ball.y - game.right.y;
                 if dy.abs() <= PADDLE_HALF {
-                    game.ball.x = right_x - 1.1;
+                    game.ball.x = right_x - PADDLE_COLLISION_WIDTH - BALL_NUDGE_DISTANCE;
                     game.ball.vx = -game.ball.vx.abs() * 1.05;
                     game.ball.vy += (dy / PADDLE_HALF) * SPIN_FACTOR;
                 }
@@ -236,7 +247,7 @@ pub fn run(time_step: f32) -> io::Result<()> {
                 game.right.score += 1;
                 if game.right.score >= WIN_SCORE {
                     game.game_over = true;
-                    game.winner = 2;
+                    game.winner = Winner::Right;
                 } else {
                     game.reset_ball(cx, cy, 1.0);
                 }
@@ -244,7 +255,7 @@ pub fn run(time_step: f32) -> io::Result<()> {
                 game.left.score += 1;
                 if game.left.score >= WIN_SCORE {
                     game.game_over = true;
-                    game.winner = 1;
+                    game.winner = Winner::Left;
                 } else {
                     game.reset_ball(cx, cy, -1.0);
                 }
@@ -308,7 +319,7 @@ pub fn run(time_step: f32) -> io::Result<()> {
         // Messages
         let cy_i32 = cy as i32;
         if game.game_over {
-            let msg = if game.winner == 1 { MSG_P1_WINS } else { MSG_P2_WINS };
+            let msg = if game.winner == Winner::Left { MSG_P1_WINS } else { MSG_P2_WINS };
             term.set_str(center_x - msg.len() as i32 / 2, cy_i32, msg, Some(Color::Yellow), true);
             term.set_str(center_x - MSG_RESTART.len() as i32 / 2, cy_i32 + 1, MSG_RESTART, Some(Color::DarkGrey), false);
         } else if game.paused {

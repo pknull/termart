@@ -101,17 +101,19 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         let handle = std::thread::spawn(move || {
             let mut reader = ReconnectingDevice::new(device);
 
-            while running_clone.load(Ordering::Relaxed) {
+            while running_clone.load(Ordering::Acquire) {
                 reader.poll_events(|ev| {
                     if let evdev::InputEventKind::Key(key) = ev.kind() {
                         if matches!(key, evdev::Key::KEY_LEFTSHIFT | evdev::Key::KEY_RIGHTSHIFT) {
-                            shift_clone.store(ev.value() != 0, Ordering::Relaxed);
+                            shift_clone.store(ev.value() != 0, Ordering::Release);
                         }
                         if ev.value() == 1 || ev.value() == 2 {
                             if let Some(label) = evdev_key_to_label(key) {
-                                if let Ok(mut heat) = heat_clone.lock() {
-                                    heat.insert(label.to_string(), 1.0);
-                                }
+                                let mut heat = match heat_clone.lock() {
+                                    Ok(guard) => guard,
+                                    Err(poisoned) => poisoned.into_inner(),
+                                };
+                                heat.insert(label.to_string(), 1.0);
                             }
                         }
                     }
@@ -154,7 +156,11 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         }
 
         // Decay heat values
-        if let Ok(mut heat) = key_heat.lock() {
+        {
+            let mut heat = match key_heat.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner(),
+            };
             for v in heat.values_mut() {
                 *v = (*v - state.speed * 3.0).max(0.0);
             }
@@ -165,11 +171,15 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
 
         // Calculate keyboard vertical position (centered)
         let total_height = rows.len() * key_height + rows.len();
-        let start_y = ((h - total_height) / 2).max(1);
+        let start_y = h.saturating_sub(total_height) / 2;
+        let start_y = start_y.max(1);
 
         // Draw keyboard
-        let heat_snapshot: HashMap<String, f32> = key_heat.lock().map(|h| h.clone()).unwrap_or_default();
-        let is_shifted = shift_held.load(Ordering::Relaxed);
+        let heat_snapshot: HashMap<String, f32> = match key_heat.lock() {
+            Ok(guard) => guard.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        };
+        let is_shifted = shift_held.load(Ordering::Acquire);
 
         for (row_idx, row) in rows.iter().enumerate() {
             let y = start_y + row_idx * (key_height + 1);
@@ -243,7 +253,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     }
 
     // Signal threads to stop and wait for them
-    running.store(false, Ordering::Relaxed);
+    running.store(false, Ordering::Release);
     for handle in handles {
         let _ = handle.join();
     }

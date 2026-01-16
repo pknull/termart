@@ -6,11 +6,30 @@ use super::{scheme_color, VizState};
 use rand::prelude::*;
 use std::io;
 
+/// Number of concurrent pipes in the visualization
+const NUM_PIPES: usize = 5;
+
 struct Pipe {
     x: i32,
     y: i32,
     dir: u8,
     steps: u32,
+}
+
+/// Spawn a new pipe at a random edge position
+fn spawn_pipe(rng: &mut StdRng, w: usize, h: usize) -> Pipe {
+    // Guard against zero-size terminal to prevent panic from gen_range(0..0)
+    if w == 0 || h == 0 {
+        return Pipe { x: 0, y: 0, dir: 0, steps: 0 };
+    }
+    let dir = rng.gen_range(0..4);
+    let (x, y) = match dir {
+        0 => (rng.gen_range(0..w as i32), h as i32 - 1),
+        1 => (0, rng.gen_range(0..h as i32)),
+        2 => (rng.gen_range(0..w as i32), 0),
+        _ => (w as i32 - 1, rng.gen_range(0..h as i32)),
+    };
+    Pipe { x, y, dir, steps: 0 }
 }
 
 /// Run the pipes visualization
@@ -31,18 +50,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
     let mut pipes: Vec<Pipe> = Vec::new();
     let mut fill_count: usize = 0;
 
-    let spawn_pipe = |rng: &mut StdRng, w: usize, h: usize| -> Pipe {
-        let dir = rng.gen_range(0..4);
-        let (x, y) = match dir {
-            0 => (rng.gen_range(0..w as i32), h as i32 - 1),
-            1 => (0, rng.gen_range(0..h as i32)),
-            2 => (rng.gen_range(0..w as i32), 0),
-            _ => (w as i32 - 1, rng.gen_range(0..h as i32)),
-        };
-        Pipe { x, y, dir, steps: 0 }
-    };
-
-    for _ in 0..5 {
+    for _ in 0..NUM_PIPES {
         pipes.push(spawn_pipe(rng, w, h));
     }
 
@@ -55,7 +63,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
             term.clear_screen()?;
             fill_count = 0;
             pipes.clear();
-            for _ in 0..5 {
+            for _ in 0..NUM_PIPES {
                 pipes.push(spawn_pipe(rng, w, h));
             }
         }
@@ -75,7 +83,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
             term.clear_screen()?;
             fill_count = 0;
             pipes.clear();
-            for _ in 0..5 {
+            for _ in 0..NUM_PIPES {
                 pipes.push(spawn_pipe(rng, w, h));
             }
         }

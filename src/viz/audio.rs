@@ -572,6 +572,30 @@ fn restore_original_source(original_source: &Option<String>) {
     }
 }
 
+/// RAII guard to restore PulseAudio monitor source on drop.
+/// Ensures cleanup happens on all exit paths (normal exit, early return, panic).
+struct MonitorSourceGuard {
+    original_source: Option<String>,
+    should_restore: bool,
+}
+
+impl MonitorSourceGuard {
+    fn new(original_source: Option<String>, should_restore: bool) -> Self {
+        Self {
+            original_source,
+            should_restore,
+        }
+    }
+}
+
+impl Drop for MonitorSourceGuard {
+    fn drop(&mut self) {
+        if self.should_restore {
+            restore_original_source(&self.original_source);
+        }
+    }
+}
+
 /// Resize all tracking arrays to a new bar count
 fn resize_tracking_arrays(
     target_heights_left: &mut Vec<f32>,
@@ -714,6 +738,9 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     let (original_source, monitor_was_set) = detect_and_set_monitor_source();
     dbg_log!(log, "Monitor source detection: original={:?}, set={}", original_source, monitor_was_set);
 
+    // Create RAII guard immediately - will restore on any exit path (normal, early return, panic)
+    let _source_guard = MonitorSourceGuard::new(original_source, monitor_was_set);
+
     // Now get the default device (which should be the monitor if we found one)
     dbg_log!(log, "Getting default input device");
     let device = host.default_input_device();
@@ -773,8 +800,15 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
                     buffer.push_stereo_samples(data);
                 } else {
                     // Multi-channel: take first two channels as L/R
+                    // Guard against empty chunks to prevent panic
                     let stereo: Vec<f32> = data.chunks(channels as usize)
-                        .flat_map(|chunk| [chunk[0], chunk.get(1).copied().unwrap_or(chunk[0])])
+                        .flat_map(|chunk| {
+                            if chunk.is_empty() {
+                                [0.0, 0.0]
+                            } else {
+                                [chunk[0], chunk.get(1).copied().unwrap_or(chunk[0])]
+                            }
+                        })
                         .collect();
                     buffer.push_stereo_samples(&stereo);
                 }
@@ -979,11 +1013,6 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         term.sleep(state.speed.max(MIN_FRAME_TIME as f32));
     }
 
-    // Restore original audio source if we changed it
-    if monitor_was_set {
-        dbg_log!(log, "Restoring original source: {:?}", original_source);
-        restore_original_source(&original_source);
-    }
-
+    // Note: _source_guard handles restoration automatically via Drop
     Ok(())
 }

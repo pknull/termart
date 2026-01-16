@@ -6,6 +6,13 @@ use super::{scheme_color, VizState};
 use rand::prelude::*;
 use std::io;
 
+/// Initial probability of a cell being alive when grid is created
+const INITIAL_DENSITY: f64 = 0.3;
+/// Number of generations between periodic life injections
+const INJECTION_INTERVAL: u64 = 100;
+/// Divisor for calculating injection count (w * h / INJECTION_DIVISOR)
+const INJECTION_DIVISOR: usize = 50;
+
 /// Run the Game of Life visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
     let mut state = VizState::new(config.time_step);
@@ -15,7 +22,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
     let mut h = init_h as usize;
 
     let mut grid: Vec<Vec<bool>> = (0..h)
-        .map(|_| (0..w).map(|_| rng.gen_bool(0.3)).collect())
+        .map(|_| (0..w).map(|_| rng.gen_bool(INITIAL_DENSITY)).collect())
         .collect();
 
     let mut next_grid = grid.clone();
@@ -23,7 +30,8 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
     let mut generation = 0u64;
 
     loop {
-        // Check for terminal resize
+        // Check for terminal resize - uses crossterm directly to get fresh size
+        // rather than term.size() which returns the cached internal dimensions
         let (new_w, new_h) = crossterm::terminal::size().unwrap_or((w as u16, h as u16));
         if new_w as usize != w || new_h as usize != h {
             w = new_w as usize;
@@ -31,7 +39,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
             term.resize(new_w, new_h);
             term.clear_screen()?;
             grid = (0..h)
-                .map(|_| (0..w).map(|_| rng.gen_bool(0.3)).collect())
+                .map(|_| (0..w).map(|_| rng.gen_bool(INITIAL_DENSITY)).collect())
                 .collect();
             next_grid = grid.clone();
             neighbor_counts = vec![vec![0; w]; h];
@@ -76,9 +84,9 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
         std::mem::swap(&mut grid, &mut next_grid);
         generation += 1;
 
-        // Periodically inject new life
-        if generation % 100 == 0 {
-            for _ in 0..((w * h) / 50) {
+        // Periodically inject new life to prevent stagnation
+        if generation % INJECTION_INTERVAL == 0 && w > 0 && h > 0 {
+            for _ in 0..((w * h) / INJECTION_DIVISOR) {
                 let x = rng.gen_range(0..w);
                 let y = rng.gen_range(0..h);
                 grid[y][x] = true;

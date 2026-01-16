@@ -11,6 +11,13 @@ use std::io;
 // Game constants
 const ALIEN_GRID_ROWS: usize = 5;
 const ALIEN_SPACING: usize = 3;
+const BASE_ALIEN_COUNT: usize = 55;          // Reference count for speed scaling
+const ALIEN_SPEED_SCALE: f32 = 0.02;         // Speed increase per alien killed
+const ALIEN_FIRE_PROBABILITY: f64 = 0.4;     // Probability alien fires each interval
+const INITIAL_ALIEN_SPEED: f32 = 0.5;        // Starting alien movement interval
+const MIN_ALIEN_SPEED: f32 = 0.2;            // Fastest alien movement interval
+const WAVE_SPEED_MULTIPLIER: f32 = 0.9;      // Speed multiplier per wave
+const INITIAL_PLAYER_LIVES: u8 = 3;          // Starting lives
 
 // Animated alien characters (frame 0, frame 1) for each type
 const ALIEN_CHARS: [[char; 2]; 3] = [
@@ -80,6 +87,26 @@ struct Game {
     alien_fire_timer: f32,
 }
 
+impl Game {
+    /// Resets the game state while preserving the high score.
+    fn reset(&mut self, w: usize, h: usize) {
+        self.player_x = w as f32 / 2.0;
+        self.player_lives = INITIAL_PLAYER_LIVES;
+        self.score = 0;
+        // high_score is preserved
+        self.aliens = create_aliens(w, h);
+        self.alien_dir = 1.0;
+        self.alien_speed = INITIAL_ALIEN_SPEED;
+        self.alien_frame = 0;
+        self.alien_move_timer = 0.0;
+        self.bullets = Vec::new();
+        self.shields = create_shields(w, h);
+        self.game_state = GameState::Playing;
+        self.wave = 1;
+        self.alien_fire_timer = 0.0;
+    }
+}
+
 #[inline]
 fn calc_alien_cols(w: usize) -> usize {
     // Original: 11 cols on 80-char terminal (11*3=33 pixels, ~41% of width)
@@ -133,6 +160,12 @@ fn create_shields(w: usize, h: usize) -> Vec<Shield> {
     shields
 }
 
+/// Calculate the alien speed multiplier based on how many aliens remain alive.
+#[inline]
+fn calc_alien_speed_multiplier(alive_count: usize) -> f32 {
+    1.0 + (BASE_ALIEN_COUNT - alive_count.min(BASE_ALIEN_COUNT)) as f32 * ALIEN_SPEED_SCALE
+}
+
 pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
     let mut state = VizState::new(config.time_step);
 
@@ -142,12 +175,12 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
 
     let mut game = Game {
         player_x: w as f32 / 2.0,
-        player_lives: 3,
+        player_lives: INITIAL_PLAYER_LIVES,
         score: 0,
         high_score: 0,
         aliens: create_aliens(w, h),
         alien_dir: 1.0,
-        alien_speed: 0.5,
+        alien_speed: INITIAL_ALIEN_SPEED,
         alien_frame: 0,
         alien_move_timer: 0.0,
         bullets: Vec::new(),
@@ -211,22 +244,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
                     }
                 }
                 KeyCode::Char('r') => {
-                    game = Game {
-                        player_x: w as f32 / 2.0,
-                        player_lives: 3,
-                        score: 0,
-                        high_score: game.high_score,
-                        aliens: create_aliens(w, h),
-                        alien_dir: 1.0,
-                        alien_speed: 0.5,
-                        alien_frame: 0,
-                        alien_move_timer: 0.0,
-                        bullets: Vec::new(),
-                        shields: create_shields(w, h),
-                        game_state: GameState::Playing,
-                        wave: 1,
-                        alien_fire_timer: 0.0,
-                    };
+                    game.reset(w, h);
                 }
                 KeyCode::Char('a') => {
                     auto_play = !auto_play;
@@ -311,7 +329,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
                             let frames_to_hit = dist / BULLET_SPEED;
 
                             let alive_count = game.aliens.iter().filter(|a| a.alive).count();
-                            let speed_mult = 1.0 + (55 - alive_count.min(55)) as f32 * 0.02;
+                            let speed_mult = calc_alien_speed_multiplier(alive_count);
                             let move_interval = game.alien_speed / speed_mult;
                             let alien_moves = (frames_to_hit * dt / move_interval) as i32;
 
@@ -402,22 +420,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
             game_over_timer += dt;
             if game_over_timer >= AUTO_RESTART_DELAY {
                 game_over_timer = 0.0;
-                game = Game {
-                    player_x: w as f32 / 2.0,
-                    player_lives: 3,
-                    score: 0,
-                    high_score: game.high_score,
-                    aliens: create_aliens(w, h),
-                    alien_dir: 1.0,
-                    alien_speed: 0.5,
-                    alien_frame: 0,
-                    alien_move_timer: 0.0,
-                    bullets: Vec::new(),
-                    shields: create_shields(w, h),
-                    game_state: GameState::Playing,
-                    wave: 1,
-                    alien_fire_timer: 0.0,
-                };
+                game.reset(w, h);
             }
         } else {
             game_over_timer = 0.0;
@@ -428,7 +431,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
             // Move aliens
             game.alien_move_timer += dt;
             let alive_count = game.aliens.iter().filter(|a| a.alive).count();
-            let speed_mult = 1.0 + (55 - alive_count.min(55)) as f32 * 0.02;
+            let speed_mult = calc_alien_speed_multiplier(alive_count);
             let move_interval = game.alien_speed / speed_mult;
 
             if game.alien_move_timer >= move_interval {
@@ -464,7 +467,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
             if game.alien_fire_timer >= ALIEN_FIRE_INTERVAL {
                 game.alien_fire_timer = 0.0;
                 let alive_aliens: Vec<_> = game.aliens.iter().filter(|a| a.alive).collect();
-                if !alive_aliens.is_empty() && rng.gen_bool(0.4) {
+                if !alive_aliens.is_empty() && rng.gen_bool(ALIEN_FIRE_PROBABILITY) {
                     let shooter = alive_aliens[rng.gen_range(0..alive_aliens.len())];
                     game.bullets.push(Bullet {
                         x: shooter.x,
@@ -561,7 +564,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
             if game.aliens.iter().all(|a| !a.alive) {
                 game.wave += 1;
                 game.aliens = create_aliens(w, h);
-                game.alien_speed = (game.alien_speed * 0.9).max(0.2);
+                game.alien_speed = (game.alien_speed * WAVE_SPEED_MULTIPLIER).max(MIN_ALIEN_SPEED);
             }
 
             game.bullets.retain(|b| b.active);
@@ -604,7 +607,13 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
         // Draw shields with degradation
         for shield in &game.shields {
             if shield.health > 0 {
-                let ch = SHIELD_CHARS[3 - shield.health as usize];
+                // Safe indexing: health is 1, 2, or 3; map to index 2, 1, 0 respectively
+                // Using match to avoid potential panic if health is unexpectedly 0
+                let ch = match shield.health {
+                    3 => SHIELD_CHARS[0],
+                    2 => SHIELD_CHARS[1],
+                    _ => SHIELD_CHARS[2],
+                };
                 term.set(shield.x, shield.y, ch, Some(Color::Yellow), false);
             }
         }

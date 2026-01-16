@@ -78,6 +78,8 @@ mod constants {
     pub const TIME_STEP_NORM: f32 = 0.03;
     /// Animation time increment
     pub const TIME_INCREMENT: f32 = 0.06;
+    /// Time wrapping period to prevent precision loss (TAU * 1000 radians)
+    pub const TIME_WRAP_PERIOD: f32 = std::f32::consts::TAU * 1000.0;
 }
 
 /// Generate all vertices for an n-dimensional hypercube (unit cube centered at origin).
@@ -283,6 +285,14 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     let mut braille_h = init_h as usize * BRAILLE_HEIGHT;
     let mut braille_dots: Vec<Vec<bool>> = vec![vec![false; braille_w]; braille_h];
 
+    // Cache geometry - only regenerate when dimensions change
+    let mut cached_dimensions = dimensions;
+    let mut vertices = generate_vertices(dimensions);
+    let mut edges = generate_edges(dimensions);
+
+    // Reusable coordinate buffer to avoid allocations in hot loop
+    let mut coord_buffer: Vec<f32> = vec![0.0; MAX_DIMENSIONS];
+
     loop {
         let (width, height) = crossterm::terminal::size().unwrap_or(term.size());
 
@@ -340,36 +350,41 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
             row.fill(false);
         }
 
-        // Generate geometry for current dimension
-        let vertices = generate_vertices(dimensions);
-        let edges = generate_edges(dimensions);
+        // Regenerate geometry only when dimensions change
+        if dimensions != cached_dimensions {
+            vertices = generate_vertices(dimensions);
+            edges = generate_edges(dimensions);
+            cached_dimensions = dimensions;
+        }
 
         // Project all vertices (first pass: get raw projected coordinates)
         let mut raw_projected: Vec<(f32, f32)> = Vec::with_capacity(vertices.len());
 
         for vertex in &vertices {
-            let mut coords = vertex.clone();
+            // Reuse coordinate buffer instead of cloning vertex
+            coord_buffer.clear();
+            coord_buffer.extend_from_slice(vertex);
 
             // Apply rotations in various planes dynamically
             // Base rotations in lower dimensions
             if dimensions >= 2 {
-                rotate_plane(&mut coords, 0, 1, time * ROTATION_SPEED_XY);
+                rotate_plane(&mut coord_buffer, 0, 1, time * ROTATION_SPEED_XY);
             }
             if dimensions >= 3 {
-                rotate_plane(&mut coords, 1, 2, time * ROTATION_SPEED_YZ);
-                rotate_plane(&mut coords, 0, 2, time * ROTATION_SPEED_XZ);
+                rotate_plane(&mut coord_buffer, 1, 2, time * ROTATION_SPEED_YZ);
+                rotate_plane(&mut coord_buffer, 0, 2, time * ROTATION_SPEED_XZ);
             }
             // Higher dimension rotations: rotate axis 0 with each higher axis
             // This creates the "inside-out" effect for each dimension
             for d in 3..dimensions {
                 let speed = ROTATION_SPEED_BASE_HIGHER - (d as f32 - 3.0) * ROTATION_SPEED_DECAY;
-                rotate_plane(&mut coords, 0, d, time * speed.max(ROTATION_SPEED_MIN));
+                rotate_plane(&mut coord_buffer, 0, d, time * speed.max(ROTATION_SPEED_MIN));
                 // Also rotate alternating axes for visual interest
                 let alt_axis = (d - 1) % 3; // Cycle through 0, 1, 2
-                rotate_plane(&mut coords, alt_axis, d, time * (speed * ROTATION_SECONDARY_FACTOR));
+                rotate_plane(&mut coord_buffer, alt_axis, d, time * (speed * ROTATION_SECONDARY_FACTOR));
             }
 
-            let (px, py) = project_to_2d(&coords);
+            let (px, py) = project_to_2d(&coord_buffer);
             raw_projected.push((px, py));
         }
 
@@ -431,7 +446,8 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         }
 
         term.present()?;
-        time += (state.speed / TIME_STEP_NORM) * TIME_INCREMENT;
+        // Wrap time to prevent f32 precision loss after long runtime
+        time = (time + (state.speed / TIME_STEP_NORM) * TIME_INCREMENT) % TIME_WRAP_PERIOD;
         term.sleep(state.speed);
     }
 

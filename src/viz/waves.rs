@@ -13,9 +13,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     let mut time: f64 = 0.0;
     let wave_chars = ['_', '.', '-', '~', '^', '"', '*'];
 
-    let (init_w, init_h) = term.size();
-    let mut prev_w = init_w;
-    let mut prev_h = init_h;
+    let (mut prev_w, mut prev_h) = term.size();
 
     const SIN_TABLE_SIZE: usize = 1024;
     let sin_table: Vec<f64> = (0..SIN_TABLE_SIZE)
@@ -54,11 +52,17 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
 
         term.clear();
 
+        // Wave layer rendering constants
+        const NUM_LAYERS: usize = 5;
+        const AMPLITUDE_DECAY: f64 = 0.15;
+        const BASE_FREQUENCY: f64 = 0.05;
+        const FREQUENCY_INCREMENT: f64 = 0.02;
+
         // Draw multiple wave layers
-        for layer in 0..5 {
+        for layer in 0..NUM_LAYERS {
             let layer_f = layer as f64;
-            let amplitude = (h / 4.0) * (1.0 - layer_f * 0.15);
-            let frequency = 0.05 + layer_f * 0.02;
+            let amplitude = (h / 4.0) * (1.0 - layer_f * AMPLITUDE_DECAY);
+            let frequency = BASE_FREQUENCY + layer_f * FREQUENCY_INCREMENT;
             let speed = 1.0 + layer_f * 0.3;
             let phase = layer_f * 0.5;
 
@@ -69,12 +73,12 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
                 3 => 2,
                 _ => 3,
             };
-            let (color, bold) = scheme_color(state.color_scheme, intensity, layer == 4);
+            let (color, bold) = scheme_color(state.color_scheme, intensity, layer == NUM_LAYERS - 1);
 
             for x in 0..width as usize {
                 let fx = x as f64;
                 let wave_y = mid_y + amplitude * fast_sin(fx * frequency + time * speed + phase);
-                let y = wave_y as i32;
+                let y = wave_y.round() as i32;
 
                 if y >= 0 && y < height as i32 {
                     let char_idx = (fast_sin(fx * 0.3 + time * 2.0).abs() * (wave_chars.len() - 1) as f64) as usize;
@@ -85,7 +89,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         }
 
         term.present()?;
-        time += (state.speed / 0.03) as f64 * 0.03;
+        time += state.speed as f64;
         term.sleep(state.speed);
     }
 

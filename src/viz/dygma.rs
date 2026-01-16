@@ -573,6 +573,9 @@ fn evdev_key_raw(key: evdev::Key) -> String {
 // Focus Protocol (Serial Communication)
 // ============================================================================
 
+/// Maximum response size to prevent unbounded buffer growth (16KB)
+const MAX_RESPONSE_SIZE: usize = 16384;
+
 /// Connection to Dygma keyboard via Focus protocol
 struct FocusConnection {
     port: Box<dyn serialport::SerialPort>,
@@ -641,8 +644,8 @@ impl FocusConnection {
                 Ok(n) => {
                     if let Ok(s) = std::str::from_utf8(&buffer[..n]) {
                         response.push_str(s);
-                        // Check for Focus terminator
-                        if response.contains("\r\n.\r\n") {
+                        // Check for Focus terminator or max size
+                        if response.contains("\r\n.\r\n") || response.len() > MAX_RESPONSE_SIZE {
                             break;
                         }
                     }
@@ -715,6 +718,10 @@ impl FocusConnection {
                         response.push(' ');
                     }
                     response.push_str(trimmed);
+                    // Check max size
+                    if response.len() > MAX_RESPONSE_SIZE {
+                        break;
+                    }
                 }
                 Err(_) => break,
             }
@@ -747,7 +754,8 @@ impl FocusConnection {
                 Ok(n) => {
                     if let Ok(s) = std::str::from_utf8(&buffer[..n]) {
                         response.push_str(s);
-                        if response.contains("\r\n.\r\n") {
+                        // Check for Focus terminator or max size
+                        if response.contains("\r\n.\r\n") || response.len() > MAX_RESPONSE_SIZE {
                             break;
                         }
                     }
@@ -795,7 +803,8 @@ impl FocusConnection {
                 Ok(n) => {
                     if let Ok(s) = std::str::from_utf8(&buffer[..n]) {
                         response.push_str(s);
-                        if response.contains("\r\n.\r\n") {
+                        // Check for Focus terminator or max size
+                        if response.contains("\r\n.\r\n") || response.len() > MAX_RESPONSE_SIZE {
                             break;
                         }
                     }
@@ -966,23 +975,23 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
                 let now = Instant::now();
 
                 // Promote pending modifiers that have waited long enough (real modifier press)
-                if let Ok(mut pending) = pending_mods_clone.lock() {
-                    let mut promoted = Vec::new();
-                    pending.retain(|(label, time, _is_s)| {
-                        if now.duration_since(*time).as_millis() > MOD_DELAY_MS {
-                            promoted.push(label.clone());
-                            false // Remove from pending
-                        } else {
-                            true // Keep waiting
-                        }
-                    });
+                // Use recovery pattern to handle poisoned mutex
+                let mut pending = pending_mods_clone.lock().unwrap_or_else(|e| e.into_inner());
+                let mut promoted = Vec::new();
+                pending.retain(|(label, time, _is_s)| {
+                    if now.duration_since(*time).as_millis() > MOD_DELAY_MS {
+                        promoted.push(label.clone());
+                        false // Remove from pending
+                    } else {
+                        true // Keep waiting
+                    }
+                });
+                drop(pending); // Release lock before acquiring heat lock
 
-                    if !promoted.is_empty() {
-                        if let Ok(mut heat) = heat_clone.lock() {
-                            for label in promoted {
-                                heat.insert(label, 1.0);
-                            }
-                        }
+                if !promoted.is_empty() {
+                    let mut heat = heat_clone.lock().unwrap_or_else(|e| e.into_inner());
+                    for label in promoted {
+                        heat.insert(label, 1.0);
                     }
                 }
 
@@ -1000,17 +1009,15 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
 
                             if is_modifier(key) {
                                 // Queue modifier - wait to see if it's synthetic
-                                if let Ok(mut pending) = pending_mods_clone.lock() {
-                                    pending.push((label.clone(), now, is_shift(key)));
-                                }
+                                let mut pending = pending_mods_clone.lock().unwrap_or_else(|e| e.into_inner());
+                                pending.push((label.clone(), now, is_shift(key)));
                             } else {
                                 // Non-modifier key pressed - check if Shift was pending (synthetic)
-                                let had_synthetic_shift = if let Ok(mut pending) = pending_mods_clone.lock() {
+                                let had_synthetic_shift = {
+                                    let mut pending = pending_mods_clone.lock().unwrap_or_else(|e| e.into_inner());
                                     let had_shift = pending.iter().any(|(_, _, is_s)| *is_s);
                                     pending.clear();
                                     had_shift
-                                } else {
-                                    false
                                 };
 
                                 // Use shifted label if Shift was synthetic, otherwise use raw label
@@ -1022,16 +1029,14 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
                                     label.clone()
                                 };
 
-                                if let Ok(mut heat) = heat_clone.lock() {
-                                    heat.insert(heat_label, 1.0);
-                                }
+                                let mut heat = heat_clone.lock().unwrap_or_else(|e| e.into_inner());
+                                heat.insert(heat_label, 1.0);
                             }
 
                             // Store for debug display
                             if debug_mode {
-                                if let Ok(mut lk) = last_key_clone.lock() {
-                                    *lk = format!("{:?} -> {}", key, label);
-                                }
+                                let mut lk = last_key_clone.lock().unwrap_or_else(|e| e.into_inner());
+                                *lk = format!("{:?} -> {}", key, label);
                             }
                         }
                     }
@@ -1092,9 +1097,10 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
                     }
                     // Ensure layer 0 is always in the mask (base layer fallback for transparent keys)
                     mask |= 1;
-                    // Clear shift state when layer changes (prevents stuck shift)
+                    // Note: There's a benign race here where evdev could set shift_held true
+                    // right after we set it false. This only causes a momentary visual glitch.
                     if mask != prev_layer_mask {
-                        shift_held.store(false, Ordering::Relaxed);
+                        shift_held.store(false, Ordering::Release);
                         prev_layer_mask = mask;
                     }
                     active_layers.store(mask, Ordering::Relaxed);
@@ -1105,7 +1111,8 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
         }
 
         // Decay heat values
-        if let Ok(mut heat) = key_heat.lock() {
+        {
+            let mut heat = key_heat.lock().unwrap_or_else(|e| e.into_inner());
             for v in heat.values_mut() {
                 *v = (*v - state.speed * 3.0).max(0.0);
             }

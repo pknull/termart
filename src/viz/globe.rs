@@ -29,6 +29,17 @@ fn shortest_angular_delta(from: f32, to: f32) -> f32 {
     delta
 }
 
+/// Normalize an angle to the range [-PI, PI].
+#[inline]
+fn normalize_longitude(lon: f32) -> f32 {
+    let normalized = lon.rem_euclid(std::f32::consts::TAU);
+    if normalized > std::f32::consts::PI {
+        normalized - std::f32::consts::TAU
+    } else {
+        normalized
+    }
+}
+
 static GLOBE_CONTINENTS: LazyLock<Vec<Vec<(f32, f32)>>> = LazyLock::new(|| vec![
     // North America (41 points)
     vec![
@@ -158,12 +169,12 @@ static GLOBE_CITIES: LazyLock<Vec<(f32, f32)>> = LazyLock::new(|| vec![
     deg_to_rad(45.5, -73.6),   // Montreal
     deg_to_rad(19.4, -99.1),   // Mexico City
     // South America
-    deg_to_rad(-23.5, -46.6),  // São Paulo
+    deg_to_rad(-23.5, -46.6),  // Sao Paulo
     deg_to_rad(-22.9, -43.2),  // Rio de Janeiro
     deg_to_rad(-34.6, -58.4),  // Buenos Aires
     deg_to_rad(-33.4, -70.6),  // Santiago
     deg_to_rad(-12.0, -77.0),  // Lima
-    deg_to_rad(4.7, -74.1),    // Bogotá
+    deg_to_rad(4.7, -74.1),    // Bogota
     // Europe
     deg_to_rad(51.5, -0.1),    // London
     deg_to_rad(48.9, 2.3),     // Paris
@@ -207,6 +218,10 @@ static GLOBE_CITIES: LazyLock<Vec<(f32, f32)>> = LazyLock::new(|| vec![
 ]);
 
 /// Fetch user's location from IP geolocation service
+///
+/// Note: Uses HTTP instead of HTTPS as ip-api.com free tier only supports HTTP.
+/// This is acceptable for non-sensitive location data used for visualization positioning.
+/// For production use with sensitive data, consider a paid API with HTTPS support.
 fn fetch_user_location() -> Option<(f32, f32)> {
     let resp = ureq::get("http://ip-api.com/json/?fields=lat,lon")
         .timeout(std::time::Duration::from_secs(3))
@@ -480,8 +495,9 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
                 let lon_min = all_lons.iter().cloned().fold(f32::INFINITY, f32::min);
                 let lon_max = all_lons.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
 
-                let lat_span = (lat_max - lat_min).abs().to_radians();
-                let lon_span = (lon_max - lon_min).abs().to_radians();
+                // Values are already in radians from user_location and GeoLocation
+                let lat_span = (lat_max - lat_min).abs();
+                let lon_span = (lon_max - lon_min).abs();
                 let max_span = lat_span.max(lon_span).max(0.1);
                 let target_zoom = (1.0 / max_span).clamp(0.5, 2.5);
 
@@ -565,7 +581,8 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
                 for t in 0..=steps {
                     let frac = t as f32 / 30.0;
                     let lat = arc.lat1 + (arc.lat2 - arc.lat1) * frac;
-                    let lon = arc.lon1 + shortest_angular_delta(arc.lon1, arc.lon2) * frac;
+                    // Interpolate longitude using shortest path and normalize to [-PI, PI]
+                    let lon = normalize_longitude(arc.lon1 + shortest_angular_delta(arc.lon1, arc.lon2) * frac);
                     let arc_height = (frac * std::f32::consts::PI).sin() * 0.1;
                     let lat_adj = lat + arc_height;
 

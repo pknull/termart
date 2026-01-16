@@ -7,6 +7,13 @@ use crossterm::style::Color;
 use rand::prelude::*;
 use std::io;
 
+// Pulse spawn and animation parameters
+const PULSE_SPAWN_PROBABILITY: f64 = 0.08;
+const PULSE_SPEED_MIN: f32 = 15.0;
+const PULSE_SPEED_MAX: f32 = 35.0;
+const PULSE_RADIUS_MIN: f32 = 30.0;
+const PULSE_RADIUS_MAX: f32 = 80.0;
+
 struct Pulse {
     x: f32,
     y: f32,
@@ -73,13 +80,13 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
         }
 
         // Spawn new pulses randomly
-        if rng.gen_bool(0.08) {
+        if rng.gen_bool(PULSE_SPAWN_PROBABILITY) {
             pulses.push(Pulse {
                 x: rng.gen_range(0.0..w as f32),
                 y: rng.gen_range(0.0..h as f32),
                 birth_time: time,
-                speed: rng.gen_range(15.0..35.0),
-                max_radius: rng.gen_range(30.0..80.0),
+                speed: rng.gen_range(PULSE_SPEED_MIN..PULSE_SPEED_MAX),
+                max_radius: rng.gen_range(PULSE_RADIUS_MIN..PULSE_RADIUS_MAX),
             });
         }
 

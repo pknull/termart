@@ -5,6 +5,15 @@ use crate::terminal::Terminal;
 use super::{scheme_color, VizState};
 use std::io;
 
+// Cube rendering constants
+const CAMERA_DISTANCE: f32 = 3.5;
+const CUBE_SCALE: f32 = 0.4;
+const ROTATION_X_SPEED: f32 = 0.6;
+const ROTATION_Y_SPEED: f32 = 0.8;
+const ROTATION_Z_SPEED: f32 = 0.4;
+const ASPECT_CORRECTION: f32 = 0.5;
+const MIN_Z_DIVISOR: f32 = 0.1;
+
 /// Run the 3D rotating cube visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     let mut state = VizState::new(config.time_step);
@@ -20,8 +29,6 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         (4, 5), (5, 6), (6, 7), (7, 4),
         (0, 4), (1, 5), (2, 6), (3, 7),
     ];
-
-    let distance = 3.5;
 
     let (init_w, init_h) = term.size();
     let mut prev_w = init_w;
@@ -49,7 +56,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         let h = height as f32;
         let half_w = w / 2.0;
         let half_h = h / 2.0;
-        let cube_size = (h * 2.0).min(w) * 0.4;
+        let cube_size = (h * 2.0).min(w) * CUBE_SCALE;
 
         if let Some((code, mods)) = term.check_key()? {
             if state.handle_key(code, mods) {
@@ -63,14 +70,12 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         }
 
         for row in &mut braille_dots {
-            for cell in row {
-                *cell = false;
-            }
+            row.fill(false);
         }
 
-        let rx = time * 0.6;
-        let ry = time * 0.8;
-        let rz = time * 0.4;
+        let rx = time * ROTATION_X_SPEED;
+        let ry = time * ROTATION_Y_SPEED;
+        let rz = time * ROTATION_Z_SPEED;
 
         let (cos_x, sin_x) = (rx.cos(), rx.sin());
         let (cos_y, sin_y) = (ry.cos(), ry.sin());
@@ -84,9 +89,9 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
             let x3 = x2 * cos_z - y1 * sin_z;
             let y3 = x2 * sin_z + y1 * cos_z;
 
-            let z_factor = 1.0 / (distance + z2);
+            let z_factor = 1.0 / (CAMERA_DISTANCE + z2).max(MIN_Z_DIVISOR);
             let screen_x = half_w + x3 * z_factor * cube_size;
-            let screen_y = half_h + y3 * z_factor * cube_size * 0.5;
+            let screen_y = half_h + y3 * z_factor * cube_size * ASPECT_CORRECTION;
 
             projected[i] = (screen_x, screen_y);
         }
@@ -160,7 +165,8 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         }
 
         term.present()?;
-        time += (state.speed / 0.03) * 0.06;
+        // Animation time advances at 2x frame rate
+        time += state.speed * 2.0;
         term.sleep(state.speed);
     }
 

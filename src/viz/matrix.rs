@@ -10,6 +10,13 @@ use std::io;
 const CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*(){}[]|;:,.<>?~`";
 const CHARS_LEN: usize = CHARS.len();
 
+// Drop configuration constants
+const DROP_SPEED_MIN: f32 = 0.5;
+const DROP_SPEED_MAX: f32 = 1.2;
+const DROP_LENGTH_MIN: usize = 5;
+const DROP_LENGTH_MAX: usize = 20;
+const CHAR_REFRESH_PROBABILITY: f64 = 0.3;
+
 struct Drop {
     y: f32,
     speed: f32,
@@ -24,22 +31,26 @@ impl Drop {
         for c in &mut chars {
             *c = CHARS[rng.gen_range(0..CHARS_LEN)] as char;
         }
+        // Use h.max(1) to prevent empty range panic when h=0
+        let safe_h = h.max(1) as f32;
         Self {
-            y: rng.gen_range(-(h as f32)..0.0),
-            speed: rng.gen_range(0.5..1.2),
-            length: rng.gen_range(5..20),
+            y: rng.gen_range(-safe_h..0.0),
+            speed: rng.gen_range(DROP_SPEED_MIN..DROP_SPEED_MAX),
+            length: rng.gen_range(DROP_LENGTH_MIN..DROP_LENGTH_MAX),
             chars,
         }
     }
 
     #[inline]
     fn reset(&mut self, rng: &mut StdRng) {
-        self.y = rng.gen_range(-20.0..0.0);
-        self.speed = rng.gen_range(0.5..1.2);
-        self.length = rng.gen_range(5..20);
+        // Use length-based reset range for consistency with new()
+        let reset_range = -(self.length as f32 * 1.5);
+        self.y = rng.gen_range(reset_range..0.0);
+        self.speed = rng.gen_range(DROP_SPEED_MIN..DROP_SPEED_MAX);
+        self.length = rng.gen_range(DROP_LENGTH_MIN..DROP_LENGTH_MAX);
         // Only randomize some chars
         for c in &mut self.chars {
-            if rng.gen_bool(0.3) {
+            if rng.gen_bool(CHAR_REFRESH_PROBABILITY) {
                 *c = CHARS[rng.gen_range(0..CHARS_LEN)] as char;
             }
         }

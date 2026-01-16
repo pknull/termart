@@ -6,6 +6,12 @@ use super::{scheme_color, VizState};
 use rand::prelude::*;
 use std::io;
 
+// Rain generation constants
+const SPAWN_PROBABILITY: f64 = 0.4;
+const CHAR_PROBABILITY: f64 = 0.7;
+const MIN_SPEED: f32 = 0.5;
+const MAX_SPEED: f32 = 2.0;
+
 struct Raindrop {
     x: usize,
     y: f32,
@@ -56,17 +62,21 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
         }
 
         for row in &mut screen {
-            for cell in row {
-                *cell = ' ';
-            }
+            row.fill(' ');
         }
 
-        if rng.gen_bool(0.4) {
+        // Guard against zero-size terminal
+        if w == 0 || h == 0 {
+            term.sleep(0.1);
+            continue;
+        }
+
+        if rng.gen_bool(SPAWN_PROBABILITY) {
             drops.push(Raindrop {
                 x: rng.gen_range(0..w),
                 y: 0.0,
-                speed: rng.gen_range(0.5..2.0),
-                char: if rng.gen_bool(0.7) { '|' } else { '/' },
+                speed: rng.gen_range(MIN_SPEED..MAX_SPEED),
+                char: if rng.gen_bool(CHAR_PROBABILITY) { '|' } else { '/' },
             });
         }
 

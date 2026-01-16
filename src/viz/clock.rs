@@ -10,56 +10,105 @@ use std::env;
 use std::fs;
 use std::io;
 
-/// Get timezone abbreviation from system (cached)
-fn get_tz_abbrev() -> &'static str {
+/// Get IANA timezone name from system (cached)
+fn get_tz_name() -> &'static str {
     use std::sync::OnceLock;
-    static TZ_ABBREV: OnceLock<String> = OnceLock::new();
-    TZ_ABBREV.get_or_init(|| {
+    static TZ_NAME: OnceLock<String> = OnceLock::new();
+    TZ_NAME.get_or_init(|| {
         // Try TZ environment variable first
         if let Ok(tz) = env::var("TZ") {
             let tz_name = tz.strip_prefix(':').unwrap_or(&tz);
             if !tz_name.starts_with('/') {
-                return tz_to_abbrev(tz_name);
+                return tz_name.to_string();
             }
         }
         // Try /etc/timezone (Debian/Ubuntu)
         if let Ok(tz) = fs::read_to_string("/etc/timezone") {
-            return tz_to_abbrev(tz.trim());
+            return tz.trim().to_string();
         }
         // Try /etc/localtime symlink target (other Linux)
         if let Ok(link) = fs::read_link("/etc/localtime") {
             if let Some(tz) = link.to_str() {
                 if let Some(pos) = tz.find("zoneinfo/") {
-                    return tz_to_abbrev(&tz[pos + 9..]);
+                    return tz[pos + 9..].to_string();
                 }
             }
         }
-        // Fallback to offset
-        let offset = Local::now().format("%:z").to_string();
-        format!("UTC{}", offset.replace(":00", "").replace(":30", ".5"))
+        // Fallback marker
+        String::new()
     })
 }
 
-/// Convert IANA timezone to common abbreviation
+/// Get timezone abbreviation with DST awareness
+fn get_tz_abbrev_now() -> String {
+    let now = Local::now();
+    let tz_name = get_tz_name();
+
+    if tz_name.is_empty() {
+        // Fallback to offset-based abbreviation
+        let offset = now.format("%:z").to_string();
+        return format!("UTC{}", offset.replace(":00", "").replace(":30", ".5"));
+    }
+
+    // Check if currently in DST by comparing standard offset to current offset
+    // DST is active if local offset differs from what standard time would be
+    // A simple heuristic: check if we're in the DST-observing months (roughly Mar-Nov in Northern Hemisphere)
+    let month = now.month();
+    let in_dst = is_dst_active(tz_name, month);
+
+    tz_to_abbrev(tz_name, in_dst)
+}
+
+/// Determine if DST is likely active for a timezone based on month
+/// This is a heuristic - exact DST transitions vary by region/year
+fn is_dst_active(tz: &str, month: u32) -> bool {
+    // Timezones that don't observe DST
+    let no_dst = matches!(tz,
+        "America/Phoenix" | "Pacific/Honolulu" | "US/Hawaii" | "US/Arizona" |
+        "Asia/Tokyo" | "Japan" | "Asia/Shanghai" | "Asia/Hong_Kong" |
+        "Asia/Kolkata" | "Asia/Calcutta" | "Asia/Dubai" |
+        "UTC" | "Etc/UTC"
+    );
+
+    if no_dst {
+        return false;
+    }
+
+    // Southern hemisphere (reversed DST seasons)
+    let southern = matches!(tz,
+        "Australia/Sydney" | "Pacific/Auckland" | "NZ"
+    );
+
+    if southern {
+        // DST roughly Oct-Mar in Southern Hemisphere
+        month >= 10 || month <= 3
+    } else {
+        // DST roughly Mar-Nov in Northern Hemisphere
+        month >= 3 && month <= 11
+    }
+}
+
+/// Convert IANA timezone to common abbreviation with DST awareness
 #[inline]
-fn tz_to_abbrev(tz: &str) -> String {
+fn tz_to_abbrev(tz: &str, in_dst: bool) -> String {
     match tz {
-        "America/New_York" | "US/Eastern" => "EST",
-        "America/Chicago" | "US/Central" => "CST",
-        "America/Denver" | "US/Mountain" | "America/Phoenix" => "MST",
-        "America/Los_Angeles" | "US/Pacific" => "PST",
-        "America/Anchorage" | "US/Alaska" => "AKST",
-        "Pacific/Honolulu" | "US/Hawaii" => "HST",
-        "Europe/London" | "GB" => "GMT",
-        "Europe/Paris" | "Europe/Berlin" | "Europe/Amsterdam" => "CET",
-        "Europe/Moscow" => "MSK",
-        "Asia/Tokyo" | "Japan" => "JST",
-        "Asia/Shanghai" | "Asia/Hong_Kong" => "HKT",
-        "Asia/Kolkata" | "Asia/Calcutta" => "IST",
-        "Asia/Dubai" => "GST",
-        "Australia/Sydney" => "AEST",
-        "Australia/Perth" => "AWST",
-        "Pacific/Auckland" | "NZ" => "NZST",
+        "America/New_York" | "US/Eastern" => if in_dst { "EDT" } else { "EST" },
+        "America/Chicago" | "US/Central" => if in_dst { "CDT" } else { "CST" },
+        "America/Denver" | "US/Mountain" => if in_dst { "MDT" } else { "MST" },
+        "America/Phoenix" | "US/Arizona" => "MST", // Arizona doesn't observe DST
+        "America/Los_Angeles" | "US/Pacific" => if in_dst { "PDT" } else { "PST" },
+        "America/Anchorage" | "US/Alaska" => if in_dst { "AKDT" } else { "AKST" },
+        "Pacific/Honolulu" | "US/Hawaii" => "HST", // Hawaii doesn't observe DST
+        "Europe/London" | "GB" => if in_dst { "BST" } else { "GMT" },
+        "Europe/Paris" | "Europe/Berlin" | "Europe/Amsterdam" => if in_dst { "CEST" } else { "CET" },
+        "Europe/Moscow" => "MSK", // Russia doesn't observe DST
+        "Asia/Tokyo" | "Japan" => "JST", // Japan doesn't observe DST
+        "Asia/Shanghai" | "Asia/Hong_Kong" => "HKT", // China/HK don't observe DST
+        "Asia/Kolkata" | "Asia/Calcutta" => "IST", // India doesn't observe DST
+        "Asia/Dubai" => "GST", // UAE doesn't observe DST
+        "Australia/Sydney" => if in_dst { "AEDT" } else { "AEST" },
+        "Australia/Perth" => "AWST", // Western Australia doesn't observe DST
+        "Pacific/Auckland" | "NZ" => if in_dst { "NZDT" } else { "NZST" },
         "UTC" | "Etc/UTC" => "UTC",
         _ => {
             // Fallback: extract uppercase letters
@@ -127,7 +176,7 @@ const SPACING: usize = 1;
 #[inline]
 #[allow(clippy::too_many_arguments)]
 fn draw_big_time(term: &mut Terminal, cx: usize, cy: usize, time_str: &str, color: Color,
-                 state: &ClockState, old_time: &str, show_seconds: bool, cycling: bool, cycle_digit: usize) {
+                 state: &ClockState, show_seconds: bool, cycling: bool, cycle_digit: usize) {
     // Calculate total width
     let mut total_width = 0;
     let mut first = true;
@@ -151,7 +200,7 @@ fn draw_big_time(term: &mut Terminal, cx: usize, cy: usize, time_str: &str, colo
         // Show all positions with the same digit
         let digit_count = if show_seconds || state.showing_date { 8 } else { 6 };
         x_pos = cx.saturating_sub((digit_count * (DIGIT_WIDTH + SPACING) - SPACING) / 2);
-        
+
         for _ in 0..digit_count {
             for (row, line) in DIGITS[cycle_digit].iter().enumerate() {
                 let y = (cy + row) as i32;
@@ -171,7 +220,7 @@ fn draw_big_time(term: &mut Terminal, cx: usize, cy: usize, time_str: &str, colo
         // Show 8 8s in a row during transition
         let eight_str = if show_seconds || state.showing_date { "88888888" } else { "888888" };
         x_pos = cx.saturating_sub((eight_str.len() * (DIGIT_WIDTH + SPACING) - SPACING) / 2);
-        
+
         for _ in eight_str.chars() {
             for (row, line) in DIGITS[8].iter().enumerate() {
                 let y = (cy + row) as i32;
@@ -187,6 +236,7 @@ fn draw_big_time(term: &mut Terminal, cx: usize, cy: usize, time_str: &str, colo
     }
 
     // Normal display
+    let old_time = &state.last_time;
     for (i, ch) in time_str.chars().enumerate() {
         let (pattern, width) = match ch {
             ':' => (&COLON, COLON_WIDTH),
@@ -226,9 +276,6 @@ fn draw_date(term: &mut Terminal, cx: usize, y: usize, date_str: &str, color: Co
 pub fn run(mut config: ClockConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
     let mut colors = ColorState::new(7); // Default to mono
-
-    // Cached timezone (computed once)
-    let tz_name = get_tz_abbrev();
 
     // Reusable string buffers
     let mut time_buf = String::with_capacity(8);
@@ -329,10 +376,10 @@ pub fn run(mut config: ClockConfig) -> io::Result<()> {
         let now = Local::now();
         time_buf.clear();
         use std::fmt::Write;
-        
+
         if state.showing_date {
-            // Show date instead of time
-            let _ = write!(time_buf, "{:02}-{:02}-{:02}", 
+            // Show date instead of time (MM-DD-YY format)
+            let _ = write!(time_buf, "{:02}-{:02}-{:02}",
                 now.month(), now.day(), now.year() % 100);
         } else {
             // Show time
@@ -342,7 +389,7 @@ pub fn run(mut config: ClockConfig) -> io::Result<()> {
             } else {
                 now.hour()
             };
-            
+
             if config.show_seconds {
                 let _ = write!(time_buf, "{:02}:{:02}:{:02}",
                     hour, now.minute(), now.second());
@@ -351,10 +398,13 @@ pub fn run(mut config: ClockConfig) -> io::Result<()> {
             }
         }
 
-        // Format date into reused buffer with unix timestamp
+        // Get DST-aware timezone abbreviation
+        let tz_abbrev = get_tz_abbrev_now();
+
+        // Format date into reused buffer with unix timestamp (MM-DD-YY format for consistency)
         date_buf.clear();
         let _ = write!(date_buf, "{:02}-{:02}-{:02} {} {}",
-            now.day(), now.month(), now.year() % 100, tz_name, now.timestamp());
+            now.month(), now.day(), now.year() % 100, tz_abbrev, now.timestamp());
 
         // Update transition state
         if state.last_time != time_buf && !state.last_time.is_empty() {
@@ -363,9 +413,9 @@ pub fn run(mut config: ClockConfig) -> io::Result<()> {
 
         // Render
         term.clear();
-        draw_big_time(&mut term, cx, start_y, &time_buf, time_color, &state, &state.last_time, 
+        draw_big_time(&mut term, cx, start_y, &time_buf, time_color, &state,
                       config.show_seconds, state.cycling, state.cycle_digit);
-        
+
         // Show inverse information below
         if state.showing_date {
             // When showing date, display time below (with timezone and unix timestamp)
@@ -375,15 +425,15 @@ pub fn run(mut config: ClockConfig) -> io::Result<()> {
             } else {
                 now.hour()
             };
-            
+
             let time_info = if config.twelve_hour {
                 format!("{:02}:{:02}:{:02} {} {} {}", hour, now.minute(), now.second(),
-                    if now.hour() >= 12 { "PM" } else { "AM" }, tz_name, now.timestamp())
+                    if now.hour() >= 12 { "PM" } else { "AM" }, tz_abbrev, now.timestamp())
             } else {
-                format!("{:02}:{:02}:{:02} {} {}", hour, now.minute(), now.second(), 
-                    tz_name, now.timestamp())
+                format!("{:02}:{:02}:{:02} {} {}", hour, now.minute(), now.second(),
+                    tz_abbrev, now.timestamp())
             };
-            
+
             let x = cx.saturating_sub(time_info.len() / 2);
             term.set_str(x as i32, (start_y + 4) as i32, &time_info, Some(date_color), false);
         } else {
@@ -392,7 +442,7 @@ pub fn run(mut config: ClockConfig) -> io::Result<()> {
         }
 
         term.present()?;
-        
+
         // Update cycling animation
         if state.cycling && state.last_cycle.elapsed().as_millis() >= 100 {
             state.cycle_digit += 1;
@@ -402,14 +452,14 @@ pub fn run(mut config: ClockConfig) -> io::Result<()> {
             }
             state.last_cycle = std::time::Instant::now();
         }
-        
+
         // Update state
         state.last_time = time_buf.clone();
         if state.transition_frame > 0 {
             state.transition_frame -= 1;
         }
         state.was_showing_date = state.showing_date;
-        
+
         term.sleep(config.time_step);
     }
 

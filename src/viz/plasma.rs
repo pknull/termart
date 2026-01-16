@@ -27,9 +27,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
     let time_mult2: f64 = rng.gen_range(1.2..1.8);
     let time_mult3: f64 = rng.gen_range(0.3..0.7);
 
-    let (init_w, init_h) = term.size();
-    let mut prev_w = init_w;
-    let mut prev_h = init_h;
+    let (mut prev_w, mut prev_h) = term.size();
 
     const SIN_TABLE_SIZE: usize = 1024;
     let sin_table: Vec<f64> = (0..SIN_TABLE_SIZE)
@@ -50,6 +48,12 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
             term.clear_screen()?;
             prev_w = width;
             prev_h = height;
+        }
+
+        // Guard against division by zero when terminal has zero dimensions
+        if width == 0 || height == 0 {
+            term.sleep(0.1);
+            continue;
         }
 
         let w = width as f64;
@@ -101,7 +105,8 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
         }
 
         term.present()?;
-        time += (state.speed / 0.03) as f64 * 0.06;
+        // Advance time: state.speed * 2.0 (normalized from default 30fps timing)
+        time += state.speed as f64 * 2.0;
         term.sleep(state.speed);
     }
 

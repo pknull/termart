@@ -10,6 +10,7 @@ pub mod fire;
 pub mod rain;
 pub mod waves;
 pub mod cube;
+pub mod hypercube;
 pub mod pipes;
 pub mod donut;
 pub mod globe;
@@ -19,6 +20,7 @@ pub mod clock;
 pub mod pong;
 pub mod dygma;
 pub mod sunlight;
+pub mod audio;
 
 use crossterm::event::{KeyCode, KeyModifiers};
 

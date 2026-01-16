@@ -5,6 +5,14 @@ use crate::terminal::Terminal;
 use super::{scheme_color, VizState};
 use std::io;
 
+// Torus geometry constants
+const TORUS_INNER_RADIUS: f32 = 1.0;
+const TORUS_TUBE_RADIUS: f32 = 2.0;
+const VIEWER_DISTANCE: f32 = 5.0;
+const THETA_STEP: f32 = 0.07;
+const PHI_STEP: f32 = 0.02;
+const MIN_Z_DIVISOR: f32 = 0.01;
+
 /// Run the rotating donut visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     let mut state = VizState::new(config.time_step);
@@ -13,9 +21,9 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
 
     let luminance_chars: [char; 12] = ['.', ',', '-', '~', ':', ';', '=', '!', '*', '#', '$', '@'];
 
-    let r1 = 1.0;
-    let r2 = 2.0;
-    let k2 = 5.0;
+    let r1 = TORUS_INNER_RADIUS;
+    let r2 = TORUS_TUBE_RADIUS;
+    let k2 = VIEWER_DISTANCE;
 
     let (init_w, init_h) = term.size();
     let mut prev_w = init_w;
@@ -25,8 +33,8 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     let mut output: Vec<Vec<char>> = vec![vec![' '; init_w as usize]; init_h as usize];
     let mut lum_buffer: Vec<Vec<f32>> = vec![vec![0.0; init_w as usize]; init_h as usize];
 
-    let theta_step = 0.07;
-    let phi_step = 0.02;
+    let theta_step = THETA_STEP;
+    let phi_step = PHI_STEP;
     let theta_count = (std::f32::consts::TAU / theta_step) as usize + 1;
     let phi_count = (std::f32::consts::TAU / phi_step) as usize + 1;
 
@@ -98,7 +106,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
                 let x = circle_x * (cos_b * cos_phi + sin_a_sin_b * sin_phi) - circle_y * cos_a_sin_b;
                 let y = circle_x * (sin_b * cos_phi - sin_a_cos_b * sin_phi) + circle_y_cos_a * cos_b;
                 let z = k2 + cos_a * circle_x * sin_phi + circle_y_sin_a;
-                let ooz = 1.0 / z;
+                let ooz = 1.0 / z.max(MIN_Z_DIVISOR);
 
                 let xp = (half_w + k1 * ooz * x) as i32;
                 let yp = (half_h - k1 * ooz * y * 0.5) as i32;
@@ -115,7 +123,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
                         lum_buffer[py][px] = l;
 
                         let lum_idx = if l > 0.0 {
-                            ((l * 8.0) as usize).min(luminance_chars.len() - 1)
+                            ((l * 11.0) as usize).min(luminance_chars.len() - 1)
                         } else {
                             0
                         };

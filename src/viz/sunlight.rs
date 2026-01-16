@@ -9,7 +9,7 @@
 //! Optionally adjusts screen color temperature via xrandr gamma.
 
 use crate::terminal::Terminal;
-use chrono::{Local, Timelike};
+use chrono::{Local, NaiveDate, Timelike};
 use crossterm::event::KeyCode;
 use crossterm::style::Color;
 use crossterm::terminal::size;
@@ -88,6 +88,12 @@ struct SolarTimes {
     sunset_hour: f64,   // Hours since midnight (e.g., 18.75 = 6:45 PM)
 }
 
+/// Cache for solar times to avoid recalculating every frame
+struct SolarCache {
+    times: SolarTimes,
+    cached_date: NaiveDate,
+}
+
 fn calculate_solar_times(lat: f64, lon: f64, unix_time: i64) -> SolarTimes {
     let params = SunriseSunsetParameters::new(unix_time, lat, lon);
     let result = params.calculate();
@@ -158,7 +164,14 @@ fn calculate_phase_and_temp(hour: f64, solar: &SolarTimes) -> (Phase, f64) {
     let sunset_start = solar.sunset_hour - transition_duration / 2.0;
     let sunset_end = solar.sunset_hour + transition_duration / 2.0;
 
-    if hour < sunrise_start || hour >= sunset_end {
+    // Normalize hour and sunset_end for midnight wrap-around (extreme latitudes)
+    // When sunset_end > 24.0, we need to handle the case where hour is in early morning
+    let sunset_end_normalized = if sunset_end > 24.0 { sunset_end - 24.0 } else { sunset_end };
+
+    // Check if we're in the wrapped night period (after midnight but before normalized sunset_end)
+    let in_wrapped_night = sunset_end > 24.0 && hour < sunset_end_normalized;
+
+    if hour < sunrise_start || hour >= sunset_end || in_wrapped_night {
         // Night - full warm
         (Phase::Night, 0.0)
     } else if hour < sunrise_end {
@@ -263,6 +276,9 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
     let now_init = Local::now();
     let mut demo_hour: f64 = now_init.hour() as f64 + now_init.minute() as f64 / 60.0;
 
+    // Solar times cache - only recalculate when date changes
+    let mut solar_cache: Option<SolarCache> = None;
+
     // Apply gamma immediately on startup (don't wait for interval)
     if config.adjust_gamma {
         let solar = calculate_solar_times(config.latitude, config.longitude, now_init.timestamp());
@@ -273,6 +289,12 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
         let (r, g, b) = temp_to_gamma(temp, config.night_green, config.night_blue);
         let _ = apply_gamma(r, g, b);
         gamma_applied = true;
+
+        // Initialize cache
+        solar_cache = Some(SolarCache {
+            times: solar,
+            cached_date: now_init.date_naive(),
+        });
     }
 
     loop {
@@ -304,11 +326,22 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
             now.hour() as f64 + now.minute() as f64 / 60.0 + now.second() as f64 / 3600.0
         };
 
-        // Calculate solar times for today
-        let solar = calculate_solar_times(config.latitude, config.longitude, now.timestamp());
+        // Calculate solar times for today (cached - only recalculate when date changes)
+        let current_date = now.date_naive();
+        let solar = match &solar_cache {
+            Some(cache) if cache.cached_date == current_date => &cache.times,
+            _ => {
+                let times = calculate_solar_times(config.latitude, config.longitude, now.timestamp());
+                solar_cache = Some(SolarCache {
+                    times,
+                    cached_date: current_date,
+                });
+                &solar_cache.as_ref().unwrap().times
+            }
+        };
 
         // Calculate phase and temperature (f.lux style)
-        let (phase, temp) = calculate_phase_and_temp(current_hour, &solar);
+        let (phase, temp) = calculate_phase_and_temp(current_hour, solar);
 
         // Apply gamma if enabled and interval passed
         if config.adjust_gamma && last_gamma_update.elapsed() >= gamma_update_interval {
@@ -335,6 +368,14 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
         let total_height = wave_height + 4;
         let block_top = (h as usize).saturating_sub(total_height) / 2;
         let wave_top_y = block_top;
+
+        // Guard against division by zero for very small terminals
+        if wave_width == 0 || wave_height == 0 {
+            // Skip wave rendering, just show minimal info
+            term.present()?;
+            term.sleep(config.time_step);
+            continue;
+        }
 
         // Draw wave
         for x in 0..wave_width {
