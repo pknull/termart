@@ -1,5 +1,5 @@
 ---
-version: "3.4"
+version: "3.5"
 lastUpdated: "2026-01-17"
 lifecycle: core
 stakeholder: pknull
@@ -24,6 +24,18 @@ Project expanded with system monitors and utilities:
 - **Audio visualizer** with stereo separation and decay animation
 
 ## Recent Changes
+
+### Session 2026-01-17 (Sunlight Bar Display)
+
+**Goal**: Change sunlight visualization from sine wave arc to horizontal bar
+
+**Accomplishments**:
+- Modified `src/viz/sunlight.rs` to render horizontal bar instead of sine curve
+- Preserved color gradient (warm red at midnight ends, cool blue at noon center)
+- Kept all markers (☀ sunrise, ☾ sunset, ● current time) on the bar
+- Updated module docstring to reflect new display style
+
+**Files modified**: src/viz/sunlight.rs
 
 ### Session 2026-01-17 (Audit Review Implementation)
 

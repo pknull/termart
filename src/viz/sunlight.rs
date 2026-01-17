@@ -1,10 +1,10 @@
 //! Sunlight - Day/night cycle visualization with screen temperature control
 //!
-//! Shows a sine wave representing the day cycle:
-//! - Peak (top) = solar noon, cool blue colors
-//! - Trough (bottom) = midnight, warm amber/red colors
+//! Shows a horizontal bar representing the 24-hour day cycle:
+//! - Center (noon) = cool blue colors
+//! - Ends (midnight) = warm amber/red colors
 //! - Current time shown as a moving dot
-//! - Sunrise/sunset marked on the wave
+//! - Sunrise/sunset marked on the bar
 //!
 //! Optionally adjusts screen color temperature via xrandr gamma.
 
@@ -377,43 +377,39 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
             continue;
         }
 
-        // Draw wave
+        // Draw horizontal bar
+        let bar_y = (wave_top_y + wave_height / 2) as i32;
+
         for x in 0..wave_width {
             // Map x to hours (0-24)
             let hour = x as f64 / wave_width as f64 * 24.0;
 
-            // Calculate wave y position (sine wave, noon at top, midnight at bottom)
+            // Calculate color based on time of day (noon=cool/bright, midnight=warm/dim)
             let hours_from_noon = hour - 12.0;
             let normalized = hours_from_noon / 12.0;
             let wave_val = (-normalized * std::f64::consts::PI).cos(); // -1 to 1
-            let y_offset = ((1.0 - wave_val) / 2.0 * wave_height as f64) as usize;
-            let y = wave_top_y + y_offset;
-
-            // Calculate color based on position on wave
             let pos_temp = (wave_val + 1.0) / 2.0; // 0 to 1
             let color = temp_color(pos_temp);
 
-            // Draw wave point
             let screen_x = (wave_start_x + x) as i32;
-            let screen_y = y as i32;
 
-            if screen_y >= 0 && screen_y < h as i32 {
-                term.set(screen_x, screen_y, '─', Some(color), false);
+            if bar_y >= 0 && bar_y < h as i32 {
+                term.set(screen_x, bar_y, '─', Some(color), false);
             }
 
             // Mark sunrise
-            if (hour - solar.sunrise_hour).abs() < 0.5 && screen_y >= 0 && screen_y < h as i32 {
-                term.set(screen_x, screen_y, '☀', Some(sunrise_color), false);
+            if (hour - solar.sunrise_hour).abs() < 0.5 && bar_y >= 0 && bar_y < h as i32 {
+                term.set(screen_x, bar_y, '☀', Some(sunrise_color), false);
             }
 
             // Mark sunset
-            if (hour - solar.sunset_hour).abs() < 0.5 && screen_y >= 0 && screen_y < h as i32 {
-                term.set(screen_x, screen_y, '☾', Some(sunset_color), false);
+            if (hour - solar.sunset_hour).abs() < 0.5 && bar_y >= 0 && bar_y < h as i32 {
+                term.set(screen_x, bar_y, '☾', Some(sunset_color), false);
             }
 
             // Mark current time
-            if (hour - current_hour).abs() < 0.25 && screen_y >= 0 && screen_y < h as i32 {
-                term.set(screen_x, screen_y, '●', Some(dot_color), false);
+            if (hour - current_hour).abs() < 0.25 && bar_y >= 0 && bar_y < h as i32 {
+                term.set(screen_x, bar_y, '●', Some(dot_color), false);
             }
         }
 
