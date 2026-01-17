@@ -1,6 +1,6 @@
 ---
-version: "3.3"
-lastUpdated: "2026-01-16"
+version: "3.4"
+lastUpdated: "2026-01-17"
 lifecycle: core
 stakeholder: pknull
 changeTrigger: "session end, significant changes"
@@ -24,6 +24,34 @@ Project expanded with system monitors and utilities:
 - **Audio visualizer** with stereo separation and decay animation
 
 ## Recent Changes
+
+### Session 2026-01-17 (Audit Review Implementation)
+
+**Goal**: Implement all recommendations from AUDIT-REVIEW.md code audit
+
+**Accomplishments**:
+
+1. **Error handling improvements**:
+   - `settings.rs`: Config parsing errors now printed to stderr instead of silently using defaults
+   - `bonsai.rs`: Fixed `unwrap()` on `duration_since(UNIX_EPOCH)` with fallback for broken clocks
+   - `fah.rs`: `load_private_key()` now returns `Result<(), String>` with descriptive error messages surfaced to stderr
+
+2. **Code quality**:
+   - `fah.rs`: Replaced 35-line manual date calculation with one-line `chrono::Utc::now().format()` call
+   - `fah.rs`: `debug_log!` macro now opt-in via `TERMART_DEBUG` env var (prevents disk filling)
+   - `main.rs`: Added `#![warn(clippy::unwrap_used)]` to catch future unwrap additions
+
+3. **Test infrastructure created**:
+   - `tests/smoke_test.rs`: 3 smoke tests (help, version, invalid command)
+   - All tests passing
+
+4. **Documentation**:
+   - `README.md`: Added security note about `chmod 600` for config file with credentials
+
+**Key Learnings**:
+- **Validated Pattern**: `#![warn(clippy::unwrap_used)]` catches unwraps without breaking existing code
+- **Validated Pattern**: Return `Result<(), String>` for simple error surfacing without adding thiserror dependency
+- **Pitfall**: Manual date calculations are error-prone; always use chrono if already a dependency
 
 ### Session 2026-01-16 (Comprehensive Code Review & Fix Pass)
 
@@ -100,6 +128,8 @@ Project expanded with system monitors and utilities:
 
 ## Next Steps
 
+- [ ] **Audit follow-up**: Full `unwrap()` audit across codebase (15 occurrences flagged)
+- [ ] **Testing**: Add unit tests for config parsing, crypto error paths, network failures
 - [ ] **Consider**: Apply same constants/helper extraction pattern to remaining viz files
 - [ ] **Optional refactor**: Consolidate cube.rs into hypercube.rs (hypercube handles 3D now)
 - [ ] **Optional refactor**: Extract `shortest_angular_delta()` helper (3 use cases)
