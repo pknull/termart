@@ -77,8 +77,6 @@ mod constants {
     /// Minimum gap between bars (in characters)
     pub const BAR_GAP: usize = 1;
 
-    /// Default color scheme index (5 = electric blue/cyan)
-    pub const DEFAULT_COLOR_SCHEME: u8 = 5;
     /// Color scheme index for rainbow mode
     pub const RAINBOW_SCHEME: u8 = 8;
 
@@ -202,24 +200,13 @@ impl StereoAudioBuffer {
         }
     }
 
-    fn get_left_samples(&self) -> Vec<f32> {
-        // Return samples in order (oldest to newest)
-        let mut result = Vec::with_capacity(BUFFER_SIZE);
+    /// Copy samples into preallocated buffers (oldest to newest order)
+    fn copy_samples(&self, left: &mut [f32], right: &mut [f32]) {
         for i in 0..BUFFER_SIZE {
             let idx = (self.write_pos + i) % BUFFER_SIZE;
-            result.push(self.left[idx]);
+            left[i] = self.left[idx];
+            right[i] = self.right[idx];
         }
-        result
-    }
-
-    fn get_right_samples(&self) -> Vec<f32> {
-        // Return samples in order (oldest to newest)
-        let mut result = Vec::with_capacity(BUFFER_SIZE);
-        for i in 0..BUFFER_SIZE {
-            let idx = (self.write_pos + i) % BUFFER_SIZE;
-            result.push(self.right[idx]);
-        }
-        result
     }
 }
 
@@ -715,7 +702,6 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     dbg_log!(log, "Starting audio visualizer");
 
     let mut state = VizState::new(config.time_step);
-    state.color_scheme = DEFAULT_COLOR_SCHEME;
 
 
     // Suppress ALSA debug spam by redirecting stderr temporarily during device enumeration
@@ -867,6 +853,10 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     // Frame timing for decay updates
     let mut last_frame = std::time::Instant::now();
 
+    // Preallocated sample buffers to avoid per-frame allocations
+    let mut samples_left = vec![0.0f32; BUFFER_SIZE];
+    let mut samples_right = vec![0.0f32; BUFFER_SIZE];
+
     // Bar rendering characters - matched sets for symmetric animation
     // Lower blocks fill from bottom up (for top half): 1/8, 1/2, full
     let bar_chars_lower = ['▁', '▄', '█'];
@@ -933,11 +923,12 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         term.clear();
 
         // Get current audio samples for both channels
-        let (samples_left, samples_right) = if let Ok(buffer) = audio_buffer.lock() {
-            (buffer.get_left_samples(), buffer.get_right_samples())
+        if let Ok(buffer) = audio_buffer.lock() {
+            buffer.copy_samples(&mut samples_left, &mut samples_right);
         } else {
-            (vec![0.0; BUFFER_SIZE], vec![0.0; BUFFER_SIZE])
-        };
+            samples_left.fill(0.0);
+            samples_right.fill(0.0);
+        }
 
         let current_bar_count = target_heights_left.len();
         let available_height = height.saturating_sub(1) as f32;
@@ -998,14 +989,14 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
             render_channel_bar(
                 term, &decay_left[bar_idx], bar_x, bar_width, x_ratio,
                 half_height, center_y, max_top, height,
-                BarDirection::Up, &bar_chars_lower, state.color_scheme,
+                BarDirection::Up, &bar_chars_lower, state.color_scheme(),
             );
 
             // Right channel (bottom half, grows downward)
             render_channel_bar(
                 term, &decay_right[bar_idx], bar_x, bar_width, x_ratio,
                 half_height, center_y, max_bottom, height,
-                BarDirection::Down, &bar_chars_upper, state.color_scheme,
+                BarDirection::Down, &bar_chars_upper, state.color_scheme(),
             );
         }
 

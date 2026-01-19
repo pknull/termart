@@ -3,14 +3,14 @@ use crate::terminal::Terminal;
 use crossterm::style::Color;
 
 /// A bounding box for layout calculations
-pub struct Box {
+pub struct Rect {
     pub x: i32,
     pub y: i32,
     pub width: u16,
     pub height: u16,
 }
 
-impl Box {
+impl Rect {
     /// Inner content area (excluding borders)
     pub fn inner_x(&self) -> i32 { self.x + 1 }
     pub fn inner_y(&self) -> i32 { self.y + 1 }
@@ -61,7 +61,7 @@ pub fn draw_core_graphs_scheme(
     let has_temps = !temps.is_empty();
 
     let cols = 2;
-    let col_width = (width - 1) / cols;
+    let col_width = width.saturating_sub(1) / cols;
     let rows_per_col = cores.div_ceil(cols);
     let actual_rows = rows_per_col.min(height);
 

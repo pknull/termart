@@ -8,7 +8,6 @@ use std::io;
 /// Run the waves effect visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     let mut state = VizState::new(config.time_step);
-    state.color_scheme = 2; // Default to blue/cyan
 
     let mut time: f64 = 0.0;
     let wave_chars = ['_', '.', '-', '~', '^', '"', '*'];
@@ -73,7 +72,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
                 3 => 2,
                 _ => 3,
             };
-            let (color, bold) = scheme_color(state.color_scheme, intensity, layer == NUM_LAYERS - 1);
+            let (color, bold) = scheme_color(state.color_scheme(), intensity, layer == NUM_LAYERS - 1);
 
             for x in 0..width as usize {
                 let fx = x as f64;

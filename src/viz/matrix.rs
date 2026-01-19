@@ -102,7 +102,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
                     let char_idx = (y as usize + x) % drop.chars.len();
                     let ch = drop.chars[char_idx];
                     let intensity = if i == 0 { 3 } else if i < 3 { 2 } else if i < half_len { 1 } else { 0 };
-                    let (color, bold) = scheme_color(state.color_scheme, intensity, i < 3);
+                    let (color, bold) = scheme_color(state.color_scheme(), intensity, i < 3);
                     term.set(x as i32, y, ch, Some(color), bold);
                 }
             }

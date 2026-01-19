@@ -846,7 +846,6 @@ impl FocusConnection {
 pub fn run(config: DygmaConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
     let mut state = VizState::new(config.time_step);
-    state.color_scheme = 5; // Electric default
 
     let (init_w, init_h) = term.size();
     let mut prev_w = init_w;
@@ -1155,12 +1154,12 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
         let connection_status = if has_focus { "Focus" } else if has_evdev { "evdev" } else { "none" };
         let layer_text = format!("[ Layer {} : {} ]", top_layer + 1, connection_status);
         let layer_x = (width as usize - layer_text.len()) / 2;
-        let (layer_color, _) = scheme_color(state.color_scheme, 2, true);
+        let (layer_color, _) = scheme_color(state.color_scheme(), 2, true);
         term.set_str(layer_x as i32, 0, &layer_text, Some(layer_color), true);
 
         // Debug status line (only in debug mode)
         if config.debug {
-            let (status_color, _) = scheme_color(state.color_scheme, 0, false);
+            let (status_color, _) = scheme_color(state.color_scheme(), 0, false);
             let _last_key_info = last_key.lock().map(|k| k.clone()).unwrap_or_default();
             // Show keycodes for number row positions (1-6) on active layer
             let km_samples = if let Some(ref km) = keymap {
@@ -1217,7 +1216,7 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
             scale,
             key_char_width,
             &heat_snapshot,
-            state.color_scheme,
+            state.color_scheme(),
             keymap.as_ref(),
             &layer_stack,
             shifted,
@@ -1235,7 +1234,7 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
             scale,
             key_char_width,
             &heat_snapshot,
-            state.color_scheme,
+            state.color_scheme(),
             keymap.as_ref(),
             &layer_stack,
             shifted,

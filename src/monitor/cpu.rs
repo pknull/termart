@@ -2,7 +2,7 @@ use crate::colors::ColorState;
 use crate::terminal::Terminal;
 use crate::monitor::{MonitorConfig, MonitorState};
 use crate::monitor::layout::{
-    Box, draw_meter_btop_scheme, draw_core_graphs_scheme,
+    Rect, draw_meter_btop_scheme, draw_core_graphs_scheme,
     cpu_gradient_color_scheme, temp_gradient_color_scheme,
     text_color_scheme, muted_color_scheme,
 };
@@ -330,7 +330,7 @@ impl CpuMonitor {
     }
 
     #[allow(dead_code)]
-    pub fn render(&self, term: &mut Terminal, bx: &Box, colors: &ColorState) {
+    pub fn render(&self, term: &mut Terminal, bx: &Rect, colors: &ColorState) {
         let x = bx.inner_x();
         let y = bx.inner_y();
         let w = bx.inner_width() as usize;

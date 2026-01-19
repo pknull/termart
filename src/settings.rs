@@ -40,8 +40,25 @@ impl Settings {
         }
 
         match fs::read_to_string(&path) {
-            Ok(content) => toml::from_str(&content).unwrap_or_default(),
-            Err(_) => Self::default(),
+            Ok(content) => match toml::from_str(&content) {
+                Ok(settings) => settings,
+                Err(e) => {
+                    eprintln!(
+                        "Warning: Failed to parse {}: {}\nUsing defaults.",
+                        path.display(),
+                        e
+                    );
+                    Self::default()
+                }
+            },
+            Err(e) => {
+                eprintln!(
+                    "Warning: Could not read {}: {}\nUsing defaults.",
+                    path.display(),
+                    e
+                );
+                Self::default()
+            }
         }
     }
 

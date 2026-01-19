@@ -21,16 +21,21 @@ pub mod pong;
 pub mod dygma;
 pub mod sunlight;
 pub mod audio;
+pub mod lissajous;
 
 use crossterm::event::{KeyCode, KeyModifiers};
+use crate::colors::ColorState;
 
 // Re-export scheme_color from colors module for viz users
 pub use crate::colors::scheme_color;
 
+/// Default color scheme for all visualizations (7 = mono/white)
+const DEFAULT_COLOR_SCHEME: u8 = 7;
+
 /// Runtime state for interactive controls (shared by all visualizations)
 pub struct VizState {
     pub speed: f32,        // Current speed (time per frame)
-    pub color_scheme: u8,  // Current color scheme (0-9)
+    pub colors: ColorState, // Color scheme state (delegated)
     pub paused: bool,
 }
 
@@ -38,13 +43,23 @@ impl VizState {
     pub fn new(initial_speed: f32) -> Self {
         Self {
             speed: initial_speed,
-            color_scheme: 0,
+            colors: ColorState::new(DEFAULT_COLOR_SCHEME),
             paused: false,
         }
     }
 
+    /// Get current color scheme (convenience accessor)
+    pub fn color_scheme(&self) -> u8 {
+        self.colors.scheme
+    }
+
     /// Handle keypress, returns true if should quit
     pub fn handle_key(&mut self, code: KeyCode, _modifiers: KeyModifiers) -> bool {
+        // Try color key handling first
+        if self.colors.handle_key(code) {
+            return false;
+        }
+
         match code {
             KeyCode::Char('q') | KeyCode::Esc => return true,
             KeyCode::Char(' ') => self.paused = !self.paused,
@@ -65,17 +80,6 @@ impl VizState {
                     _ => self.speed,
                 };
             }
-            // Shift+number produces symbols - use these for color schemes
-            KeyCode::Char('!') => self.color_scheme = 1,  // Shift+1: fire
-            KeyCode::Char('@') => self.color_scheme = 2,  // Shift+2: ice
-            KeyCode::Char('#') => self.color_scheme = 3,  // Shift+3: pink
-            KeyCode::Char('$') => self.color_scheme = 4,  // Shift+4: gold
-            KeyCode::Char('%') => self.color_scheme = 5,  // Shift+5: electric
-            KeyCode::Char('^') => self.color_scheme = 6,  // Shift+6: lava
-            KeyCode::Char('&') => self.color_scheme = 7,  // Shift+7: mono
-            KeyCode::Char('*') => self.color_scheme = 8,  // Shift+8: rainbow
-            KeyCode::Char('(') => self.color_scheme = 9,  // Shift+9: neon
-            KeyCode::Char(')') => self.color_scheme = 0,  // Shift+0: green/matrix
             _ => {}
         }
         false

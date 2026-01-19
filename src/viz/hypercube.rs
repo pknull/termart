@@ -430,7 +430,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
 
                 if dots > 0 {
                     let ch = char::from_u32(BRAILLE_BASE + dots as u32).unwrap_or(' ');
-                    let (color, bold) = scheme_color(state.color_scheme, 2, true);
+                    let (color, bold) = scheme_color(state.color_scheme(), 2, true);
                     term.set(cx as i32, cy as i32, ch, Some(color), bold);
                 }
             }

@@ -76,7 +76,6 @@ fn evdev_key_to_label(key: evdev::Key) -> Option<&'static str> {
 /// Run the keyboard visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     let mut state = VizState::new(config.time_step);
-    state.color_scheme = 5; // Default to electric (cyan/white)
 
     let (init_w, init_h) = term.size();
     let mut prev_w = init_w;
@@ -216,11 +215,11 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
                 let (color, bold) = if heat > 0.7 {
                     (Color::White, true)
                 } else if heat > 0.3 {
-                    scheme_color(state.color_scheme, 3, true)
+                    scheme_color(state.color_scheme(), 3, true)
                 } else if heat > 0.0 {
-                    scheme_color(state.color_scheme, 2, false)
+                    scheme_color(state.color_scheme(), 2, false)
                 } else {
-                    scheme_color(state.color_scheme, 0, false)
+                    scheme_color(state.color_scheme(), 0, false)
                 };
 
                 // Draw compact key (label with padding, no brackets)
@@ -242,7 +241,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
             let status = if has_evdev { "[GLOBAL]" } else { "[LOCAL]" };
             let status_text = format!("{} (q to quit)", status);
             let status_x = ((w as f32 - status_text.len() as f32) / 2.0).max(0.0) as usize;
-            let (status_color, _) = scheme_color(state.color_scheme, 1, false);
+            let (status_color, _) = scheme_color(state.color_scheme(), 1, false);
             for (i, ch) in status_text.chars().enumerate() {
                 term.set((status_x + i) as i32, 0, ch, Some(status_color), false);
             }

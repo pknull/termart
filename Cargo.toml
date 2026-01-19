@@ -30,6 +30,8 @@ chrono = "0.4"
 serialport = "4.3"
 maxminddb = "0.24"
 sunrise-sunset-calculator = "1.0"
+cpal = "0.15"
+spectrum-analyzer = "1.6"
 
 [profile.release]
 opt-level = 3

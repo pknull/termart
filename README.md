@@ -275,6 +275,11 @@ To get `fah_secret` and `fah_sid` for remote machines:
 2. Open browser DevTools → Application → Local Storage
 3. Copy `fah-secret` and `fah-sid` values
 
+**Security Note:** The config file contains sensitive credentials (RSA private keys, session tokens). Restrict permissions:
+```bash
+chmod 600 ~/.config/termart/config.toml
+```
+
 **Controls:**
 | Key | Action |
 |-----|--------|

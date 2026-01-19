@@ -14,34 +14,34 @@ pub struct BonsaiConfig {
     pub message: Option<String>,
 }
 
-/// Types of visualizations available
-#[derive(Clone, Copy, PartialEq)]
-pub enum FractalType {
-    Matrix,   // cmatrix-like falling characters
-    Life,     // Conway's Game of Life
-    Plasma,   // Animated plasma effect
-    Fire,     // Doom-style fire
-    Rain,     // Falling rain with splashes
-    Waves,    // Animated sine waves
-    Cube,     // 3D rotating cube with braille
-    Pipes,    // Classic pipes screensaver
-    Donut,    // Rotating 3D torus (donut)
-    Globe,    // Rotating 3D globe with network activity
-    Hex,      // Hexagon grid with wave animations
-    Keyboard, // On-screen keyboard with key highlighting
-    Invaders, // Space Invaders style game
+/// Per-visualizer specific configuration
+#[derive(Clone)]
+pub enum FractalKind {
+    Matrix,
+    Life { draw_char: char },
+    Plasma,
+    Fire,
+    Rain,
+    Waves,
+    Cube,
+    Hypercube,
+    Pipes,
+    Donut,
+    Globe { geoip_db: Option<std::path::PathBuf>, tilt: f32 },
+    Hex,
+    Keyboard,
+    Invaders,
+    Audio,
+    Lissajous,
 }
 
 /// Configuration for fractal generation
 #[derive(Clone)]
 pub struct FractalConfig {
-    pub fractal_type: FractalType,
+    pub kind: FractalKind,
     pub time_step: f32,
     pub seed: Option<u64>,
-    pub draw_char: char,
     pub debug: bool,
-    pub geoip_db: Option<std::path::PathBuf>,
-    pub tilt: f32,  // Globe tilt in radians
 }
 
 /// Branch types for bonsai tree

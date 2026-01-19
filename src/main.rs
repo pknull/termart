@@ -1,3 +1,6 @@
+// Prevent new unwrap() calls - existing code should migrate to proper error handling
+#![warn(clippy::unwrap_used)]
+
 mod config;
 mod terminal;
 mod colors;
@@ -13,7 +16,7 @@ mod net_geo;
 mod evdev_util;
 
 use clap::{Parser, Subcommand, Args};
-use config::{BonsaiConfig, FractalConfig, FractalType};
+use config::{BonsaiConfig, FractalConfig, FractalKind};
 use monitor::{MonitorConfig, MonitorType};
 use std::io;
 use std::path::PathBuf;
@@ -149,6 +152,12 @@ enum Commands {
         opts: VizOptions,
     },
 
+    /// Spinning 4D hypercube (tesseract)
+    Hypercube {
+        #[command(flatten)]
+        opts: VizOptions,
+    },
+
     /// Pipes screensaver
     Pipes {
         #[command(flatten)]
@@ -204,6 +213,18 @@ enum Commands {
 
     /// Space Invaders style game
     Invaders {
+        #[command(flatten)]
+        opts: VizOptions,
+    },
+
+    /// Audio spectrum visualizer (CAVA-style)
+    Audio {
+        #[command(flatten)]
+        opts: VizOptions,
+    },
+
+    /// Lissajous curves with braille rendering
+    Lissajous {
         #[command(flatten)]
         opts: VizOptions,
     },
@@ -332,6 +353,14 @@ enum Commands {
         /// Animation speed (seconds per frame)
         #[arg(short, long, default_value = "0.1")]
         time: f32,
+
+        /// Demo mode: cycle through all weather conditions
+        #[arg(long)]
+        demo: bool,
+
+        /// Demo speed: seconds per condition (default 3.0)
+        #[arg(long, default_value = "3.0")]
+        demo_speed: f32,
     },
 
     /// Pomodoro timer with ASCII tomato
@@ -365,15 +394,12 @@ enum Commands {
     },
 }
 
-fn run_viz(ftype: FractalType, opts: VizOptions, draw_char: char, geoip_db: Option<PathBuf>, tilt_deg: f32) -> io::Result<()> {
+fn run_viz(kind: FractalKind, opts: VizOptions) -> io::Result<()> {
     let config = FractalConfig {
-        fractal_type: ftype,
+        kind,
         time_step: opts.time,
         seed: opts.seed,
-        draw_char,
         debug: opts.debug,
-        geoip_db,
-        tilt: tilt_deg.to_radians(),
     };
     fractal::run(config)
 }
@@ -420,24 +446,26 @@ fn main() -> io::Result<()> {
             };
             bonsai::run(config)?;
         }
-        Commands::Matrix { opts } => run_viz(FractalType::Matrix, opts, '#', None, 0.0)?,
+        Commands::Matrix { opts } => run_viz(FractalKind::Matrix, opts)?,
         Commands::Life { opts, char: c } => {
-            run_viz(FractalType::Life, opts, c.chars().next().unwrap_or('#'), None, 0.0)?
+            let draw_char = c.chars().next().unwrap_or('#');
+            run_viz(FractalKind::Life { draw_char }, opts)?
         }
-        Commands::Plasma { opts } => run_viz(FractalType::Plasma, opts, '#', None, 0.0)?,
-        Commands::Fire { opts } => run_viz(FractalType::Fire, opts, '#', None, 0.0)?,
-        Commands::Rain { opts } => run_viz(FractalType::Rain, opts, '#', None, 0.0)?,
-        Commands::Waves { opts } => run_viz(FractalType::Waves, opts, '#', None, 0.0)?,
-        Commands::Cube { opts } => run_viz(FractalType::Cube, opts, '#', None, 0.0)?,
-        Commands::Pipes { opts } => run_viz(FractalType::Pipes, opts, '#', None, 0.0)?,
-        Commands::Donut { opts } => run_viz(FractalType::Donut, opts, '#', None, 0.0)?,
+        Commands::Plasma { opts } => run_viz(FractalKind::Plasma, opts)?,
+        Commands::Fire { opts } => run_viz(FractalKind::Fire, opts)?,
+        Commands::Rain { opts } => run_viz(FractalKind::Rain, opts)?,
+        Commands::Waves { opts } => run_viz(FractalKind::Waves, opts)?,
+        Commands::Cube { opts } => run_viz(FractalKind::Cube, opts)?,
+        Commands::Hypercube { opts } => run_viz(FractalKind::Hypercube, opts)?,
+        Commands::Pipes { opts } => run_viz(FractalKind::Pipes, opts)?,
+        Commands::Donut { opts } => run_viz(FractalKind::Donut, opts)?,
         Commands::Globe { opts, geoip, tilt } => {
             let settings = settings::Settings::load();
             let geoip_db = geoip.or(settings.globe.geoip_db);
-            run_viz(FractalType::Globe, opts, '#', geoip_db, tilt)?
+            run_viz(FractalKind::Globe { geoip_db, tilt: tilt.to_radians() }, opts)?
         }
-        Commands::Hex { opts } => run_viz(FractalType::Hex, opts, '#', None, 0.0)?,
-        Commands::Keyboard { opts } => run_viz(FractalType::Keyboard, opts, '#', None, 0.0)?,
+        Commands::Hex { opts } => run_viz(FractalKind::Hex, opts)?,
+        Commands::Keyboard { opts } => run_viz(FractalKind::Keyboard, opts)?,
         Commands::Dygma { time, port, debug } => {
             let config = viz::dygma::DygmaConfig {
                 time_step: time,
@@ -446,7 +474,9 @@ fn main() -> io::Result<()> {
             };
             viz::dygma::run(config)?;
         }
-        Commands::Invaders { opts } => run_viz(FractalType::Invaders, opts, '#', None, 0.0)?,
+        Commands::Invaders { opts } => run_viz(FractalKind::Invaders, opts)?,
+        Commands::Audio { opts } => run_viz(FractalKind::Audio, opts)?,
+        Commands::Lissajous { opts } => run_viz(FractalKind::Lissajous, opts)?,
         Commands::Clock { time, no_seconds } => {
             let config = viz::clock::ClockConfig {
                 time_step: time,
@@ -513,10 +543,12 @@ fn main() -> io::Result<()> {
             };
             monitor::docker::run(config)?;
         }
-        Commands::Weather { location, time } => {
+        Commands::Weather { location, time, demo, demo_speed } => {
             let config = weather::WeatherConfig {
                 location,
                 time_step: time,
+                demo,
+                demo_speed,
             };
             weather::run(config)?;
         }

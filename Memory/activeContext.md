@@ -1,6 +1,6 @@
 ---
-version: "3.5"
-lastUpdated: "2026-01-17"
+version: "3.6"
+lastUpdated: "2026-01-19"
 lifecycle: core
 stakeholder: pknull
 changeTrigger: "session end, significant changes"
@@ -24,6 +24,46 @@ Project expanded with system monitors and utilities:
 - **Audio visualizer** with stereo separation and decay animation
 
 ## Recent Changes
+
+### Session 2026-01-19 (Codex Code Review & Fixes)
+
+**Goal**: Get external code review from Codex and implement all recommended fixes
+
+**Accomplishments**:
+
+1. **Codex code review obtained** covering:
+   - Code quality and Rust idioms
+   - Potential bugs and edge cases
+   - Performance concerns
+   - Architecture/design patterns
+
+2. **8 fixes implemented**:
+
+   | Fix | Description | Files |
+   |-----|-------------|-------|
+   | 1 | Rename `Box` → `Rect` to avoid shadowing `std::boxed::Box` | layout.rs, cpu.rs, mem.rs, disk.rs, diskio.rs, net.rs, gpu.rs |
+   | 2 | Use `saturating_sub` to prevent width underflow panic | layout.rs:64 |
+   | 3 | Replace `unwrap()` with `unwrap_or_default()` on SystemTime | fractal.rs:15 |
+   | 4 | Remove nested `unwrap()` in timestamp conversion | sunlight.rs:103 |
+   | 5 | Preallocate audio sample buffers (eliminate per-frame allocations) | audio.rs |
+   | 6 | Use `BufWriter` for terminal output performance | terminal.rs:254-302 |
+   | 7 | Split `FractalConfig` into common + per-viz `FractalKind` enum | config.rs, main.rs, fractal.rs, life.rs, globe.rs |
+   | 8 | Deduplicate keybinding logic via `ColorState` delegation | viz/mod.rs + all 17 visualizers |
+
+3. **Default color scheme set to mono/white (scheme 7)** across all visualizations
+
+**Key Learnings**:
+- **Validated Pattern**: External AI review (Codex) catches different issues than self-review
+- **Validated Pattern**: `saturating_sub` is safer than subtraction for layout math
+- **Validated Pattern**: Delegating to a single source (ColorState) prevents drift
+- **Pitfall**: Renaming a struct used across modules requires updating all imports AND type usages
+
+**Files modified** (28 files total):
+- config.rs, main.rs, fractal.rs (FractalKind refactor)
+- terminal.rs (BufWriter optimization)
+- monitor/layout.rs, cpu.rs, mem.rs, disk.rs, diskio.rs, net.rs, gpu.rs (Box→Rect)
+- viz/mod.rs (ColorState delegation)
+- All 17 visualizers (color_scheme accessor update)
 
 ### Session 2026-01-17 (Sunlight Bar Display)
 
@@ -140,7 +180,7 @@ Project expanded with system monitors and utilities:
 
 ## Next Steps
 
-- [ ] **Audit follow-up**: Full `unwrap()` audit across codebase (15 occurrences flagged)
+- [x] ~~**Audit follow-up**: Full `unwrap()` audit across codebase~~ (Codex review covered this)
 - [ ] **Testing**: Add unit tests for config parsing, crypto error paths, network failures
 - [ ] **Consider**: Apply same constants/helper extraction pattern to remaining viz files
 - [ ] **Optional refactor**: Consolidate cube.rs into hypercube.rs (hypercube handles 3D now)

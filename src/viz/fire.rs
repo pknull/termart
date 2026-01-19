@@ -18,7 +18,6 @@ const HOT_THRESHOLD: u8 = 200;
 /// Run the fire effect visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
     let mut state = VizState::new(config.time_step);
-    state.color_scheme = 1; // Default to fire colors
 
     let (init_w, init_h) = term.size();
     let mut w = init_w as usize;
@@ -82,7 +81,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
                 let char_idx = (heat as usize * (fire_chars.len() - 1)) / 255;
                 let ch = fire_chars[char_idx.min(fire_chars.len() - 1)];
                 let intensity = (heat / INTENSITY_DIVISOR).min(INTENSITY_MAX);
-                let (color, bold) = scheme_color(state.color_scheme, intensity, heat > HOT_THRESHOLD);
+                let (color, bold) = scheme_color(state.color_scheme(), intensity, heat > HOT_THRESHOLD);
                 term.set(x as i32, y as i32, ch, Some(color), bold);
             }
         }

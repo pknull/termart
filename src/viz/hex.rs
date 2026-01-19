@@ -25,7 +25,6 @@ struct Pulse {
 /// Run the hex grid visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
     let mut state = VizState::new(config.time_step);
-    state.color_scheme = 5; // Default to electric (cyan/white)
 
     let mut time: f32 = 0.0;
 
@@ -151,7 +150,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
                 // Draw hex based on intensity
                 if intensity > 0.1 {
                     let level = ((intensity * 4.0) as u8).min(3);
-                    let (color, bold) = scheme_color(state.color_scheme, level, intensity > 0.8);
+                    let (color, bold) = scheme_color(state.color_scheme(), level, intensity > 0.8);
 
                     // Draw hexagon shape - let set_if_visible handle clipping
                     // Top:    /_\

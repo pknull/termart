@@ -2,7 +2,7 @@ use crate::colors::ColorState;
 use crate::terminal::Terminal;
 use crate::monitor::{MonitorConfig, MonitorState};
 use crate::monitor::layout::{
-    Box, draw_meter_btop_scheme, cpu_gradient_color_scheme, format_bytes,
+    Rect, draw_meter_btop_scheme, cpu_gradient_color_scheme, format_bytes,
     text_color_scheme, muted_color_scheme, header_color_scheme,
 };
 use crossterm::style::Color;
@@ -99,7 +99,7 @@ impl DiskMonitor {
     }
 
     #[allow(dead_code)]
-    pub fn render(&self, term: &mut Terminal, bx: &Box, colors: &ColorState) {
+    pub fn render(&self, term: &mut Terminal, bx: &Rect, colors: &ColorState) {
         let x = bx.inner_x();
         let y = bx.inner_y();
         let w = bx.inner_width() as usize;

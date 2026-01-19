@@ -28,7 +28,6 @@ struct Splash {
 /// Run the rain effect visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
     let mut state = VizState::new(config.time_step);
-    state.color_scheme = 2; // Default to blue/cyan
 
     let (init_w, init_h) = term.size();
     let mut w = init_w as usize;
@@ -121,7 +120,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
                         '~' => 1,
                         _ => 0,
                     };
-                    let (color, bold) = scheme_color(state.color_scheme, intensity, ch == '|' || ch == '/');
+                    let (color, bold) = scheme_color(state.color_scheme(), intensity, ch == '|' || ch == '/');
                     term.set(x as i32, y as i32, ch, Some(color), bold);
                 }
             }

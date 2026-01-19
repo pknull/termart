@@ -103,7 +103,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
 
             if pipe.x >= 0 && pipe.x < w as i32 && pipe.y >= 0 && pipe.y < h as i32 {
                 fill_count += 1;
-                let (color, bold) = scheme_color(state.color_scheme, 2, true);
+                let (color, bold) = scheme_color(state.color_scheme(), 2, true);
                 term.set(pipe.x, pipe.y, ch, Some(color), bold);
             }
 

@@ -241,19 +241,18 @@ fn fetch_user_location() -> Option<(f32, f32)> {
 }
 
 /// Run the globe visualization
-pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
+pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng, geoip_db: Option<&std::path::Path>, default_tilt: f32) -> io::Result<()> {
     let mut state = VizState::new(config.time_step);
-    state.color_scheme = 5; // Default to electric (cyan/white)
 
     let user_location: Option<(f32, f32)> = fetch_user_location();
     let base_rotation: f32 = user_location.map(|(_, lon)| -lon).unwrap_or(0.0);
-    let mut tilt: f32 = user_location.map(|(lat, _)| -lat).unwrap_or(config.tilt);
+    let mut tilt: f32 = user_location.map(|(lat, _)| -lat).unwrap_or(default_tilt);
     let mut view_offset: f32 = 0.0;
 
     let mut zoom_override: Option<f32> = None;
     let mut current_zoom: f32 = 1.0;
 
-    let mut conn_tracker = ConnectionTracker::new(config.geoip_db.as_deref());
+    let mut conn_tracker = ConnectionTracker::new(geoip_db);
     let use_real_connections = conn_tracker.has_database();
 
     let (init_w, init_h) = term.size();
@@ -658,7 +657,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
                             2 => 2,
                             _ => 3,
                         };
-                        scheme_color(state.color_scheme, intensity, max_intensity >= 3)
+                        scheme_color(state.color_scheme(), intensity, max_intensity >= 3)
                     };
                     term.set(cx as i32, cy as i32, ch, Some(color), bold);
                 }

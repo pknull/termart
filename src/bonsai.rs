@@ -19,8 +19,8 @@ pub fn run(config: BonsaiConfig) -> io::Result<()> {
     let seed = config.seed.unwrap_or_else(|| {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
+            .map(|d| d.as_secs())
+            .unwrap_or(0) // Fallback seed for misconfigured system clocks
     });
 
     if config.print {

@@ -98,7 +98,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
                 let ch = chars[char_idx.min(chars.len() - 1)];
 
                 let intensity = (normalized * 3.0) as u8;
-                let (color, bold) = scheme_color(state.color_scheme, intensity, normalized > 0.7);
+                let (color, bold) = scheme_color(state.color_scheme(), intensity, normalized > 0.7);
 
                 term.set(x as i32, y as i32, ch, Some(color), bold);
             }

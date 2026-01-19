@@ -703,6 +703,55 @@ fn urlencoding(s: &str) -> String {
 pub struct WeatherConfig {
     pub location: Option<String>,
     pub time_step: f32,
+    pub demo: bool,
+    pub demo_speed: f32,
+}
+
+// All conditions for demo mode cycling
+const ALL_CONDITIONS: [WeatherCondition; 10] = [
+    WeatherCondition::Clear,
+    WeatherCondition::PartlyCloudy,
+    WeatherCondition::Cloudy,
+    WeatherCondition::Fog,
+    WeatherCondition::Drizzle,
+    WeatherCondition::Rain,
+    WeatherCondition::HeavyRain,
+    WeatherCondition::Snow,
+    WeatherCondition::HeavySnow,
+    WeatherCondition::Thunderstorm,
+];
+
+impl WeatherDisplay {
+    /// Generate demo weather data for a given condition and day/night state
+    fn demo_data(condition: WeatherCondition, is_day: bool) -> WeatherData {
+        // Pick temperature based on condition
+        let temperature = match condition {
+            WeatherCondition::Snow | WeatherCondition::HeavySnow => -5.0,
+            WeatherCondition::Clear if is_day => 25.0,
+            WeatherCondition::Clear => 15.0,
+            WeatherCondition::Fog => 8.0,
+            WeatherCondition::Thunderstorm => 22.0,
+            WeatherCondition::Rain | WeatherCondition::HeavyRain | WeatherCondition::Drizzle => 12.0,
+            _ => 18.0,
+        };
+
+        WeatherData {
+            temperature,
+            temp_high: temperature + 5.0,
+            temp_low: temperature - 5.0,
+            wind_speed: match condition {
+                WeatherCondition::Thunderstorm => 45.0,
+                WeatherCondition::HeavyRain | WeatherCondition::HeavySnow => 30.0,
+                WeatherCondition::Clear => 5.0,
+                _ => 15.0,
+            },
+            wind_direction: 225.0, // SW
+            condition,
+            is_day,
+            location: format!("Demo: {} {}", condition.description(), if is_day { "(Day)" } else { "(Night)" }),
+            observation_time: "2025-01-16T12:00".to_string(),
+        }
+    }
 }
 
 pub fn run(config: WeatherConfig) -> io::Result<()> {
@@ -711,14 +760,25 @@ pub fn run(config: WeatherConfig) -> io::Result<()> {
     let mut colors = ColorState::new(7); // Default to mono (semantic colors)
     let mut use_fahrenheit = true; // Default to Fahrenheit
 
-    // Fetch weather data
-    display.fetch_weather(config.location.as_deref())?;
+    // Demo mode state
+    let mut demo_index: usize = 0; // 0-19: 10 conditions x 2 (day/night)
+    let mut demo_elapsed: f32 = 0.0;
+    let demo_total_states = ALL_CONDITIONS.len() * 2; // day + night for each
+
+    if config.demo {
+        // Start with first demo condition
+        let condition = ALL_CONDITIONS[0];
+        display.data = Some(WeatherDisplay::demo_data(condition, true));
+    } else {
+        // Fetch real weather data
+        display.fetch_weather(config.location.as_deref())?;
+    }
 
     // Initialize particles based on terminal size
     let (w, h) = term.size();
     display.init_particles(w as usize, h as usize);
 
-    // Auto-refresh every 20 minutes
+    // Auto-refresh every 20 minutes (only in non-demo mode)
     let refresh_interval = Duration::from_secs(20 * 60);
     let mut last_refresh = Instant::now();
 
@@ -728,22 +788,52 @@ pub fn run(config: WeatherConfig) -> io::Result<()> {
             if !colors.handle_key(code) {
                 match code {
                     KeyCode::Char('q') | KeyCode::Esc => break,
-                    KeyCode::Char('r') => {
-                        // Manual refresh
+                    KeyCode::Char('r') if !config.demo => {
+                        // Manual refresh (only in non-demo mode)
                         display.fetch_weather(config.location.as_deref())?;
                         display.init_particles(w as usize, h as usize);
                         last_refresh = Instant::now();
                     }
                     KeyCode::Char('f') => use_fahrenheit = !use_fahrenheit,
+                    // Demo navigation
+                    KeyCode::Right | KeyCode::Char('n') if config.demo => {
+                        demo_index = (demo_index + 1) % demo_total_states;
+                        demo_elapsed = 0.0;
+                        let condition = ALL_CONDITIONS[demo_index / 2];
+                        let is_day = demo_index % 2 == 0;
+                        display.data = Some(WeatherDisplay::demo_data(condition, is_day));
+                        display.init_particles(term.size().0 as usize, term.size().1 as usize);
+                    }
+                    KeyCode::Left | KeyCode::Char('p') if config.demo => {
+                        demo_index = (demo_index + demo_total_states - 1) % demo_total_states;
+                        demo_elapsed = 0.0;
+                        let condition = ALL_CONDITIONS[demo_index / 2];
+                        let is_day = demo_index % 2 == 0;
+                        display.data = Some(WeatherDisplay::demo_data(condition, is_day));
+                        display.init_particles(term.size().0 as usize, term.size().1 as usize);
+                    }
                     _ => {}
                 }
             }
         }
 
-        // Auto-refresh weather data
-        if last_refresh.elapsed() >= refresh_interval {
-            let _ = display.fetch_weather(config.location.as_deref()); // Ignore errors on auto-refresh
-            last_refresh = Instant::now();
+        // Demo mode: cycle through conditions
+        if config.demo {
+            demo_elapsed += config.time_step;
+            if demo_elapsed >= config.demo_speed {
+                demo_elapsed = 0.0;
+                demo_index = (demo_index + 1) % demo_total_states;
+                let condition = ALL_CONDITIONS[demo_index / 2];
+                let is_day = demo_index % 2 == 0;
+                display.data = Some(WeatherDisplay::demo_data(condition, is_day));
+                display.init_particles(term.size().0 as usize, term.size().1 as usize);
+            }
+        } else {
+            // Auto-refresh weather data (non-demo mode only)
+            if last_refresh.elapsed() >= refresh_interval {
+                let _ = display.fetch_weather(config.location.as_deref()); // Ignore errors on auto-refresh
+                last_refresh = Instant::now();
+            }
         }
 
         // Handle resize
@@ -761,6 +851,13 @@ pub fn run(config: WeatherConfig) -> io::Result<()> {
         term.clear();
         let (w, h) = term.size();
         display.render(&mut term, w as usize, h as usize, &colors, use_fahrenheit);
+
+        // Demo mode progress indicator
+        if config.demo {
+            let progress = format!("[Demo {}/{}] ←/→ or n/p to navigate", demo_index + 1, demo_total_states);
+            term.set_str(2, (h - 1) as i32, &progress, Some(Color::DarkGrey), false);
+        }
+
         term.present()?;
 
         term.sleep(config.time_step);

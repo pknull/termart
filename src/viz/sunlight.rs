@@ -101,7 +101,7 @@ fn calculate_solar_times(lat: f64, lon: f64, unix_time: i64) -> SolarTimes {
     // Convert Unix timestamp to hour of day (local time)
     let unix_to_local_hour = |ts: i64| -> f64 {
         let dt = chrono::DateTime::from_timestamp(ts, 0)
-            .unwrap_or_else(|| chrono::DateTime::from_timestamp(0, 0).unwrap());
+            .unwrap_or(chrono::DateTime::<chrono::Utc>::UNIX_EPOCH);
         let local = dt.with_timezone(&chrono::Local);
         local.hour() as f64 + local.minute() as f64 / 60.0 + local.second() as f64 / 3600.0
     };

@@ -252,52 +252,53 @@ impl Terminal {
 
     /// Print buffer to stdout with ANSI colors (for print mode)
     pub fn print_to_stdout(&self) {
+        let mut out = BufWriter::new(stdout());
         for row in &self.back_buffer {
             for cell in row {
                 if cell.ch == ' ' {
-                    print!(" ");
+                    let _ = write!(out, " ");
                     continue;
                 }
 
                 if cell.bold {
-                    print!("\x1b[1m");
+                    let _ = write!(out, "\x1b[1m");
                 }
 
                 if let Some(color) = cell.fg {
-                    match color {
+                    let _ = match color {
                         Color::Rgb { r, g, b } => {
-                            print!("\x1b[38;2;{};{};{}m", r, g, b);
+                            write!(out, "\x1b[38;2;{};{};{}m", r, g, b)
                         }
                         Color::AnsiValue(v) => {
-                            print!("\x1b[38;5;{}m", v);
+                            write!(out, "\x1b[38;5;{}m", v)
                         }
                         // Standard colors (0-7)
-                        Color::Black => print!("\x1b[30m"),
-                        Color::DarkRed => print!("\x1b[31m"),
-                        Color::DarkGreen => print!("\x1b[32m"),
-                        Color::DarkYellow => print!("\x1b[33m"),
-                        Color::DarkBlue => print!("\x1b[34m"),
-                        Color::DarkMagenta => print!("\x1b[35m"),
-                        Color::DarkCyan => print!("\x1b[36m"),
-                        Color::Grey => print!("\x1b[37m"),
+                        Color::Black => write!(out, "\x1b[30m"),
+                        Color::DarkRed => write!(out, "\x1b[31m"),
+                        Color::DarkGreen => write!(out, "\x1b[32m"),
+                        Color::DarkYellow => write!(out, "\x1b[33m"),
+                        Color::DarkBlue => write!(out, "\x1b[34m"),
+                        Color::DarkMagenta => write!(out, "\x1b[35m"),
+                        Color::DarkCyan => write!(out, "\x1b[36m"),
+                        Color::Grey => write!(out, "\x1b[37m"),
                         // Bright colors (8-15)
-                        Color::DarkGrey => print!("\x1b[90m"),
-                        Color::Red => print!("\x1b[91m"),
-                        Color::Green => print!("\x1b[92m"),
-                        Color::Yellow => print!("\x1b[93m"),
-                        Color::Blue => print!("\x1b[94m"),
-                        Color::Magenta => print!("\x1b[95m"),
-                        Color::Cyan => print!("\x1b[96m"),
-                        Color::White => print!("\x1b[97m"),
-                        _ => {}
-                    }
+                        Color::DarkGrey => write!(out, "\x1b[90m"),
+                        Color::Red => write!(out, "\x1b[91m"),
+                        Color::Green => write!(out, "\x1b[92m"),
+                        Color::Yellow => write!(out, "\x1b[93m"),
+                        Color::Blue => write!(out, "\x1b[94m"),
+                        Color::Magenta => write!(out, "\x1b[95m"),
+                        Color::Cyan => write!(out, "\x1b[96m"),
+                        Color::White => write!(out, "\x1b[97m"),
+                        _ => Ok(()),
+                    };
                 }
 
-                print!("{}", cell.ch);
-                print!("\x1b[0m");
+                let _ = write!(out, "{}\x1b[0m", cell.ch);
             }
-            println!();
+            let _ = writeln!(out);
         }
+        let _ = out.flush();
     }
 }
 

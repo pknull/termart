@@ -14,7 +14,7 @@ const INJECTION_INTERVAL: u64 = 100;
 const INJECTION_DIVISOR: usize = 50;
 
 /// Run the Game of Life visualization
-pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
+pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng, draw_char: char) -> io::Result<()> {
     let mut state = VizState::new(config.time_step);
 
     let (init_w, init_h) = term.size();
@@ -70,8 +70,8 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
 
                 if alive {
                     let intensity = match neighbors { 2 => 1, 3 => 2, _ => 0 };
-                    let (color, bold) = scheme_color(state.color_scheme, intensity, false);
-                    term.set(x as i32, y as i32, config.draw_char, Some(color), bold);
+                    let (color, bold) = scheme_color(state.color_scheme(), intensity, false);
+                    term.set(x as i32, y as i32, draw_char, Some(color), bold);
                 }
 
                 next_grid[y][x] = matches!((alive, neighbors), (true, 2) | (true, 3) | (false, 3));

@@ -6,8 +6,10 @@ use std::io::Write;
 
 macro_rules! debug_log {
     ($($arg:tt)*) => {{
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/fah_debug.log") {
-            let _ = writeln!(f, $($arg)*);
+        if std::env::var("TERMART_DEBUG").is_ok() {
+            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/fah_debug.log") {
+                let _ = writeln!(f, $($arg)*);
+            }
         }
     }};
 }
@@ -65,40 +67,7 @@ fn base64_std_encode(data: &[u8]) -> String {
 }
 
 fn chrono_now_iso() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    let secs = now.as_secs();
-    let millis = now.subsec_millis();
-    // Convert to ISO 8601 format: 2025-12-14T12:34:56.789Z
-    let days_since_epoch = secs / 86400;
-    let secs_today = secs % 86400;
-    let hours = secs_today / 3600;
-    let mins = (secs_today % 3600) / 60;
-    let s = secs_today % 60;
-    // Simple year/month/day calculation (good enough for ~2020-2100)
-    let mut year = 1970;
-    let mut remaining_days = days_since_epoch as i64;
-    loop {
-        let days_in_year = if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) { 366 } else { 365 };
-        if remaining_days < days_in_year { break; }
-        remaining_days -= days_in_year;
-        year += 1;
-    }
-    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
-    let days_in_months = if leap {
-        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    } else {
-        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    };
-    let mut month = 1;
-    for &d in &days_in_months {
-        if remaining_days < d { break; }
-        remaining_days -= d;
-        month += 1;
-    }
-    let day = remaining_days + 1;
-    // Match web client format: include milliseconds
-    format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z", year, month, day, hours, mins, s, millis)
+    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
 }
 
 // Remote WebSocket message types
@@ -319,26 +288,24 @@ impl FahDisplay {
     }
 
     /// Load RSA private key from base64-encoded PKCS#8 format (from browser localStorage fah-secret)
-    pub fn load_private_key(&mut self, key_b64: &str) {
+    /// Returns an error message if key loading fails, so caller can surface it to user.
+    pub fn load_private_key(&mut self, key_b64: &str) -> Result<(), String> {
         debug_log!("[KEY] Loading private key, {} chars", key_b64.len());
-        // Decode base64 and parse PKCS#8
-        match base64::engine::general_purpose::STANDARD.decode(key_b64) {
-            Ok(der) => {
-                debug_log!("[KEY] Decoded {} bytes from fah_secret", der.len());
-                match RsaPrivateKey::from_pkcs8_der(&der) {
-                    Ok(key) => {
-                        debug_log!("[KEY] RSA key loaded: {} bits", key.n().bits());
-                        self.private_key = Some(key);
-                    }
-                    Err(e) => {
-                        debug_log!("[KEY] Failed to parse PKCS#8: {:?}", e);
-                    }
-                }
-            }
-            Err(e) => {
-                debug_log!("[KEY] Failed to decode base64: {:?}", e);
-            }
-        }
+
+        // Decode base64
+        let der = base64::engine::general_purpose::STANDARD
+            .decode(key_b64)
+            .map_err(|e| format!("Invalid base64 in fah_secret: {}", e))?;
+
+        debug_log!("[KEY] Decoded {} bytes from fah_secret", der.len());
+
+        // Parse PKCS#8
+        let key = RsaPrivateKey::from_pkcs8_der(&der)
+            .map_err(|e| format!("Invalid PKCS#8 private key in fah_secret: {}", e))?;
+
+        debug_log!("[KEY] RSA key loaded: {} bits", key.n().bits());
+        self.private_key = Some(key);
+        Ok(())
     }
 
     /// Connect to remote FAH WebSocket relay and authenticate
@@ -1390,7 +1357,9 @@ pub fn run(config: FahConfig) -> io::Result<()> {
 
     // Load RSA private key for encrypted WebSocket if provided
     if let Some(ref secret) = config.fah_secret {
-        display.load_private_key(secret);
+        if let Err(e) = display.load_private_key(secret) {
+            eprintln!("FAH: {}", e);
+        }
     }
 
     // Set persistent session ID if provided (used for REST API Authorization)

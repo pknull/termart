@@ -148,7 +148,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
                     } else {
                         0
                     };
-                    let (color, bold) = scheme_color(state.color_scheme, intensity, l > 0.5);
+                    let (color, bold) = scheme_color(state.color_scheme(), intensity, l > 0.5);
                     term.set(x as i32, y as i32, ch, Some(color), bold);
                 }
             }
