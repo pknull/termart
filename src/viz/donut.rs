@@ -15,7 +15,7 @@ const MIN_Z_DIVISOR: f32 = 0.01;
 
 /// Run the rotating donut visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
-    let mut state = VizState::new(config.time_step);
+    let mut state = VizState::new(config.time_step, "");
     let mut a: f32 = 0.0;
     let mut b: f32 = 0.0;
 
@@ -154,6 +154,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
             }
         }
 
+        state.render_help(term, prev_w, prev_h);
         term.present()?;
         a += 0.04 * (state.speed / 0.03);
         b += 0.02 * (state.speed / 0.03);

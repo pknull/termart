@@ -240,9 +240,18 @@ fn fetch_user_location() -> Option<(f32, f32)> {
     Some((lat.to_radians(), lon.to_radians()))
 }
 
+/// Help text for globe visualization
+const HELP: &str = "\
+GLOBE
+─────────────────
+↑/k    Pan up
+↓/j    Pan down
++/-    Zoom in/out
+0      Reset zoom";
+
 /// Run the globe visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng, geoip_db: Option<&std::path::Path>, default_tilt: f32) -> io::Result<()> {
-    let mut state = VizState::new(config.time_step);
+    let mut state = VizState::new(config.time_step, HELP);
 
     let user_location: Option<(f32, f32)> = fetch_user_location();
     let base_rotation: f32 = user_location.map(|(_, lon)| -lon).unwrap_or(0.0);
@@ -664,6 +673,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng, geoip_
             }
         }
 
+        state.render_help(term, width, height);
         term.present()?;
         term.sleep(state.speed);
     }

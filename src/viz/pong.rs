@@ -32,11 +32,28 @@ const PADDLE_COLLISION_WIDTH: f32 = 1.0;
 const BALL_NUDGE_DISTANCE: f32 = 0.1;
 
 // Static UI strings
-const HINT: &str = "1:P1 AI  W/S:P1 move  |  2:P2 AI  ↑/↓:P2 move  |  Space:pause  R:reset";
+const HINT: &str = "1:P1 AI  W/S:P1 move | 2:P2 AI  ↑/↓:P2 move | Space:pause R:reset ?:help";
 const MSG_PAUSED: &str = "PAUSED";
 const MSG_P1_WINS: &str = "PLAYER 1 WINS!";
 const MSG_P2_WINS: &str = "PLAYER 2 WINS!";
 const MSG_RESTART: &str = "Press SPACE to restart";
+
+// Help text
+const HELP_TEXT: &str = "\
+PONG
+─────────────────
+W/S      P1 up/down
+↑/↓/I/K  P2 up/down
+1        Toggle P1 AI
+2        Toggle P2 AI
+R        Reset game
+───────────────────────
+ GLOBAL CONTROLS
+ Space   Pause/resume
+ !-()    Color scheme
+ q/Esc   Quit
+ ?       Close help
+───────────────────────";
 
 #[derive(Clone, Copy, PartialEq)]
 enum Winner {
@@ -119,6 +136,7 @@ pub fn run(time_step: f32) -> io::Result<()> {
     let (mut w, mut h) = term.size();
     let mut game = Game::new(h);
     let mut colors = ColorState::new(0);
+    let mut show_help = false;
 
     // Precompute initial values
     let mut cx = w as f32 / 2.0;
@@ -159,6 +177,7 @@ pub fn run(time_step: f32) -> io::Result<()> {
                 KeyCode::Up | KeyCode::Char('i') | KeyCode::Char('I') => p2_dir = -1.0,
                 KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('K') => p2_dir = 1.0,
                 KeyCode::Char('2') => game.right.ai = !game.right.ai,
+                KeyCode::Char('?') => show_help = !show_help,
                 _ => {}
             }
         }
@@ -329,6 +348,43 @@ pub fn run(time_step: f32) -> io::Result<()> {
         // Controls hint
         if HINT.len() < w as usize {
             term.set_str(center_x - HINT.len() as i32 / 2, h as i32 - 1, HINT, Some(Color::DarkGrey), false);
+        }
+
+        // Help overlay
+        if show_help {
+            let lines: Vec<&str> = HELP_TEXT.lines().collect();
+            let max_width = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0);
+            let box_width = max_width + 4;
+            let box_height = lines.len() + 2;
+            let start_x = (w as usize).saturating_sub(box_width) / 2;
+            let start_y = (h as usize).saturating_sub(box_height) / 2;
+
+            // Top border
+            term.set(start_x as i32, start_y as i32, '┌', Some(Color::White), false);
+            for x in 1..box_width - 1 {
+                term.set((start_x + x) as i32, start_y as i32, '─', Some(Color::White), false);
+            }
+            term.set((start_x + box_width - 1) as i32, start_y as i32, '┐', Some(Color::White), false);
+
+            // Content rows
+            for (i, line) in lines.iter().enumerate() {
+                let y = start_y + 1 + i;
+                term.set(start_x as i32, y as i32, '│', Some(Color::White), false);
+                let padding = max_width.saturating_sub(line.chars().count());
+                let padded = format!(" {}{} ", line, " ".repeat(padding));
+                for (j, ch) in padded.chars().enumerate() {
+                    term.set((start_x + 1 + j) as i32, y as i32, ch, Some(Color::Grey), false);
+                }
+                term.set((start_x + box_width - 1) as i32, y as i32, '│', Some(Color::White), false);
+            }
+
+            // Bottom border
+            let bottom_y = start_y + box_height - 1;
+            term.set(start_x as i32, bottom_y as i32, '└', Some(Color::White), false);
+            for x in 1..box_width - 1 {
+                term.set((start_x + x) as i32, bottom_y as i32, '─', Some(Color::White), false);
+            }
+            term.set((start_x + box_width - 1) as i32, bottom_y as i32, '┘', Some(Color::White), false);
         }
 
         term.present()?;

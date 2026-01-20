@@ -173,6 +173,22 @@ const COLON_WIDTH: usize = 3;
 const DASH_WIDTH: usize = 3;
 const SPACING: usize = 1;
 
+// Help text
+const HELP_TEXT: &str = "\
+CLOCK
+─────────────────
+D  Toggle date/time
+T  Toggle 12/24 hour
+S  Toggle seconds
+A  Auto-cycle on/off
+C  Anti-burn cycle
+───────────────────────
+ GLOBAL CONTROLS
+ !-()    Color scheme
+ q/Esc   Quit
+ ?       Close help
+───────────────────────";
+
 #[inline]
 #[allow(clippy::too_many_arguments)]
 fn draw_big_time(term: &mut Terminal, cx: usize, cy: usize, time_str: &str, color: Color,
@@ -276,6 +292,7 @@ fn draw_date(term: &mut Terminal, cx: usize, y: usize, date_str: &str, color: Co
 pub fn run(mut config: ClockConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
     let mut colors = ColorState::new(7); // Default to mono
+    let mut show_help = false;
 
     // Reusable string buffers
     let mut time_buf = String::with_capacity(8);
@@ -336,6 +353,7 @@ pub fn run(mut config: ClockConfig) -> io::Result<()> {
                         state.cycle_digit = 0;
                         state.last_cycle = std::time::Instant::now();
                     }
+                    KeyCode::Char('?') => show_help = !show_help,
                     _ => {}
                 }
             }
@@ -439,6 +457,43 @@ pub fn run(mut config: ClockConfig) -> io::Result<()> {
         } else {
             // When showing time, display date below
             draw_date(&mut term, cx, start_y + 4, &date_buf, date_color);
+        }
+
+        // Help overlay
+        if show_help {
+            let lines: Vec<&str> = HELP_TEXT.lines().collect();
+            let max_width = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0);
+            let box_width = max_width + 4;
+            let box_height = lines.len() + 2;
+            let help_x = (w as usize).saturating_sub(box_width) / 2;
+            let help_y = (h as usize).saturating_sub(box_height) / 2;
+
+            // Top border
+            term.set(help_x as i32, help_y as i32, '┌', Some(Color::White), false);
+            for x_off in 1..box_width - 1 {
+                term.set((help_x + x_off) as i32, help_y as i32, '─', Some(Color::White), false);
+            }
+            term.set((help_x + box_width - 1) as i32, help_y as i32, '┐', Some(Color::White), false);
+
+            // Content rows
+            for (i, line) in lines.iter().enumerate() {
+                let y_off = help_y + 1 + i;
+                term.set(help_x as i32, y_off as i32, '│', Some(Color::White), false);
+                let padding = max_width.saturating_sub(line.chars().count());
+                let padded = format!(" {}{} ", line, " ".repeat(padding));
+                for (j, ch) in padded.chars().enumerate() {
+                    term.set((help_x + 1 + j) as i32, y_off as i32, ch, Some(Color::Grey), false);
+                }
+                term.set((help_x + box_width - 1) as i32, y_off as i32, '│', Some(Color::White), false);
+            }
+
+            // Bottom border
+            let bottom_y = help_y + box_height - 1;
+            term.set(help_x as i32, bottom_y as i32, '└', Some(Color::White), false);
+            for x_off in 1..box_width - 1 {
+                term.set((help_x + x_off) as i32, bottom_y as i32, '─', Some(Color::White), false);
+            }
+            term.set((help_x + box_width - 1) as i32, bottom_y as i32, '┘', Some(Color::White), false);
         }
 
         term.present()?;

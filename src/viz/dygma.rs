@@ -845,7 +845,7 @@ impl FocusConnection {
 
 pub fn run(config: DygmaConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
-    let mut state = VizState::new(config.time_step);
+    let mut state = VizState::new(config.time_step, "");
 
     let (init_w, init_h) = term.size();
     let mut prev_w = init_w;
@@ -1242,6 +1242,7 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
             led_colormap.as_ref(),
         );
 
+        state.render_help(&mut term, prev_w, prev_h);
         term.present()?;
         term.sleep(state.speed);
     }

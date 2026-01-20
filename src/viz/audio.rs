@@ -678,6 +678,12 @@ fn render_channel_bar(
     }
 }
 
+/// Help text for audio visualizer
+const HELP: &str = "\
+AUDIO SPECTRUM
+─────────────────
+←/→  Bar count -/+";
+
 /// Run the audio spectrum visualizer
 ///
 /// Captures system audio via PulseAudio/PipeWire monitor source and displays
@@ -701,7 +707,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
 
     dbg_log!(log, "Starting audio visualizer");
 
-    let mut state = VizState::new(config.time_step);
+    let mut state = VizState::new(config.time_step, HELP);
 
 
     // Suppress ALSA debug spam by redirecting stderr temporarily during device enumeration
@@ -1000,6 +1006,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
             );
         }
 
+        state.render_help(term, width, height);
         term.present()?;
         term.sleep(state.speed.max(MIN_FRAME_TIME as f32));
     }

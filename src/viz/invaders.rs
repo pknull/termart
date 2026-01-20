@@ -41,8 +41,17 @@ const ALIEN_FIRE_INTERVAL: f32 = 0.8;
 const AUTO_RESTART_DELAY: f32 = 2.0;
 
 // Static UI strings
-const HINT: &str = "←/→:Move SPACE:Fire A:AI R:Reset Q:Quit";
+const HINT: &str = "←/→:Move SPACE:Fire A:AI R:Reset ?:Help Q:Quit";
 const MSG_GAME_OVER: &str = "GAME OVER - Press R to restart";
+
+/// Help text for Space Invaders
+const HELP: &str = "\
+SPACE INVADERS
+─────────────────
+←/→/h/l  Move
+Space    Fire
+A        Toggle AI
+R        Reset game";
 
 #[derive(Clone, Copy, PartialEq)]
 enum GameState {
@@ -167,7 +176,7 @@ fn calc_alien_speed_multiplier(alive_count: usize) -> f32 {
 }
 
 pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
-    let mut state = VizState::new(config.time_step);
+    let mut state = VizState::new(config.time_step, HELP);
 
     let (init_w, init_h) = term.size();
     let mut w = init_w as usize;
@@ -647,6 +656,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
             term.set_str(0, (h - 1) as i32, HINT, Some(Color::DarkGrey), false);
         }
 
+        state.render_help(term, w as u16, h as u16);
         term.render()?;
         std::thread::sleep(std::time::Duration::from_secs_f32(state.speed));
     }

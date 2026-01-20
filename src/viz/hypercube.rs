@@ -263,6 +263,13 @@ fn draw_line(dots: &mut [Vec<bool>], x0: i32, y0: i32, x1: i32, y1: i32, width: 
     }
 }
 
+/// Help text for hypercube visualization
+const HELP: &str = "\
+HYPERCUBE
+─────────────────
+↑/↓      Dimension +/-
+←/→/+/-  Zoom in/out";
+
 /// Run the n-dimensional rotating hypercube visualization.
 ///
 /// Renders a rotating N-dimensional hypercube using braille characters
@@ -271,7 +278,7 @@ fn draw_line(dots: &mut [Vec<bool>], x0: i32, y0: i32, x1: i32, y1: i32, width: 
 pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     use constants::*;
 
-    let mut state = VizState::new(config.time_step);
+    let mut state = VizState::new(config.time_step, HELP);
     let mut time: f32 = 0.0;
 
     let mut dimensions: usize = DEFAULT_DIMENSIONS;
@@ -440,11 +447,12 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         let dim_text = format!("{}D", dimensions);
         let edge_count = edges.len();
         let vertex_count = vertices.len();
-        let info = format!("{} ({}v/{}e) ↑↓dim ←→zoom:{:.1}x", dim_text, vertex_count, edge_count, zoom);
+        let info = format!("{} ({}v/{}e) ↑↓dim ←→zoom:{:.1}x ?:help", dim_text, vertex_count, edge_count, zoom);
         for (i, ch) in info.chars().enumerate() {
             term.set(i as i32 + 1, 0, ch, None, false);
         }
 
+        state.render_help(term, width, height);
         term.present()?;
         // Wrap time to prevent f32 precision loss after long runtime
         time = (time + (state.speed / TIME_STEP_NORM) * TIME_INCREMENT) % TIME_WRAP_PERIOD;

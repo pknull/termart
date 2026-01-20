@@ -15,7 +15,7 @@ const INJECTION_DIVISOR: usize = 50;
 
 /// Run the Game of Life visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng, draw_char: char) -> io::Result<()> {
-    let mut state = VizState::new(config.time_step);
+    let mut state = VizState::new(config.time_step, "");
 
     let (init_w, init_h) = term.size();
     let mut w = init_w as usize;
@@ -78,6 +78,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng, draw_c
             }
         }
 
+        state.render_help(term, w as u16, h as u16);
         term.present()?;
         term.sleep(state.speed);
 

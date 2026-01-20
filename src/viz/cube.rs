@@ -16,7 +16,7 @@ const MIN_Z_DIVISOR: f32 = 0.1;
 
 /// Run the 3D rotating cube visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
-    let mut state = VizState::new(config.time_step);
+    let mut state = VizState::new(config.time_step, "");
     let mut time: f32 = 0.0;
 
     let vertices: [(f32, f32, f32); 8] = [
@@ -164,6 +164,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
             }
         }
 
+        state.render_help(term, width, height);
         term.present()?;
         // Animation time advances at 2x frame rate
         time += state.speed * 2.0;

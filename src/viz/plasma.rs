@@ -8,7 +8,7 @@ use std::io;
 
 /// Run the plasma effect visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
-    let mut state = VizState::new(config.time_step);
+    let mut state = VizState::new(config.time_step, "");
     let mut time: f64 = 0.0;
     let chars = [' ', '.', ':', ';', 'o', 'O', '0', '@', '#'];
 
@@ -104,6 +104,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
             }
         }
 
+        state.render_help(term, width, height);
         term.present()?;
         // Advance time: state.speed * 2.0 (normalized from default 30fps timing)
         time += state.speed as f64 * 2.0;

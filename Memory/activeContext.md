@@ -1,6 +1,6 @@
 ---
-version: "3.6"
-lastUpdated: "2026-01-19"
+version: "3.7"
+lastUpdated: "2026-01-20"
 lifecycle: core
 stakeholder: pknull
 changeTrigger: "session end, significant changes"
@@ -22,8 +22,60 @@ Project expanded with system monitors and utilities:
 - **Weather display** with wttr.in integration
 - **Folding@home monitor** with real-time WebSocket updates
 - **Audio visualizer** with stereo separation and decay animation
+- **Help system**: `?` key shows contextual help overlay in all visualizers
 
 ## Recent Changes
+
+### Session 2026-01-20 (Help System Implementation)
+
+**Goal**: Add contextual help overlay (`?` shortcut) to all visualizers showing keyboard controls
+
+**Accomplishments**:
+
+1. **Core VizState changes** (`src/viz/mod.rs`):
+   - Added `show_help` and `help_text` fields to `VizState` struct
+   - Modified `VizState::new()` to accept `help_text: &'static str` parameter
+   - Added `?` key handler to toggle help overlay
+   - Implemented `render_help()` method with centered bordered box using Unicode box-drawing chars
+
+2. **Global help section** (appended to all help overlays):
+   ```
+   ───────────────────────
+    GLOBAL CONTROLS
+    Space   Pause/resume
+    1-9     Speed (1=fast)
+    !-()    Color scheme
+    q/Esc   Quit
+    ?       Close help
+   ───────────────────────
+   ```
+
+3. **Visualizers with custom help text** (6 files):
+   - `globe.rs` - Pan (↑↓/jk), zoom (+/-), reset (0)
+   - `invaders.rs` - Move (←→/hl), fire (Space), AI (A), reset (R)
+   - `hypercube.rs` - Dimension (↑↓), zoom (←→/+/-)
+   - `audio.rs` - Bar count (←→)
+   - `lissajous.rs` - Cycle harmonics (H)
+
+4. **Local implementations** (visualizers that don't use VizState, 2 files):
+   - `pong.rs` - Full local help with P1/P2 controls, AI toggles, reset
+   - `clock.rs` - Date toggle (D), time format (T), seconds (S), auto-cycle (A), anti-burn (C)
+
+5. **Remaining visualizers** (global controls only, 12 files):
+   - fire, pipes, plasma, donut, waves, life, hex, rain, dygma, matrix, cube, keyboard
+   - All pass empty help text and call `render_help()` to show global section
+
+**Key Learnings**:
+- **Validated Pattern**: Shared `VizState` struct enables consistent behavior across visualizers
+- **Validated Pattern**: Separating global vs visualizer-specific help keeps content manageable
+- **Validated Pattern**: Box-drawing chars (`┌─┐│└─┘`) provide clean overlay borders
+- **Technique**: Files with local implementations (pong, clock) require inline help rendering
+
+**Files modified** (20 files):
+- `src/viz/mod.rs` (core changes)
+- 6 visualizers with custom help (globe, invaders, hypercube, audio, lissajous)
+- 2 visualizers with local help (pong, clock)
+- 12 visualizers with global-only help (fire, pipes, plasma, donut, waves, life, hex, rain, dygma, matrix, cube, keyboard)
 
 ### Session 2026-01-19 (Codex Code Review & Fixes)
 
@@ -181,6 +233,7 @@ Project expanded with system monitors and utilities:
 ## Next Steps
 
 - [x] ~~**Audit follow-up**: Full `unwrap()` audit across codebase~~ (Codex review covered this)
+- [x] ~~**Help system**: Add `?` shortcut to show keyboard controls~~ (implemented 2026-01-20)
 - [ ] **Testing**: Add unit tests for config parsing, crypto error paths, network failures
 - [ ] **Consider**: Apply same constants/helper extraction pattern to remaining viz files
 - [ ] **Optional refactor**: Consolidate cube.rs into hypercube.rs (hypercube handles 3D now)
@@ -191,6 +244,7 @@ Project expanded with system monitors and utilities:
 - [ ] Space Invaders AI: Continue testing bullet avoidance
 - [ ] Add more visualization types (snake, breakout, tetris?)
 - [ ] FAH: Consider auto-reconnect on WebSocket disconnect
+- [ ] **Help system enhancement**: Add help to sunlight.rs (currently no VizState)
 
 ## Active Decisions
 

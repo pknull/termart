@@ -117,9 +117,15 @@ fn encode_braille(dots: &[[bool; DOTS_X]; DOTS_Y]) -> char {
     char::from_u32(BRAILLE_BASE + code).unwrap_or(' ')
 }
 
+/// Help text for Lissajous visualization
+const HELP: &str = "\
+LISSAJOUS
+─────────────────
+H  Cycle harmonics";
+
 /// Run the Lissajous visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
-    let mut state = VizState::new(config.time_step);
+    let mut state = VizState::new(config.time_step, HELP);
 
     let (init_w, init_h) = term.size();
     let mut prev_w = init_w;
@@ -237,9 +243,10 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
 
         // Draw harmonic ratio indicator
         let (_, _, name) = HARMONICS[harmonic_idx];
-        let label = format!("Lissajous {} [H:cycle]", name);
+        let label = format!("Lissajous {} [H:cycle ?:help]", name);
         term.set_str(1, 0, &label, Some(Color::DarkGrey), false);
 
+        state.render_help(term, width, height);
         term.present()?;
         term.sleep(state.speed);
     }

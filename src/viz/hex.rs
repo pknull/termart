@@ -24,7 +24,7 @@ struct Pulse {
 
 /// Run the hex grid visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
-    let mut state = VizState::new(config.time_step);
+    let mut state = VizState::new(config.time_step, "");
 
     let mut time: f32 = 0.0;
 
@@ -182,6 +182,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
             }
         }
 
+        state.render_help(term, prev_w, prev_h);
         term.present()?;
         time += state.speed * 2.0;
         term.sleep(state.speed);

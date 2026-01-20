@@ -34,7 +34,7 @@ fn spawn_pipe(rng: &mut StdRng, w: usize, h: usize) -> Pipe {
 
 /// Run the pipes visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
-    let mut state = VizState::new(config.time_step);
+    let mut state = VizState::new(config.time_step, "");
 
     let pipe_chars: [[char; 4]; 4] = [
         ['│', '└', '│', '┘'],
@@ -120,6 +120,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
             }
         }
 
+        state.render_help(term, w as u16, h as u16);
         term.present()?;
         term.sleep(state.speed);
     }
