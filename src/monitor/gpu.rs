@@ -1,6 +1,7 @@
 use crate::colors::ColorState;
+use crate::help::render_help_overlay;
 use crate::terminal::Terminal;
-use crate::monitor::{MonitorConfig, MonitorState};
+use crate::monitor::{build_help, MonitorConfig, MonitorState};
 use crate::monitor::layout::{
     Rect, draw_meter_btop_scheme, cpu_gradient_color_scheme, format_bytes,
     muted_color_scheme, header_color_scheme, temp_gradient_color_scheme,
@@ -409,13 +410,17 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
     let mut state = MonitorState::new(config.time_step.max(0.5));
     let mut monitor = GpuMonitor::new();
+    let help_text = build_help("GPU MONITOR", "");
+    let mut show_help = false;
 
     monitor.update()?;
     std::thread::sleep(std::time::Duration::from_millis(100));
 
     loop {
         if let Ok(Some((code, mods))) = term.check_key() {
-            if state.handle_key(code, mods) {
+            if code == crossterm::event::KeyCode::Char('?') {
+                show_help = !show_help;
+            } else if state.handle_key(code, mods) {
                 break;
             }
         }
@@ -436,6 +441,11 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
 
         let (w, h) = term.size();
         monitor.render_fullscreen(&mut term, w as usize, h as usize, &state.colors);
+
+        if show_help {
+            let (w, h) = term.size();
+            render_help_overlay(&mut term, w, h, &help_text);
+        }
 
         term.present()?;
         term.sleep(state.speed);

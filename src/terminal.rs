@@ -1,6 +1,6 @@
 use crossterm::{
     cursor::{Hide, MoveTo, Show},
-    event::{poll, read, Event, KeyCode},
+    event::{poll, read, Event, KeyCode, KeyModifiers},
     queue,
     style::{Color, Print, ResetColor, SetForegroundColor, Attribute, SetAttribute},
     terminal::{
@@ -10,6 +10,14 @@ use crossterm::{
 };
 use std::io::{self, Write, stdout, BufWriter};
 use std::time::Duration;
+
+fn normalize_key(code: KeyCode, mods: KeyModifiers) -> KeyCode {
+    if code == KeyCode::Char('/') && mods.contains(KeyModifiers::SHIFT) {
+        KeyCode::Char('?')
+    } else {
+        code
+    }
+}
 
 /// Terminal abstraction for rendering
 pub struct Terminal {
@@ -229,7 +237,8 @@ impl Terminal {
     pub fn check_key(&self) -> io::Result<Option<(KeyCode, crossterm::event::KeyModifiers)>> {
         if poll(Duration::from_millis(0))? {
             if let Event::Key(key_event) = read()? {
-                return Ok(Some((key_event.code, key_event.modifiers)));
+                let code = normalize_key(key_event.code, key_event.modifiers);
+                return Ok(Some((code, key_event.modifiers)));
             }
         }
         Ok(None)
@@ -239,7 +248,8 @@ impl Terminal {
     pub fn wait_key(&self, timeout_ms: u64) -> io::Result<Option<KeyCode>> {
         if poll(Duration::from_millis(timeout_ms))? {
             if let Event::Key(key_event) = read()? {
-                return Ok(Some(key_event.code));
+                let code = normalize_key(key_event.code, key_event.modifiers);
+                return Ok(Some(code));
             }
         }
         Ok(None)

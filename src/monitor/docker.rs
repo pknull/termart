@@ -1,8 +1,9 @@
 //! Docker container monitor - shows container resource usage
 
 use crate::colors::ColorState;
+use crate::help::render_help_overlay;
 use crate::terminal::Terminal;
-use crate::monitor::MonitorState;
+use crate::monitor::{build_help, MonitorState};
 use crate::monitor::layout::{
     cpu_gradient_color_scheme, text_color_scheme, muted_color_scheme,
 };
@@ -235,6 +236,8 @@ pub fn run(config: DockerConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
     let mut state = MonitorState::new(config.time_step.max(0.5));
     let mut monitor = DockerMonitor::new();
+    let help_text = build_help("DOCKER STATS", "m  Cycle sort");
+    let mut show_help = false;
 
     monitor.update()?;
     std::thread::sleep(std::time::Duration::from_millis(100));
@@ -242,7 +245,9 @@ pub fn run(config: DockerConfig) -> io::Result<()> {
     loop {
         if let Ok(Some((code, mods))) = term.check_key() {
             use crossterm::event::KeyCode;
-            if code == KeyCode::Char('m') {
+            if code == KeyCode::Char('?') {
+                show_help = !show_help;
+            } else if code == KeyCode::Char('m') {
                 monitor.cycle_sort();
             } else if state.handle_key(code, mods) {
                 break;
@@ -265,6 +270,11 @@ pub fn run(config: DockerConfig) -> io::Result<()> {
 
         let (w, h) = term.size();
         monitor.render(&mut term, w as usize, h as usize, &state.colors);
+
+        if show_help {
+            let (w, h) = term.size();
+            render_help_overlay(&mut term, w, h, &help_text);
+        }
 
         term.present()?;
         term.sleep(state.speed);

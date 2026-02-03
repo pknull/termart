@@ -1,4 +1,5 @@
 use crate::colors::ColorState;
+use crate::help::render_help_overlay;
 use crate::monitor::layout::{draw_meter_btop_scheme, text_color_scheme, muted_color_scheme, header_color_scheme};
 use crate::terminal::Terminal;
 use aes::Aes256;
@@ -18,6 +19,17 @@ use base64::Engine;
 use crossterm::event::KeyCode;
 use crossterm::terminal::size;
 use pbkdf2::pbkdf2_hmac;
+
+const HELP: &str = "\
+FOLDING@HOME
+─────────────────
+r      Refresh/reconnect
+───────────────────────
+ GLOBAL CONTROLS
+ !-()   Color scheme
+ q/Esc  Quit
+ ?      Close help
+───────────────────────";
 use rsa::{RsaPrivateKey, RsaPublicKey, Oaep, pkcs8::DecodePrivateKey, pkcs8::DecodePublicKey, pkcs8::EncodePublicKey, traits::PublicKeyParts};
 use rsa::pkcs1v15::SigningKey;
 use rsa::signature::{Signer, SignatureEncoding};
@@ -1348,6 +1360,7 @@ pub fn run(config: FahConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
     let mut display = FahDisplay::new();
     let mut colors = ColorState::new(7);
+    let mut show_help = false;
 
     // Check if we have credentials for remote machines
     let has_creds = config.email.is_some() && config.password.is_some();
@@ -1400,7 +1413,9 @@ pub fn run(config: FahConfig) -> io::Result<()> {
 
     loop {
         if let Ok(Some((code, _))) = term.check_key() {
-            if !colors.handle_key(code) {
+            if code == KeyCode::Char('?') {
+                show_help = !show_help;
+            } else if !colors.handle_key(code) {
                 match code {
                     KeyCode::Char('q') | KeyCode::Esc => break,
                     KeyCode::Char('r') => {
@@ -1477,6 +1492,9 @@ pub fn run(config: FahConfig) -> io::Result<()> {
         term.clear();
         let (w, h) = term.size();
         display.render(&mut term, w as usize, h as usize, &colors);
+        if show_help {
+            render_help_overlay(&mut term, w, h, HELP);
+        }
         term.present()?;
 
         term.sleep(config.time_step);

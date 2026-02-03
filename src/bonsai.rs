@@ -1,9 +1,16 @@
 use crate::config::{BonsaiConfig, BranchType, Counters};
+use crate::help::show_help_modal;
 use crate::terminal::{colors, Terminal};
 use crossterm::event::KeyCode;
 use crossterm::style::Color;
 use rand::prelude::*;
 use std::io;
+
+const HELP: &str = "\
+BONSAI
+─────────────────
+q/Esc  Quit
+?      Close help";
 
 /// A branch segment to be processed
 struct BranchTask {
@@ -110,8 +117,16 @@ fn run_interactive(config: &BonsaiConfig, initial_seed: u64) -> io::Result<()> {
         if !config.infinite {
             // Wait for keypress to exit
             loop {
-                if let Some(KeyCode::Char('q') | KeyCode::Esc) = term.wait_key(100)? {
-                    break;
+                if let Some(code) = term.wait_key(100)? {
+                    match code {
+                        KeyCode::Char('?') => {
+                            if show_help_modal(&mut term, HELP)? {
+                                break;
+                            }
+                        }
+                        KeyCode::Char('q') | KeyCode::Esc => break,
+                        _ => {}
+                    }
                 }
             }
             break;
@@ -119,8 +134,16 @@ fn run_interactive(config: &BonsaiConfig, initial_seed: u64) -> io::Result<()> {
 
         // Infinite mode: wait between trees
         let wait_ms = (config.time_wait * 1000.0) as u64;
-        if let Some(KeyCode::Char('q') | KeyCode::Esc) = term.wait_key(wait_ms)? {
-            break;
+        if let Some(code) = term.wait_key(wait_ms)? {
+            match code {
+                KeyCode::Char('?') => {
+                    if show_help_modal(&mut term, HELP)? {
+                        break;
+                    }
+                }
+                KeyCode::Char('q') | KeyCode::Esc => break,
+                _ => {}
+            }
         }
 
         seed = std::time::SystemTime::now()
@@ -296,8 +319,16 @@ fn grow_tree(
         while task.life > 0 {
             // Check for interrupt
             if live {
-                if let Some((KeyCode::Char('q') | KeyCode::Esc, _)) = term.check_key()? {
-                    return Ok(true);
+                if let Some((code, _)) = term.check_key()? {
+                    match code {
+                        KeyCode::Char('?') => {
+                            if show_help_modal(term, HELP)? {
+                                return Ok(true);
+                            }
+                        }
+                        KeyCode::Char('q') | KeyCode::Esc => return Ok(true),
+                        _ => {}
+                    }
                 }
             }
 

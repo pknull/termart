@@ -4,6 +4,7 @@
 mod config;
 mod terminal;
 mod colors;
+mod help;
 mod bonsai;
 mod fractal;
 mod viz;

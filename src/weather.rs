@@ -1,4 +1,5 @@
 use crate::colors::{ColorState, scheme_color};
+use crate::help::render_help_overlay;
 use crate::terminal::Terminal;
 use crossterm::event::KeyCode;
 use crossterm::style::Color;
@@ -7,6 +8,20 @@ use rand::Rng;
 use serde::Deserialize;
 use std::io;
 use std::time::{Duration, Instant};
+
+const HELP: &str = "\
+WEATHER
+─────────────────
+f      Toggle °F/°C
+r      Refresh (non-demo)
+←/→    Next/prev condition (demo)
+n/p    Next/prev condition (demo)
+───────────────────────
+ GLOBAL CONTROLS
+ !-()   Color scheme
+ q/Esc  Quit
+ ?      Close help
+───────────────────────";
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum WeatherCondition {
@@ -759,6 +774,7 @@ pub fn run(config: WeatherConfig) -> io::Result<()> {
     let mut display = WeatherDisplay::new();
     let mut colors = ColorState::new(7); // Default to mono (semantic colors)
     let mut use_fahrenheit = true; // Default to Fahrenheit
+    let mut show_help = false;
 
     // Demo mode state
     let mut demo_index: usize = 0; // 0-19: 10 conditions x 2 (day/night)
@@ -785,7 +801,9 @@ pub fn run(config: WeatherConfig) -> io::Result<()> {
     loop {
         // Check for quit
         if let Ok(Some((code, _))) = term.check_key() {
-            if !colors.handle_key(code) {
+            if code == KeyCode::Char('?') {
+                show_help = !show_help;
+            } else if !colors.handle_key(code) {
                 match code {
                     KeyCode::Char('q') | KeyCode::Esc => break,
                     KeyCode::Char('r') if !config.demo => {
@@ -856,6 +874,11 @@ pub fn run(config: WeatherConfig) -> io::Result<()> {
         if config.demo {
             let progress = format!("[Demo {}/{}] ←/→ or n/p to navigate", demo_index + 1, demo_total_states);
             term.set_str(2, (h - 1) as i32, &progress, Some(Color::DarkGrey), false);
+        }
+
+        if show_help {
+            let (w, h) = term.size();
+            render_help_overlay(&mut term, w, h, HELP);
         }
 
         term.present()?;

@@ -35,6 +35,26 @@ pub struct MonitorState {
     pub colors: ColorState,
 }
 
+/// Global help section appended to all monitor help text
+pub const MONITOR_GLOBAL_HELP: &str = "\
+───────────────────────
+ GLOBAL CONTROLS
+ Space   Pause/resume
+ 1-9     Speed (1=fast)
+ !-()    Color scheme
+ q/Esc   Quit
+ ?       Close help
+───────────────────────";
+
+/// Build monitor help text from a title and optional extra lines
+pub fn build_help(title: &str, extra: &str) -> String {
+    if extra.is_empty() {
+        format!("{title}\n─────────────────\n{MONITOR_GLOBAL_HELP}")
+    } else {
+        format!("{title}\n─────────────────\n{extra}\n{MONITOR_GLOBAL_HELP}")
+    }
+}
+
 impl MonitorState {
     pub fn new(initial_speed: f32) -> Self {
         Self {
@@ -86,3 +106,32 @@ pub fn run(config: MonitorConfig) -> std::io::Result<()> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::{build_help, MONITOR_GLOBAL_HELP, MonitorState};
+    use crossterm::event::{KeyCode, KeyModifiers};
+
+    #[test]
+    fn build_help_without_extra() {
+        let text = build_help("CPU MONITOR", "");
+        assert!(text.starts_with("CPU MONITOR"));
+        assert!(text.contains(MONITOR_GLOBAL_HELP));
+    }
+
+    #[test]
+    fn build_help_with_extra() {
+        let text = build_help("PROCESS LIST", "m  Cycle sort");
+        assert!(text.contains("PROCESS LIST"));
+        assert!(text.contains("m  Cycle sort"));
+        assert!(text.contains(MONITOR_GLOBAL_HELP));
+    }
+
+    #[test]
+    fn monitor_state_speed_presets() {
+        let mut state = MonitorState::new(1.0);
+        state.handle_key(KeyCode::Char('1'), KeyModifiers::NONE);
+        assert!((state.speed - 0.1).abs() < f32::EPSILON);
+        state.handle_key(KeyCode::Char('9'), KeyModifiers::NONE);
+        assert!((state.speed - 3.0).abs() < f32::EPSILON);
+    }
+}

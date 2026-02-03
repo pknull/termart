@@ -1,8 +1,9 @@
 //! Process list monitor - shows top processes by CPU/memory usage
 
 use crate::colors::ColorState;
+use crate::help::render_help_overlay;
 use crate::terminal::Terminal;
-use crate::monitor::MonitorState;
+use crate::monitor::{build_help, MonitorState};
 use crate::monitor::layout::{
     cpu_gradient_color_scheme, text_color_scheme, muted_color_scheme,
 };
@@ -256,14 +257,17 @@ pub fn run(config: PsConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
     let mut state = MonitorState::new(config.time_step.max(0.5));
     let mut monitor = PsMonitor::new(config.show_kernel);
+    let help_text = build_help("PROCESS LIST", "m  Cycle sort");
+    let mut show_help = false;
 
     monitor.update()?;
     std::thread::sleep(std::time::Duration::from_millis(100));
 
     loop {
         if let Ok(Some((code, mods))) = term.check_key() {
-            // Handle 'm' for sort toggle before standard handling
-            if code == KeyCode::Char('m') {
+            if code == KeyCode::Char('?') {
+                show_help = !show_help;
+            } else if code == KeyCode::Char('m') {
                 monitor.toggle_sort();
             } else if state.handle_key(code, mods) {
                 break;
@@ -286,6 +290,11 @@ pub fn run(config: PsConfig) -> io::Result<()> {
 
         let (w, h) = term.size();
         monitor.render(&mut term, w as usize, h as usize, &state.colors, config.max_procs);
+
+        if show_help {
+            let (w, h) = term.size();
+            render_help_overlay(&mut term, w, h, &help_text);
+        }
 
         term.present()?;
         term.sleep(state.speed);

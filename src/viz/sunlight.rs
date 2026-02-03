@@ -8,6 +8,8 @@
 //!
 //! Optionally adjusts screen color temperature via xrandr gamma.
 
+use crate::colors::{scheme_color, ColorState};
+use crate::help::render_help_overlay;
 use crate::terminal::Terminal;
 use chrono::{Local, NaiveDate, Timelike};
 use crossterm::event::KeyCode;
@@ -16,6 +18,13 @@ use crossterm::terminal::size;
 use std::io;
 use std::process::Command;
 use sunrise_sunset_calculator::SunriseSunsetParameters;
+
+const HELP: &str = "\
+SUNLIGHT
+─────────────────
+!-()   Color scheme
+q/Esc  Quit
+?      Close help";
 
 pub struct SunlightConfig {
     pub time_step: f32,
@@ -143,15 +152,6 @@ impl Phase {
             Phase::Sunset => "Sunset",
         }
     }
-
-    pub fn color(&self) -> Color {
-        match self {
-            Phase::Night => Color::Red,
-            Phase::Sunrise => Color::Yellow,
-            Phase::Day => Color::Cyan,
-            Phase::Sunset => Color::DarkYellow,
-        }
-    }
 }
 
 /// Determine current phase and temperature factor
@@ -250,14 +250,41 @@ fn temp_color(t: f64) -> Color {
     }
 }
 
+fn temp_scheme_color(t: f64, colors: &ColorState) -> (Color, bool) {
+    if colors.scheme == 7 {
+        return (temp_color(t), false);
+    }
+
+    let intensity = if t < 0.25 {
+        0
+    } else if t < 0.5 {
+        1
+    } else if t < 0.75 {
+        2
+    } else {
+        3
+    };
+    scheme_color(colors.scheme, intensity, t > 0.7)
+}
+
+fn marker_color(default: Color, colors: &ColorState, intensity: u8) -> (Color, bool) {
+    if colors.scheme == 7 {
+        (default, false)
+    } else {
+        scheme_color(colors.scheme, intensity, true)
+    }
+}
+
 pub fn run(config: SunlightConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
 
-    // Color palette (16-color)
-    let sunrise_color = Color::Yellow;
-    let sunset_color = Color::DarkYellow;
-    let dot_color = Color::White;
+    // Default palette (used when scheme is mono/semantic)
+    let sunrise_default = Color::Yellow;
+    let sunset_default = Color::DarkYellow;
+    let dot_default = Color::White;
     let text_color = Color::DarkGrey;
+    let mut show_help = false;
+    let mut colors = ColorState::new(7);
 
     let (mut w, mut h) = term.size();
     // In demo mode, update gamma every frame; otherwise every minute
@@ -299,8 +326,15 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
 
     loop {
         // Handle input
-        if let Ok(Some((KeyCode::Char('q') | KeyCode::Esc, _))) = term.check_key() {
-            break;
+        if let Ok(Some((code, _))) = term.check_key() {
+            if code == KeyCode::Char('?') {
+                show_help = !show_help;
+            } else if !colors.handle_key(code) {
+                match code {
+                    KeyCode::Char('q') | KeyCode::Esc => break,
+                    _ => {}
+                }
+            }
         }
 
         // Handle resize
@@ -380,6 +414,10 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
         // Draw horizontal bar
         let bar_y = (wave_top_y + wave_height / 2) as i32;
 
+        let (sunrise_color, sunrise_bold) = marker_color(sunrise_default, &colors, 3);
+        let (sunset_color, sunset_bold) = marker_color(sunset_default, &colors, 2);
+        let (dot_color, dot_bold) = marker_color(dot_default, &colors, 3);
+
         for x in 0..wave_width {
             // Map x to hours (0-24)
             let hour = x as f64 / wave_width as f64 * 24.0;
@@ -389,27 +427,27 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
             let normalized = hours_from_noon / 12.0;
             let wave_val = (-normalized * std::f64::consts::PI).cos(); // -1 to 1
             let pos_temp = (wave_val + 1.0) / 2.0; // 0 to 1
-            let color = temp_color(pos_temp);
+            let (color, bold) = temp_scheme_color(pos_temp, &colors);
 
             let screen_x = (wave_start_x + x) as i32;
 
             if bar_y >= 0 && bar_y < h as i32 {
-                term.set(screen_x, bar_y, '─', Some(color), false);
+                term.set(screen_x, bar_y, '─', Some(color), bold);
             }
 
             // Mark sunrise
             if (hour - solar.sunrise_hour).abs() < 0.5 && bar_y >= 0 && bar_y < h as i32 {
-                term.set(screen_x, bar_y, '☀', Some(sunrise_color), false);
+                term.set(screen_x, bar_y, '☀', Some(sunrise_color), sunrise_bold);
             }
 
             // Mark sunset
             if (hour - solar.sunset_hour).abs() < 0.5 && bar_y >= 0 && bar_y < h as i32 {
-                term.set(screen_x, bar_y, '☾', Some(sunset_color), false);
+                term.set(screen_x, bar_y, '☾', Some(sunset_color), sunset_bold);
             }
 
             // Mark current time
             if (hour - current_hour).abs() < 0.25 && bar_y >= 0 && bar_y < h as i32 {
-                term.set(screen_x, bar_y, '●', Some(dot_color), false);
+                term.set(screen_x, bar_y, '●', Some(dot_color), dot_bold);
             }
         }
 
@@ -422,13 +460,14 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
             ((solar.sunset_hour % 1.0) * 60.0) as u32);
 
         let info_y = (wave_top_y + wave_height + 1) as i32;
-        term.set_str(wave_start_x as i32, info_y, &sunrise_str, Some(sunrise_color), false);
-        term.set_str((wave_start_x + wave_width - sunset_str.len()) as i32, info_y, &sunset_str, Some(sunset_color), false);
+        term.set_str(wave_start_x as i32, info_y, &sunrise_str, Some(sunrise_color), sunrise_bold);
+        term.set_str((wave_start_x + wave_width - sunset_str.len()) as i32, info_y, &sunset_str, Some(sunset_color), sunset_bold);
 
         // Draw phase and gamma info
         let (r, g, b) = temp_to_gamma(temp, config.night_green, config.night_blue);
         let phase_gamma_str = format!("{:8} γ {:.2}:{:.2}:{:.2}", phase.name(), r, g, b);
-        term.set_str(cx.saturating_sub(phase_gamma_str.len() / 2) as i32, info_y + 1, &format!("{:8}", phase.name()), Some(phase.color()), false);
+        let (phase_color, phase_bold) = temp_scheme_color(temp, &colors);
+        term.set_str(cx.saturating_sub(phase_gamma_str.len() / 2) as i32, info_y + 1, &format!("{:8}", phase.name()), Some(phase_color), phase_bold);
         term.set_str((cx.saturating_sub(phase_gamma_str.len() / 2) + 9) as i32, info_y + 1, &format!("γ {:.2}:{:.2}:{:.2}", r, g, b), Some(text_color), false);
 
         // Draw hour markers
@@ -457,17 +496,22 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
             if config.latitude >= 0.0 { "N" } else { "S" },
             config.longitude.abs(),
             if config.longitude >= 0.0 { "E" } else { "W" });
-        let time_color = temp_color(temp);
+        let (time_color, time_bold) = temp_scheme_color(temp, &colors);
         let time_x = cx.saturating_sub(time_loc_str.len() / 2);
         // Draw time part in temp color, location in gray
         let time_part = format!("{:02}:{:02}:{:02}", disp_hour, disp_min, disp_sec);
-        term.set_str(time_x as i32, time_loc_y, &time_part, Some(time_color), false);
+        term.set_str(time_x as i32, time_loc_y, &time_part, Some(time_color), time_bold);
         let loc_str = format!("  {:.2}°{} {:.2}°{}",
             config.latitude.abs(),
             if config.latitude >= 0.0 { "N" } else { "S" },
             config.longitude.abs(),
             if config.longitude >= 0.0 { "E" } else { "W" });
         term.set_str((time_x + time_part.len()) as i32, time_loc_y, &loc_str, Some(text_color), false);
+
+        if show_help {
+            let (w, h) = term.size();
+            render_help_overlay(&mut term, w, h, HELP);
+        }
 
         term.present()?;
         term.sleep(config.time_step);

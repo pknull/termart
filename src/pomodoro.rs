@@ -1,10 +1,25 @@
 use crate::colors::{ColorState, scheme_color};
+use crate::help::render_help_overlay;
 use crate::terminal::Terminal;
 use crossterm::event::KeyCode;
 use crossterm::style::Color;
 use crossterm::terminal::size;
 use std::io;
 use std::time::{Duration, Instant};
+
+const HELP: &str = "\
+POMODORO
+─────────────────
+Space  Pause/resume
+s      Skip phase
+r      Reset timer
+Enter  Advance (when done)
+───────────────────────
+ GLOBAL CONTROLS
+ !-()   Color scheme
+ q/Esc  Quit
+ ?      Close help
+───────────────────────";
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum PomodoroPhase {
@@ -260,11 +275,14 @@ pub fn run(config: PomodoroConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
     let mut state = PomodoroState::new(&config);
     let mut colors = ColorState::new(7); // Default to mono (semantic colors)
+    let mut show_help = false;
 
     loop {
         // Handle input
         if let Ok(Some((code, _mods))) = term.check_key() {
-            if !colors.handle_key(code) {
+            if code == KeyCode::Char('?') {
+                show_help = !show_help;
+            } else if !colors.handle_key(code) {
                 match code {
                     KeyCode::Char('q') | KeyCode::Esc => break,
                     KeyCode::Char(' ') => state.paused = !state.paused,
@@ -345,6 +363,11 @@ pub fn run(config: PomodoroConfig) -> io::Result<()> {
 
         // Pomodoro dots
         draw_pomodoro_dots(&mut term, cx, y, state.pomodoros_completed, config.pomodoros_until_long, &colors);
+
+        if show_help {
+            let (w, h) = term.size();
+            render_help_overlay(&mut term, w, h, HELP);
+        }
 
         term.present()?;
         term.sleep(0.1);
