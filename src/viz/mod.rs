@@ -22,6 +22,8 @@ pub mod dygma;
 pub mod sunlight;
 pub mod audio;
 pub mod lissajous;
+pub mod tui_cover;
+pub mod tui_control;
 
 use crossterm::event::{KeyCode, KeyModifiers};
 use crate::colors::ColorState;

@@ -38,5 +38,7 @@ pub fn run(config: FractalConfig) -> io::Result<()> {
         FractalKind::Invaders => crate::viz::invaders::run(&mut term, &config, &mut rng),
         FractalKind::Audio => crate::viz::audio::run(&mut term, &config),
         FractalKind::Lissajous => crate::viz::lissajous::run(&mut term, &config),
+        FractalKind::TuiCover => crate::viz::tui_cover::run(&mut term, &config),
+        FractalKind::TuiControl => crate::viz::tui_control::run(&mut term, &config),
     }
 }

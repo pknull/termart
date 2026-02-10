@@ -2,7 +2,7 @@ use crossterm::{
     cursor::{Hide, MoveTo, Show},
     event::{poll, read, Event, KeyCode, KeyModifiers},
     queue,
-    style::{Color, Print, ResetColor, SetForegroundColor, Attribute, SetAttribute},
+    style::{Color, Print, ResetColor, SetForegroundColor, SetBackgroundColor, Attribute, SetAttribute},
     terminal::{
         disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen,
         LeaveAlternateScreen, size,
@@ -33,6 +33,7 @@ pub struct Terminal {
 pub struct Cell {
     pub ch: char,
     pub fg: Option<Color>,
+    pub bg: Option<Color>,
     pub bold: bool,
 }
 
@@ -41,6 +42,7 @@ impl Default for Cell {
         Self {
             ch: ' ',
             fg: None,
+            bg: None,
             bold: false,
         }
     }
@@ -116,7 +118,14 @@ impl Terminal {
     /// Set a character in the back buffer
     pub fn set(&mut self, x: i32, y: i32, ch: char, fg: Option<Color>, bold: bool) {
         if x >= 0 && x < self.width as i32 && y >= 0 && y < self.height as i32 {
-            self.back_buffer[y as usize][x as usize] = Cell { ch, fg, bold };
+            self.back_buffer[y as usize][x as usize] = Cell { ch, fg, bg: None, bold };
+        }
+    }
+
+    /// Set a character with both foreground and background color
+    pub fn set_with_bg(&mut self, x: i32, y: i32, ch: char, fg: Option<Color>, bg: Option<Color>, bold: bool) {
+        if x >= 0 && x < self.width as i32 && y >= 0 && y < self.height as i32 {
+            self.back_buffer[y as usize][x as usize] = Cell { ch, fg, bg, bold };
         }
     }
 
@@ -130,8 +139,10 @@ impl Terminal {
     /// Render only changed cells (differential update) with single flush
     pub fn present(&mut self) -> io::Result<()> {
         let mut stdout = BufWriter::with_capacity(32 * 1024, stdout());
-        let mut last_color: Option<Color> = None;
+        let mut last_fg: Option<Color> = None;
+        let mut last_bg: Option<Color> = None;
         let mut last_bold = false;
+        let mut has_bg = false;
 
         for y in 0..self.height as usize {
             for x in 0..self.width as usize {
@@ -152,19 +163,34 @@ impl Terminal {
                         queue!(stdout, SetAttribute(Attribute::Bold))?;
                     } else {
                         queue!(stdout, SetAttribute(Attribute::Reset))?;
-                        last_color = None; // Reset clears color too
+                        last_fg = None; // Reset clears colors too
+                        last_bg = None;
                     }
                     last_bold = back.bold;
                 }
 
-                // Handle color changes
-                if back.fg != last_color {
+                // Handle foreground color changes
+                if back.fg != last_fg {
                     if let Some(color) = back.fg {
                         queue!(stdout, SetForegroundColor(color))?;
                     } else {
                         queue!(stdout, ResetColor)?;
+                        last_bg = None; // ResetColor clears both
                     }
-                    last_color = back.fg;
+                    last_fg = back.fg;
+                }
+
+                // Handle background color changes
+                if back.bg != last_bg {
+                    if let Some(color) = back.bg {
+                        queue!(stdout, SetBackgroundColor(color))?;
+                        has_bg = true;
+                    } else if has_bg {
+                        // Only reset bg when transitioning from bg to no-bg
+                        queue!(stdout, SetBackgroundColor(Color::Reset))?;
+                        has_bg = false;
+                    }
+                    last_bg = back.bg;
                 }
 
                 queue!(stdout, Print(back.ch))?;
@@ -175,7 +201,7 @@ impl Terminal {
         }
 
         // Reset attributes at end of frame
-        if last_bold || last_color.is_some() {
+        if last_bold || last_fg.is_some() || has_bg {
             queue!(stdout, SetAttribute(Attribute::Reset), ResetColor)?;
         }
 
@@ -186,8 +212,10 @@ impl Terminal {
     /// Render the entire back buffer to screen (full redraw, single flush)
     pub fn render(&mut self) -> io::Result<()> {
         let mut stdout = BufWriter::with_capacity(32 * 1024, stdout());
-        let mut last_color: Option<Color> = None;
+        let mut last_fg: Option<Color> = None;
+        let mut last_bg: Option<Color> = None;
         let mut last_bold = false;
+        let mut has_bg = false;
 
         queue!(stdout, MoveTo(0, 0))?;
 
@@ -201,19 +229,33 @@ impl Terminal {
                         queue!(stdout, SetAttribute(Attribute::Bold))?;
                     } else {
                         queue!(stdout, SetAttribute(Attribute::Reset))?;
-                        last_color = None;
+                        last_fg = None;
+                        last_bg = None;
                     }
                     last_bold = cell.bold;
                 }
 
-                // Handle color
-                if cell.fg != last_color {
+                // Handle foreground color
+                if cell.fg != last_fg {
                     if let Some(color) = cell.fg {
                         queue!(stdout, SetForegroundColor(color))?;
                     } else {
                         queue!(stdout, ResetColor)?;
+                        last_bg = None;
                     }
-                    last_color = cell.fg;
+                    last_fg = cell.fg;
+                }
+
+                // Handle background color
+                if cell.bg != last_bg {
+                    if let Some(color) = cell.bg {
+                        queue!(stdout, SetBackgroundColor(color))?;
+                        has_bg = true;
+                    } else if has_bg {
+                        queue!(stdout, SetBackgroundColor(Color::Reset))?;
+                        has_bg = false;
+                    }
+                    last_bg = cell.bg;
                 }
 
                 queue!(stdout, Print(cell.ch))?;
@@ -265,7 +307,7 @@ impl Terminal {
         let mut out = BufWriter::new(stdout());
         for row in &self.back_buffer {
             for cell in row {
-                if cell.ch == ' ' {
+                if cell.ch == ' ' && cell.bg.is_none() {
                     let _ = write!(out, " ");
                     continue;
                 }
@@ -275,33 +317,11 @@ impl Terminal {
                 }
 
                 if let Some(color) = cell.fg {
-                    let _ = match color {
-                        Color::Rgb { r, g, b } => {
-                            write!(out, "\x1b[38;2;{};{};{}m", r, g, b)
-                        }
-                        Color::AnsiValue(v) => {
-                            write!(out, "\x1b[38;5;{}m", v)
-                        }
-                        // Standard colors (0-7)
-                        Color::Black => write!(out, "\x1b[30m"),
-                        Color::DarkRed => write!(out, "\x1b[31m"),
-                        Color::DarkGreen => write!(out, "\x1b[32m"),
-                        Color::DarkYellow => write!(out, "\x1b[33m"),
-                        Color::DarkBlue => write!(out, "\x1b[34m"),
-                        Color::DarkMagenta => write!(out, "\x1b[35m"),
-                        Color::DarkCyan => write!(out, "\x1b[36m"),
-                        Color::Grey => write!(out, "\x1b[37m"),
-                        // Bright colors (8-15)
-                        Color::DarkGrey => write!(out, "\x1b[90m"),
-                        Color::Red => write!(out, "\x1b[91m"),
-                        Color::Green => write!(out, "\x1b[92m"),
-                        Color::Yellow => write!(out, "\x1b[93m"),
-                        Color::Blue => write!(out, "\x1b[94m"),
-                        Color::Magenta => write!(out, "\x1b[95m"),
-                        Color::Cyan => write!(out, "\x1b[96m"),
-                        Color::White => write!(out, "\x1b[97m"),
-                        _ => Ok(()),
-                    };
+                    let _ = write_ansi_fg(&mut out, color);
+                }
+
+                if let Some(color) = cell.bg {
+                    let _ = write_ansi_bg(&mut out, color);
                 }
 
                 let _ = write!(out, "{}\x1b[0m", cell.ch);
@@ -309,6 +329,54 @@ impl Terminal {
             let _ = writeln!(out);
         }
         let _ = out.flush();
+    }
+}
+
+fn write_ansi_fg(out: &mut impl Write, color: Color) -> io::Result<()> {
+    match color {
+        Color::Rgb { r, g, b } => write!(out, "\x1b[38;2;{};{};{}m", r, g, b),
+        Color::AnsiValue(v) => write!(out, "\x1b[38;5;{}m", v),
+        Color::Black => write!(out, "\x1b[30m"),
+        Color::DarkRed => write!(out, "\x1b[31m"),
+        Color::DarkGreen => write!(out, "\x1b[32m"),
+        Color::DarkYellow => write!(out, "\x1b[33m"),
+        Color::DarkBlue => write!(out, "\x1b[34m"),
+        Color::DarkMagenta => write!(out, "\x1b[35m"),
+        Color::DarkCyan => write!(out, "\x1b[36m"),
+        Color::Grey => write!(out, "\x1b[37m"),
+        Color::DarkGrey => write!(out, "\x1b[90m"),
+        Color::Red => write!(out, "\x1b[91m"),
+        Color::Green => write!(out, "\x1b[92m"),
+        Color::Yellow => write!(out, "\x1b[93m"),
+        Color::Blue => write!(out, "\x1b[94m"),
+        Color::Magenta => write!(out, "\x1b[95m"),
+        Color::Cyan => write!(out, "\x1b[96m"),
+        Color::White => write!(out, "\x1b[97m"),
+        _ => Ok(()),
+    }
+}
+
+fn write_ansi_bg(out: &mut impl Write, color: Color) -> io::Result<()> {
+    match color {
+        Color::Rgb { r, g, b } => write!(out, "\x1b[48;2;{};{};{}m", r, g, b),
+        Color::AnsiValue(v) => write!(out, "\x1b[48;5;{}m", v),
+        Color::Black => write!(out, "\x1b[40m"),
+        Color::DarkRed => write!(out, "\x1b[41m"),
+        Color::DarkGreen => write!(out, "\x1b[42m"),
+        Color::DarkYellow => write!(out, "\x1b[43m"),
+        Color::DarkBlue => write!(out, "\x1b[44m"),
+        Color::DarkMagenta => write!(out, "\x1b[45m"),
+        Color::DarkCyan => write!(out, "\x1b[46m"),
+        Color::Grey => write!(out, "\x1b[47m"),
+        Color::DarkGrey => write!(out, "\x1b[100m"),
+        Color::Red => write!(out, "\x1b[101m"),
+        Color::Green => write!(out, "\x1b[102m"),
+        Color::Yellow => write!(out, "\x1b[103m"),
+        Color::Blue => write!(out, "\x1b[104m"),
+        Color::Magenta => write!(out, "\x1b[105m"),
+        Color::Cyan => write!(out, "\x1b[106m"),
+        Color::White => write!(out, "\x1b[107m"),
+        _ => Ok(()),
     }
 }
 

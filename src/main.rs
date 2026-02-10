@@ -15,6 +15,7 @@ mod fah;
 mod settings;
 mod net_geo;
 mod evdev_util;
+mod tui;
 
 use clap::{Parser, Subcommand, Args};
 use config::{BonsaiConfig, FractalConfig, FractalKind};
@@ -41,6 +42,17 @@ struct VizOptions {
 struct MonitorOptions {
     /// Update interval (seconds)
     #[arg(short, long, default_value = "1.0")]
+    time: f32,
+
+    /// Show debug info
+    #[arg(short, long)]
+    debug: bool,
+}
+
+#[derive(Args, Clone)]
+struct TuiOptions {
+    /// UI refresh interval (seconds)
+    #[arg(short, long, default_value = "0.1")]
     time: f32,
 
     /// Show debug info
@@ -393,6 +405,18 @@ enum Commands {
         #[arg(short, long, default_value = "0.1")]
         time: f32,
     },
+
+    /// TUI cover art display (MPRIS)
+    TuiCover {
+        #[command(flatten)]
+        opts: TuiOptions,
+    },
+
+    /// TUI playback controls (MPRIS)
+    TuiControl {
+        #[command(flatten)]
+        opts: TuiOptions,
+    },
 }
 
 fn run_viz(kind: FractalKind, opts: VizOptions) -> io::Result<()> {
@@ -412,6 +436,16 @@ fn run_monitor(mtype: MonitorType, opts: MonitorOptions) -> io::Result<()> {
         debug: opts.debug,
     };
     monitor::run(config)
+}
+
+fn run_tui(kind: FractalKind, opts: TuiOptions) -> io::Result<()> {
+    let config = FractalConfig {
+        kind,
+        time_step: opts.time,
+        seed: None,
+        debug: opts.debug,
+    };
+    fractal::run(config)
 }
 
 fn main() -> io::Result<()> {
@@ -582,6 +616,8 @@ fn main() -> io::Result<()> {
             };
             fah::run(config)?;
         }
+        Commands::TuiCover { opts } => run_tui(FractalKind::TuiCover, opts)?,
+        Commands::TuiControl { opts } => run_tui(FractalKind::TuiControl, opts)?,
     }
 
     Ok(())

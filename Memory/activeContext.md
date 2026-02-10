@@ -1,6 +1,6 @@
 ---
-version: "3.7"
-lastUpdated: "2026-01-20"
+version: "3.8"
+lastUpdated: "2026-02-10"
 lifecycle: core
 stakeholder: pknull
 changeTrigger: "session end, significant changes"
@@ -12,7 +12,7 @@ dependencies: ["projectbrief.md"]
 
 ## Current State
 
-Project expanded with system monitors and utilities:
+Project expanded with system monitors, utilities, and TUI media controls:
 - Bonsai tree generator with static, live, infinite, and print modes
 - 19 visualization algorithms implemented
 - Interactive controls (speed, color schemes, pause)
@@ -21,10 +21,56 @@ Project expanded with system monitors and utilities:
 - **Globe visualization** with rotation and color scheme support
 - **Weather display** with wttr.in integration
 - **Folding@home monitor** with real-time WebSocket updates
-- **Audio visualizer** with stereo separation and decay animation
+- **Audio visualizer** with stereo separation, decay animation, and width-fill bars
 - **Help system**: `?` key shows contextual help overlay in all visualizers
+- **TUI cover art**: Half-block rendering with bg color support, aspect-ratio preservation, expanded palette
+- **TUI control**: Media controls with shuffle/repeat/volume, three-column status layout
+- **mplay deprecated**: Archived on GitHub, termart covers core functionality
 
 ## Recent Changes
+
+### Session 2026-02-10 (TUI Cover Quality Overhaul + mplay Deprecation)
+
+**Goal**: Improve tui-cover album art quality, bring tui-control to feature parity with mplay, deprecate mplay
+
+**Accomplishments**:
+
+1. **Half-block cover art rendering** (`src/terminal.rs`, `src/tui/cover.rs`, `src/viz/tui_cover.rs`):
+   - Added `bg: Option<Color>` to Terminal Cell struct with `set_with_bg()` method
+   - Updated `present()`, `render()`, `print_to_stdout()` with background color tracking
+   - Replaced full-block (`█`) renderers with half-block (`▀`) using fg=top pixel, bg=bottom pixel
+   - Doubles vertical resolution for cover art display
+   - Switched `FilterType::Nearest` → `FilterType::Triangle` for smoother resize
+   - Added `calc_cover_dimensions()` for aspect-ratio-preserving square layout (accounts for 2:1 terminal char ratio)
+   - Expanded scheme palette from 4 to ~21 colors via interpolation + darkened variants
+
+2. **tui-control enhancements** (`src/viz/tui_control.rs`, `src/tui/mpris_client.rs`):
+   - Fixed metadata order: title → artist → album (was title → album → artist)
+   - Added volume to PlayerState, displayed on status line
+   - Added shuffle/repeat state via MPRIS `get_shuffle()`/`get_loop_status()`
+   - Three-column status layout: controls left (⇌ ⏸ ↻), time centered, volume right
+   - Album shown in muted color to differentiate from title/artist
+
+3. **Audio visualizer bar width control** (`src/viz/audio.rs`):
+   - Changed left/right arrows from controlling bar count to controlling bar width
+   - Bars always fill terminal width, count derived from `width / (bar_width + gap)`
+   - Centered bar group to distribute leftover columns evenly
+
+4. **mplay deprecation**:
+   - Feature comparison confirmed tui-control covers ~75% of mplay features
+   - Missing features (shuffle/repeat/volume) added to termart
+   - Chromium/Electron MPRIS limitation identified (no shuffle/repeat/volume properties)
+   - Archived `pknull/mplay` and `pknull/asha` repos on GitHub
+
+**Key Learnings**:
+- **Validated Pattern**: Half-block rendering (`▀` + fg/bg) doubles vertical resolution with minimal complexity
+- **Validated Pattern**: Terminal chars are ~2:1, so `art_w = 2 * art_h_cells` for visually square output
+- **Pitfall**: Emoji characters (🔀🔁🔂) don't render in terminal monospace fonts; use Unicode symbols (⇌ ↻)
+- **Pitfall**: Chromium/Electron MPRIS backend doesn't expose Shuffle, LoopStatus, or real Volume
+- **Pitfall**: Must build `--release` when binary symlink points to `target/release/`
+- **Validated Pattern**: `Color::Reset` for background works in crossterm to clear bg without affecting fg
+
+**Files modified**: terminal.rs, tui/cover.rs, viz/tui_cover.rs, tui/mpris_client.rs, viz/tui_control.rs, viz/audio.rs
 
 ### Session 2026-01-20 (Help System Implementation)
 
@@ -232,8 +278,6 @@ Project expanded with system monitors and utilities:
 
 ## Next Steps
 
-- [x] ~~**Audit follow-up**: Full `unwrap()` audit across codebase~~ (Codex review covered this)
-- [x] ~~**Help system**: Add `?` shortcut to show keyboard controls~~ (implemented 2026-01-20)
 - [ ] **Testing**: Add unit tests for config parsing, crypto error paths, network failures
 - [ ] **Consider**: Apply same constants/helper extraction pattern to remaining viz files
 - [ ] **Optional refactor**: Consolidate cube.rs into hypercube.rs (hypercube handles 3D now)
@@ -245,6 +289,8 @@ Project expanded with system monitors and utilities:
 - [ ] Add more visualization types (snake, breakout, tetris?)
 - [ ] FAH: Consider auto-reconnect on WebSocket disconnect
 - [ ] **Help system enhancement**: Add help to sunlight.rs (currently no VizState)
+- [ ] **TUI cover**: Consider terminal image protocol support (sixel/kitty) for higher fidelity
+- [ ] **TUI control**: Consider combining tui-cover and tui-control into unified player view
 
 ## Active Decisions
 

@@ -33,6 +33,8 @@ pub enum FractalKind {
     Invaders,
     Audio,
     Lissajous,
+    TuiCover,
+    TuiControl,
 }
 
 /// Configuration for fractal generation

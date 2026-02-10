@@ -32,6 +32,8 @@ maxminddb = "0.24"
 sunrise-sunset-calculator = "1.0"
 cpal = "0.15"
 spectrum-analyzer = "1.6"
+mpris = "2.0"
+image = "0.25"
 
 [profile.release]
 opt-level = 3

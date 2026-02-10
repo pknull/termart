@@ -10,6 +10,8 @@ pub struct Settings {
     pub globe: GlobeSettings,
     #[serde(default)]
     pub sunlight: SunlightSettings,
+    #[serde(default)]
+    pub tui: TuiSettings,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -30,6 +32,50 @@ pub struct GlobeSettings {
 pub struct SunlightSettings {
     pub latitude: Option<f64>,       // Latitude in degrees (-90 to 90)
     pub longitude: Option<f64>,      // Longitude in degrees (-180 to 180)
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct TuiSettings {
+    pub players: Vec<String>,
+    pub keybinds: TuiKeybinds,
+}
+
+impl Default for TuiSettings {
+    fn default() -> Self {
+        Self {
+            players: vec!["spotify".into(), "vlc".into(), "mpd".into()],
+            keybinds: TuiKeybinds::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct TuiKeybinds {
+    pub quit: Vec<String>,
+    pub toggle: Vec<String>,
+    pub next: Vec<String>,
+    pub prev: Vec<String>,
+    pub seek_forward: Vec<String>,
+    pub seek_backward: Vec<String>,
+    pub volume_up: Vec<String>,
+    pub volume_down: Vec<String>,
+}
+
+impl Default for TuiKeybinds {
+    fn default() -> Self {
+        Self {
+            quit: vec!["q".into(), "Escape".into()],
+            toggle: vec![" ".into()],
+            next: vec!["n".into(), "Right".into()],
+            prev: vec!["p".into(), "Left".into()],
+            seek_forward: vec!["l".into(), "Shift+Right".into()],
+            seek_backward: vec!["h".into(), "Shift+Left".into()],
+            volume_up: vec!["k".into(), "Up".into()],
+            volume_down: vec!["j".into(), "Down".into()],
+        }
+    }
 }
 
 impl Settings {

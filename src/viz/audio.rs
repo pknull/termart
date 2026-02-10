@@ -10,7 +10,7 @@
 //! Bar heights are smoothed with exponential attack/decay for visual appeal.
 //!
 //! # Keybindings
-//! - Left/Right: Adjust bar count (±8 bars)
+//! - Left/Right: Adjust bar width (bars always fill terminal width)
 //! - 1-9, 0: Adjust animation speed
 //! - Shift+0-9: Change color scheme (Shift+8 for rainbow)
 //! - Space: Pause
@@ -35,14 +35,14 @@ mod constants {
     /// FFT buffer size - must be power of 2 for efficient FFT computation
     pub const BUFFER_SIZE: usize = 2048;
 
-    /// Default number of frequency bars to display
-    pub const DEFAULT_BAR_COUNT: usize = 64;
-    /// Minimum allowed bar count (prevents overly sparse display)
-    pub const MIN_BARS: usize = 8;
-    /// Maximum allowed bar count (prevents performance issues)
-    pub const MAX_BARS: usize = 200;
-    /// Step size when adjusting bar count with arrow keys
-    pub const BAR_ADJUST_STEP: usize = 8;
+    /// Default width of each bar in characters
+    pub const DEFAULT_BAR_WIDTH: usize = 2;
+    /// Minimum bar width (single character)
+    pub const MIN_BAR_WIDTH: usize = 1;
+    /// Maximum bar width
+    pub const MAX_BAR_WIDTH: usize = 20;
+    /// Maximum bar count (for preallocated arrays)
+    pub const MAX_BARS: usize = 512;
 
     /// Decay rate for bar fall animation (0.0-1.0, higher = slower fall)
     /// 0.85 provides smooth visual decay similar to CAVA
@@ -682,7 +682,7 @@ fn render_channel_bar(
 const HELP: &str = "\
 AUDIO SPECTRUM
 ─────────────────
-←/→  Bar count -/+";
+←/→  Bar width -/+";
 
 /// Run the audio spectrum visualizer
 ///
@@ -853,8 +853,8 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     let mut prev_hit_left: Vec<usize> = vec![0; MAX_BARS];
     let mut prev_hit_right: Vec<usize> = vec![0; MAX_BARS];
 
-    // CAVA-style bar configuration - adjustable with left/right arrows
-    let mut num_bars: usize = DEFAULT_BAR_COUNT;
+    // Bar width - adjustable with left/right arrows. Bar count fills terminal.
+    let mut bar_width: usize = DEFAULT_BAR_WIDTH;
 
     // Frame timing for decay updates
     let mut last_frame = std::time::Instant::now();
@@ -893,6 +893,9 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
             }
         }
 
+        // Calculate bar count from terminal width and bar width
+        let num_bars = (width as usize / (bar_width + BAR_GAP)).max(1).min(MAX_BARS);
+
         // Ensure arrays match current bar count
         if target_heights_left.len() != num_bars {
             resize_tracking_arrays(
@@ -906,12 +909,12 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
 
         if let Some((code, mods)) = term.check_key()? {
             match code {
-                // Left/Right arrows adjust bar count (resize handled by frame loop above)
+                // Left/Right arrows adjust bar width (bars always fill terminal)
                 crossterm::event::KeyCode::Left => {
-                    num_bars = (num_bars.saturating_sub(BAR_ADJUST_STEP)).max(MIN_BARS);
+                    bar_width = bar_width.saturating_sub(1).max(MIN_BAR_WIDTH);
                 }
                 crossterm::event::KeyCode::Right => {
-                    num_bars = (num_bars + BAR_ADJUST_STEP).min(MAX_BARS).min(width as usize);
+                    bar_width = (bar_width + 1).min(MAX_BAR_WIDTH);
                 }
                 _ => {
                     if state.handle_key(code, mods) {
@@ -968,15 +971,15 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
             decay_right[bar_idx].update(dt);
         }
 
-        // Calculate bar width and spacing based on current bar count
-        // Each bar needs BAR_GAP space after it (except the last one)
-        // Minimum bar width is 1, so max bars that fit = width / (1 + BAR_GAP)
-        let total_width = width as usize;
-        let max_bars_that_fit = total_width / (1 + BAR_GAP);
-        let effective_bar_count = current_bar_count.min(max_bars_that_fit).max(1);
-        let total_gaps = if effective_bar_count > 1 { (effective_bar_count - 1) * BAR_GAP } else { 0 };
-        let available_for_bars = total_width.saturating_sub(total_gaps);
-        let bar_width = (available_for_bars / effective_bar_count).max(1);
+        let effective_bar_count = current_bar_count;
+
+        // Center bars horizontally to fill terminal evenly
+        let used_width = if effective_bar_count > 0 {
+            effective_bar_count * bar_width + (effective_bar_count - 1) * BAR_GAP
+        } else {
+            0
+        };
+        let x_offset = (width as usize).saturating_sub(used_width) / 2;
 
         // Center line separating left (top) and right (bottom) channels
         let center_y = height as i32 / 2;
@@ -988,7 +991,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         let max_bottom = (height as i32 - center_y) as usize;
 
         for bar_idx in 0..effective_bar_count {
-            let bar_x = (bar_idx * (bar_width + BAR_GAP)) as i32;
+            let bar_x = (x_offset + bar_idx * (bar_width + BAR_GAP)) as i32;
             let x_ratio = bar_idx as f32 / effective_bar_count.max(1) as f32;
 
             // Left channel (top half, grows upward)
