@@ -1,5 +1,5 @@
 ---
-version: "3.8"
+version: "3.9"
 lastUpdated: "2026-02-10"
 lifecycle: core
 stakeholder: pknull
@@ -23,11 +23,31 @@ Project expanded with system monitors, utilities, and TUI media controls:
 - **Folding@home monitor** with real-time WebSocket updates
 - **Audio visualizer** with stereo separation, decay animation, and width-fill bars
 - **Help system**: `?` key shows contextual help overlay in all visualizers
-- **TUI cover art**: Half-block rendering with bg color support, aspect-ratio preservation, expanded palette
+- **TUI cover art**: Half-block rendering with bg color support, aspect-ratio preservation, luminance-to-scheme color mapping
 - **TUI control**: Media controls with shuffle/repeat/volume, three-column status layout
 - **mplay deprecated**: Archived on GitHub, termart covers core functionality
 
 ## Recent Changes
+
+### Session 2026-02-10b (TUI Cover Palette Fix)
+
+**Goal**: Fix scheme-colored cover art having colors too saturated compared to other termart elements
+
+**Accomplishments**:
+
+1. **Replaced RGB-approximation palette with luminance-to-scheme mapping** (`src/tui/cover.rs`):
+   - Removed `expanded_palette()` (RGB interpolation between scheme colors) and `nearest_palette_color()` (Euclidean RGB matching)
+   - Removed intermediate attempt: 256-entry luminance-gradient LUT with posterization — correct approach but still used `Color::Rgb` bypassing terminal palette
+   - Final solution: `luminance_to_scheme()` converts pixel to luminance, maps to 5 bands (black + 4 scheme intensity levels), returns actual `Color` enum values from `scheme_color()`
+   - Terminal renders these identically to audio bars, text, and all other scheme-colored elements
+   - Removed ~100 lines of dead code: `color_to_rgb`, `ansi_value_to_rgb`, `ansi_256_to_rgb`, `rgb_6cube_value`, `lerp_u8`, `build_luminance_gradient`
+
+**Key Learnings**:
+- **Critical Pattern**: Terminal named colors (`Color::DarkBlue`) render through the terminal's palette/theme. `Color::Rgb { r: 0, g: 0, b: 255 }` bypasses the theme entirely. For visual consistency across UI elements, always use the same Color enum values.
+- **Pitfall**: RGB approximations of terminal colors (DarkBlue→(0,0,128)) don't match what the terminal actually renders for `DarkBlue`. The terminal theme controls the actual color.
+- **Validated**: Luminance banding (5 levels) provides sufficient detail for small terminal cover art while maintaining scheme consistency
+
+**Files modified**: src/tui/cover.rs
 
 ### Session 2026-02-10 (TUI Cover Quality Overhaul + mplay Deprecation)
 
@@ -42,7 +62,7 @@ Project expanded with system monitors, utilities, and TUI media controls:
    - Doubles vertical resolution for cover art display
    - Switched `FilterType::Nearest` → `FilterType::Triangle` for smoother resize
    - Added `calc_cover_dimensions()` for aspect-ratio-preserving square layout (accounts for 2:1 terminal char ratio)
-   - Expanded scheme palette from 4 to ~21 colors via interpolation + darkened variants
+   - Scheme palette via luminance banding (see session 2026-02-10b for final approach)
 
 2. **tui-control enhancements** (`src/viz/tui_control.rs`, `src/tui/mpris_client.rs`):
    - Fixed metadata order: title → artist → album (was title → album → artist)

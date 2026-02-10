@@ -207,7 +207,8 @@ pub fn render_cover_halfblock(
     }
 }
 
-/// Render cover art using half-block technique with palette-mapped colors.
+/// Render cover art using half-block technique with luminance-mapped scheme colors.
+/// Converts each pixel to luminance, then maps through the scheme's color gradient.
 pub fn render_cover_halfblock_palette(
     term: &mut Terminal,
     rgba: &RgbaImage,
@@ -220,8 +221,6 @@ pub fn render_cover_halfblock_palette(
     if art_w == 0 || art_h_cells == 0 {
         return;
     }
-
-    let palette = expanded_palette(scheme);
 
     for cy in 0..art_h_cells as u32 {
         let top_row = cy * 2;
@@ -240,9 +239,9 @@ pub fn render_cover_halfblock_palette(
                 continue;
             }
 
-            let top_color = nearest_palette_color(&palette, top_px[0], top_px[1], top_px[2]);
+            let top_color = luminance_to_scheme(scheme, top_px[0], top_px[1], top_px[2]);
             let bot_color = if has_bot && bot_px[3] >= ALPHA_THRESHOLD {
-                Some(nearest_palette_color(&palette, bot_px[0], bot_px[1], bot_px[2]))
+                Some(luminance_to_scheme(scheme, bot_px[0], bot_px[1], bot_px[2]))
             } else {
                 None
             };
@@ -260,20 +259,20 @@ pub fn render_cover_halfblock_palette(
     }
 }
 
-fn nearest_palette_color(palette: &[(Color, u8, u8, u8)], r: u8, g: u8, b: u8) -> Color {
-    let mut best_color = palette[0].0;
-    let mut best_dist = u32::MAX;
-    for &(color, pr, pg, pb) in palette {
-        let dr = r as i32 - pr as i32;
-        let dg = g as i32 - pg as i32;
-        let db = b as i32 - pb as i32;
-        let dist = (dr * dr + dg * dg + db * db) as u32;
-        if dist < best_dist {
-            best_dist = dist;
-            best_color = color;
-        }
-    }
-    best_color
+/// Map a pixel to its scheme color via luminance banding.
+/// Uses the actual Color enum values so the terminal renders them
+/// identically to audio bars, text, and other scheme-colored elements.
+fn luminance_to_scheme(scheme: u8, r: u8, g: u8, b: u8) -> Color {
+    let lum = (0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32)
+        .round() as u8;
+    let intensity = match lum {
+        0..=30 => return Color::Black,
+        31..=95 => 0,
+        96..=160 => 1,
+        161..=210 => 2,
+        _ => 3,
+    };
+    scheme_color(scheme, intensity, true).0
 }
 
 fn load_image(url: &str, cancel: &AtomicBool) -> Option<DynamicImage> {
@@ -323,128 +322,3 @@ fn load_image(url: &str, cancel: &AtomicBool) -> Option<DynamicImage> {
     }
 }
 
-/// Build an expanded palette (~17 entries) from the 4 scheme colors by
-/// interpolating between consecutive pairs and including black.
-fn expanded_palette(scheme: u8) -> Vec<(Color, u8, u8, u8)> {
-    let base: [(Color, bool); 4] = [
-        scheme_color(scheme, 0, true),
-        scheme_color(scheme, 1, true),
-        scheme_color(scheme, 2, true),
-        scheme_color(scheme, 3, true),
-    ];
-
-    let base_rgb: Vec<(u8, u8, u8)> = base.iter().map(|(c, _)| color_to_rgb(*c)).collect();
-
-    let mut palette: Vec<(Color, u8, u8, u8)> = Vec::with_capacity(20);
-
-    // Black anchor
-    palette.push((Color::Rgb { r: 0, g: 0, b: 0 }, 0, 0, 0));
-
-    // For each consecutive pair, add the base color plus 3 interpolated steps
-    for i in 0..base_rgb.len() {
-        let (r1, g1, b1) = base_rgb[i];
-        palette.push((Color::Rgb { r: r1, g: g1, b: b1 }, r1, g1, b1));
-
-        if i + 1 < base_rgb.len() {
-            let (r2, g2, b2) = base_rgb[i + 1];
-            for step in 1..=3 {
-                let t = step as f32 / 4.0;
-                let r = lerp_u8(r1, r2, t);
-                let g = lerp_u8(g1, g2, t);
-                let b = lerp_u8(b1, b2, t);
-                palette.push((Color::Rgb { r, g, b }, r, g, b));
-            }
-        }
-    }
-
-    // Darken variants of base colors (50% brightness)
-    for &(r, g, b) in &base_rgb {
-        let dr = r / 2;
-        let dg = g / 2;
-        let db = b / 2;
-        palette.push((Color::Rgb { r: dr, g: dg, b: db }, dr, dg, db));
-    }
-
-    palette
-}
-
-fn lerp_u8(a: u8, b: u8, t: f32) -> u8 {
-    (a as f32 + (b as f32 - a as f32) * t).round() as u8
-}
-
-fn color_to_rgb(color: Color) -> (u8, u8, u8) {
-    match color {
-        Color::Black => (0, 0, 0),
-        Color::DarkRed => (128, 0, 0),
-        Color::Red => (255, 0, 0),
-        Color::DarkGreen => (0, 128, 0),
-        Color::Green => (0, 255, 0),
-        Color::DarkYellow => (128, 128, 0),
-        Color::Yellow => (255, 255, 0),
-        Color::DarkBlue => (0, 0, 128),
-        Color::Blue => (0, 0, 255),
-        Color::DarkMagenta => (128, 0, 128),
-        Color::Magenta => (255, 0, 255),
-        Color::DarkCyan => (0, 128, 128),
-        Color::Cyan => (0, 255, 255),
-        Color::Grey => (192, 192, 192),
-        Color::DarkGrey => (128, 128, 128),
-        Color::White => (255, 255, 255),
-        Color::AnsiValue(v) => ansi_value_to_rgb(v),
-        Color::Rgb { r, g, b } => (r, g, b),
-        _ => (255, 255, 255),
-    }
-}
-
-fn ansi_value_to_rgb(v: u8) -> (u8, u8, u8) {
-    match v {
-        0 => (0, 0, 0),
-        1 => (128, 0, 0),
-        2 => (0, 128, 0),
-        3 => (128, 128, 0),
-        4 => (0, 0, 128),
-        5 => (128, 0, 128),
-        6 => (0, 128, 128),
-        7 => (192, 192, 192),
-        8 => (128, 128, 128),
-        9 => (255, 0, 0),
-        10 => (0, 255, 0),
-        11 => (255, 255, 0),
-        12 => (0, 0, 255),
-        13 => (255, 0, 255),
-        14 => (0, 255, 255),
-        15 => (255, 255, 255),
-        _ => ansi_256_to_rgb(v),
-    }
-}
-
-fn ansi_256_to_rgb(v: u8) -> (u8, u8, u8) {
-    if v < 16 {
-        return ansi_value_to_rgb(v);
-    }
-    if v >= 232 {
-        let gray = 8 + (v - 232) * 10;
-        return (gray, gray, gray);
-    }
-
-    let idx = v - 16;
-    let r = idx / 36;
-    let g = (idx % 36) / 6;
-    let b = idx % 6;
-    (
-        rgb_6cube_value(r),
-        rgb_6cube_value(g),
-        rgb_6cube_value(b),
-    )
-}
-
-fn rgb_6cube_value(v: u8) -> u8 {
-    match v {
-        0 => 0,
-        1 => 95,
-        2 => 135,
-        3 => 175,
-        4 => 215,
-        _ => 255,
-    }
-}
