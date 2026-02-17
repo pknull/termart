@@ -1,6 +1,6 @@
 ---
-version: "3.9"
-lastUpdated: "2026-02-10"
+version: "4.0"
+lastUpdated: "2026-02-17"
 lifecycle: core
 stakeholder: pknull
 changeTrigger: "session end, significant changes"
@@ -13,6 +13,7 @@ dependencies: ["projectbrief.md"]
 ## Current State
 
 Project expanded with system monitors, utilities, and TUI media controls:
+
 - Bonsai tree generator with static, live, infinite, and print modes
 - 19 visualization algorithms implemented
 - Interactive controls (speed, color schemes, pause)
@@ -29,6 +30,43 @@ Project expanded with system monitors, utilities, and TUI media controls:
 
 ## Recent Changes
 
+### Session 2026-02-17 (Matrix Rain Async + Glitch Effects)
+
+**Goal**: Make matrix rain columns fall at independent speeds and add visual effects
+
+**Accomplishments**:
+
+1. **Frame-skip speed variation** (`src/viz/matrix.rs`):
+   - Replaced floating-point `speed` multiplier with cmatrix-style frame-skip
+   - Each column has `update_rate` (2-5) — advances only when `frame % update_rate == 0`
+   - Lower rate = faster. Creates clear visual speed differentiation between adjacent columns
+   - Researched cmatrix, neo, TMatrix implementations for reference
+
+2. **Character glitch effect**:
+   - 2% per-character per-frame chance to trigger glitch
+   - Glitched character replaced with random char from pool
+   - Glitched chars render with lead color (intensity 3, bold) to pop visually
+   - 8% chance per frame to clear — glitches persist ~12 frames on average
+
+3. **Expanded character set**:
+   - Changed from `&[u8]` ASCII to `&[char]` with Unicode
+   - Added 56 half-width katakana (ｦｧｨ...ﾝ) — authentic Matrix style
+   - Total: 104 characters (katakana + uppercase latin + digits + symbols)
+
+4. **Tuning**:
+   - Raised minimum update_rate from 1 to 2 (fastest columns were too fast)
+   - Extended glitch duration (was clearing at 30% per frame, now 8%)
+   - Staggered initial Y positions across full screen height
+
+**Key Learnings**:
+
+- **Validated Pattern**: Frame-skip (integer modulo) creates more obvious speed variation than floating-point multipliers
+- **Validated Pattern**: Research existing implementations (cmatrix, neo) before designing effects
+- **Reference**: cmatrix uses `updates[j]` threshold per column; neo adds glitch with brightness pulse and head-linger pause
+- **Deferred**: Multiple drops per column, fade effect, head-linger pause — user preferred simpler approach
+
+**Files modified**: src/viz/matrix.rs
+
 ### Session 2026-02-10b (TUI Cover Palette Fix)
 
 **Goal**: Fix scheme-colored cover art having colors too saturated compared to other termart elements
@@ -43,6 +81,7 @@ Project expanded with system monitors, utilities, and TUI media controls:
    - Removed ~100 lines of dead code: `color_to_rgb`, `ansi_value_to_rgb`, `ansi_256_to_rgb`, `rgb_6cube_value`, `lerp_u8`, `build_luminance_gradient`
 
 **Key Learnings**:
+
 - **Critical Pattern**: Terminal named colors (`Color::DarkBlue`) render through the terminal's palette/theme. `Color::Rgb { r: 0, g: 0, b: 255 }` bypasses the theme entirely. For visual consistency across UI elements, always use the same Color enum values.
 - **Pitfall**: RGB approximations of terminal colors (DarkBlue→(0,0,128)) don't match what the terminal actually renders for `DarkBlue`. The terminal theme controls the actual color.
 - **Validated**: Luminance banding (5 levels) provides sufficient detail for small terminal cover art while maintaining scheme consistency
@@ -83,6 +122,7 @@ Project expanded with system monitors, utilities, and TUI media controls:
    - Archived `pknull/mplay` and `pknull/asha` repos on GitHub
 
 **Key Learnings**:
+
 - **Validated Pattern**: Half-block rendering (`▀` + fg/bg) doubles vertical resolution with minimal complexity
 - **Validated Pattern**: Terminal chars are ~2:1, so `art_w = 2 * art_h_cells` for visually square output
 - **Pitfall**: Emoji characters (🔀🔁🔂) don't render in terminal monospace fonts; use Unicode symbols (⇌ ↻)
@@ -105,6 +145,7 @@ Project expanded with system monitors, utilities, and TUI media controls:
    - Implemented `render_help()` method with centered bordered box using Unicode box-drawing chars
 
 2. **Global help section** (appended to all help overlays):
+
    ```
    ───────────────────────
     GLOBAL CONTROLS
@@ -132,12 +173,14 @@ Project expanded with system monitors, utilities, and TUI media controls:
    - All pass empty help text and call `render_help()` to show global section
 
 **Key Learnings**:
+
 - **Validated Pattern**: Shared `VizState` struct enables consistent behavior across visualizers
 - **Validated Pattern**: Separating global vs visualizer-specific help keeps content manageable
 - **Validated Pattern**: Box-drawing chars (`┌─┐│└─┘`) provide clean overlay borders
 - **Technique**: Files with local implementations (pong, clock) require inline help rendering
 
 **Files modified** (20 files):
+
 - `src/viz/mod.rs` (core changes)
 - 6 visualizers with custom help (globe, invaders, hypercube, audio, lissajous)
 - 2 visualizers with local help (pong, clock)
@@ -171,12 +214,14 @@ Project expanded with system monitors, utilities, and TUI media controls:
 3. **Default color scheme set to mono/white (scheme 7)** across all visualizations
 
 **Key Learnings**:
+
 - **Validated Pattern**: External AI review (Codex) catches different issues than self-review
 - **Validated Pattern**: `saturating_sub` is safer than subtraction for layout math
 - **Validated Pattern**: Delegating to a single source (ColorState) prevents drift
 - **Pitfall**: Renaming a struct used across modules requires updating all imports AND type usages
 
 **Files modified** (28 files total):
+
 - config.rs, main.rs, fractal.rs (FractalKind refactor)
 - terminal.rs (BufWriter optimization)
 - monitor/layout.rs, cpu.rs, mem.rs, disk.rs, diskio.rs, net.rs, gpu.rs (Box→Rect)
@@ -188,6 +233,7 @@ Project expanded with system monitors, utilities, and TUI media controls:
 **Goal**: Change sunlight visualization from sine wave arc to horizontal bar
 
 **Accomplishments**:
+
 - Modified `src/viz/sunlight.rs` to render horizontal bar instead of sine curve
 - Preserved color gradient (warm red at midnight ends, cool blue at noon center)
 - Kept all markers (☀ sunrise, ☾ sunset, ● current time) on the bar
@@ -219,6 +265,7 @@ Project expanded with system monitors, utilities, and TUI media controls:
    - `README.md`: Added security note about `chmod 600` for config file with credentials
 
 **Key Learnings**:
+
 - **Validated Pattern**: `#![warn(clippy::unwrap_used)]` catches unwraps without breaking existing code
 - **Validated Pattern**: Return `Result<(), String>` for simple error surfacing without adding thiserror dependency
 - **Pitfall**: Manual date calculations are error-prone; always use chrono if already a dependency
@@ -254,6 +301,7 @@ Project expanded with system monitors, utilities, and TUI media controls:
    - Process restart verified via TTY mapping
 
 **Key Learnings**:
+
 - **Validated Pattern**: Parallel code review agents provide comprehensive coverage
 - **Validated Pattern**: Zero-size guards should be added proactively to any terminal app
 - **Validated Pattern**: RAII guards (like MonitorSourceGuard) safer than manual cleanup
@@ -261,6 +309,7 @@ Project expanded with system monitors, utilities, and TUI media controls:
 - **Pitfall**: Fix agents may have Edit/Write auto-denied - apply fixes from main session
 
 **Files modified** (19 visualizers):
+
 - pipes.rs, rain.rs, hex.rs, pong.rs, audio.rs (direct fixes)
 - life.rs, fire.rs, matrix.rs, plasma.rs, donut.rs, clock.rs (agent fixes)
 - hypercube.rs, keyboard.rs, waves.rs, cube.rs (agent fixes)
@@ -271,6 +320,7 @@ Project expanded with system monitors, utilities, and TUI media controls:
 **Goal**: Enhance audio visualizer with stereo separation, animated decay, and address all code review findings
 
 **Accomplishments**:
+
 - Stereo audio separation (left/right channels)
 - 4-tier color decay animation
 - Security fixes (TOCTOU race, command injection, log permissions)
@@ -281,6 +331,7 @@ Project expanded with system monitors, utilities, and TUI media controls:
 **Goal**: Create N-dimensional hypercube visualization and audio spectrum visualizer
 
 **Accomplishments**:
+
 - `termart hypercube` - 1D through 16D rotating hypercube with braille rendering
 - `termart audio` - CAVA-style spectrum display with cpal + spectrum-analyzer
 - Constants modules and helper extraction for both
