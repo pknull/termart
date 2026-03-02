@@ -1,6 +1,6 @@
 [package]
 name = "termart"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Terminal-based generative art: bonsai trees and fractals"
 authors = ["Terminal Art Generator"]

@@ -24,6 +24,7 @@ pub mod audio;
 pub mod lissajous;
 pub mod tui_cover;
 pub mod tui_control;
+pub mod fractal;
 
 use crossterm::event::{KeyCode, KeyModifiers};
 use crate::colors::ColorState;

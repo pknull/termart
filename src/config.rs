@@ -35,6 +35,7 @@ pub enum FractalKind {
     Lissajous,
     TuiCover,
     TuiControl,
+    Fractal,
 }
 
 /// Configuration for fractal generation

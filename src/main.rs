@@ -242,6 +242,12 @@ enum Commands {
         opts: VizOptions,
     },
 
+    /// Fractal visualization (Mandelbrot, Julia) with braille rendering
+    Fractal {
+        #[command(flatten)]
+        opts: VizOptions,
+    },
+
     /// Clock display with nixie tube effects - alternates between time and date
     Clock {
         /// Animation speed (seconds per frame)
@@ -512,6 +518,7 @@ fn main() -> io::Result<()> {
         Commands::Invaders { opts } => run_viz(FractalKind::Invaders, opts)?,
         Commands::Audio { opts } => run_viz(FractalKind::Audio, opts)?,
         Commands::Lissajous { opts } => run_viz(FractalKind::Lissajous, opts)?,
+        Commands::Fractal { opts } => run_viz(FractalKind::Fractal, opts)?,
         Commands::Clock { time, no_seconds } => {
             let config = viz::clock::ClockConfig {
                 time_step: time,

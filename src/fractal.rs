@@ -40,5 +40,6 @@ pub fn run(config: FractalConfig) -> io::Result<()> {
         FractalKind::Lissajous => crate::viz::lissajous::run(&mut term, &config),
         FractalKind::TuiCover => crate::viz::tui_cover::run(&mut term, &config),
         FractalKind::TuiControl => crate::viz::tui_control::run(&mut term, &config),
+        FractalKind::Fractal => crate::viz::fractal::run(&mut term, &config),
     }
 }
