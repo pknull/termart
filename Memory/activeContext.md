@@ -1,6 +1,6 @@
 ---
-version: "5.1"
-lastUpdated: "2026-03-02"
+version: "5.2"
+lastUpdated: "2026-03-03"
 lifecycle: core
 stakeholder: pknull
 changeTrigger: "session end, significant changes"
@@ -34,6 +34,7 @@ Project expanded with system monitors, utilities, and TUI media controls:
 
 | Date | Goal | Outcome |
 |------|------|---------|
+| 2026-03-03 | Fractal animation speed tuning | Linear speed control: 1-9 = 10-90s per cycle, fixed 30 FPS frame rate |
 | 2026-03-02 | Fractal visualizer + GitHub CI | 5 fractal types with zoom/pan, CI workflow, release workflow (v0.2.0) |
 | 2026-02-17 | Matrix rain async speeds + glitch effects | Frame-skip variation, 2% glitch chance, 104-char katakana set |
 | 2026-02-10b | Fix cover art color saturation | Luminance-to-scheme mapping, removed RGB approximation |
@@ -65,6 +66,7 @@ Project expanded with system monitors, utilities, and TUI media controls:
 - **Frame-skip** (integer modulo) creates more obvious speed variation than floating-point multipliers
 - **Research existing implementations** (cmatrix, neo) before designing effects
 - **Julia morphing > Mandelbrot zoom**: Julia set with animated constant stays visually interesting; Mandelbrot zoom eventually hits blank/boring regions regardless of autopilot algorithm
+- **Decouple frame rate from animation speed**: Using sleep duration for both causes choppiness at slow speeds; keep frame rate constant (~30 FPS), vary animation delta separately
 
 ### Safety & Robustness
 

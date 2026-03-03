@@ -8,7 +8,7 @@
 //! - +/-: Zoom in/out
 //! - Arrows: Pan view
 //! - R: Reset view
-//! - 1-9: Speed
+//! - 1-9: Animation speed (N × 10 seconds per cycle)
 //! - Shift+1-9: Color scheme
 //! - Space: Pause
 //! - Q/Esc: Quit
@@ -86,6 +86,8 @@ struct FractalState {
     pan_y: f64,
     // Phoenix fractal: previous z value per pixel (stored separately)
     phoenix_p: f64,
+    // Animation speed level (1-9), each level = 10 seconds per cycle
+    speed_level: u8,
 }
 
 impl FractalState {
@@ -101,7 +103,12 @@ impl FractalState {
             pan_x: 0.0,
             pan_y: 0.0,
             phoenix_p: -0.5,  // Phoenix parameter
+            speed_level: 5,   // Default: 50 seconds per cycle
         }
+    }
+
+    fn set_speed(&mut self, level: u8) {
+        self.speed_level = level.clamp(1, 9);
     }
 
     fn cycle_type(&mut self) {
@@ -143,7 +150,7 @@ impl FractalState {
         }
 
         // Animate the Julia constant along a circular path
-        self.angle += dt * 0.5;  // Speed of animation
+        self.angle += dt;  // dt already scaled by caller
         if self.angle > std::f64::consts::TAU {
             self.angle -= std::f64::consts::TAU;
         }
@@ -264,7 +271,8 @@ F      Cycle type
 P      Cycle path
 +/-    Zoom in/out
 Arrows Pan view
-R      Reset view";
+R      Reset view
+1-9    Speed (N×10s)";
 
 /// Run the fractal visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
@@ -309,6 +317,10 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
                 KeyCode::Down => fractal.pan(0.0, 1.0),
                 KeyCode::Left => fractal.pan(-1.0, 0.0),
                 KeyCode::Right => fractal.pan(1.0, 0.0),
+                // Speed: 1-9 = 10-90 seconds per cycle
+                KeyCode::Char(c) if c.is_ascii_digit() && c != '0' => {
+                    fractal.set_speed(c.to_digit(10).unwrap() as u8);
+                }
                 _ => {}
             }
         }
@@ -396,10 +408,14 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         state.render_help(term, width, height);
         term.present()?;
 
-        // Update zoom
-        fractal.update(state.speed as f64);
+        // Fixed frame rate, speed level determines cycle time
+        // Speed N = N * 10 seconds per full cycle
+        const FRAME_TIME: f32 = 0.033;  // ~30 FPS
+        let cycle_seconds = fractal.speed_level as f64 * 10.0;
+        let anim_speed = std::f64::consts::TAU / (cycle_seconds * 30.0);  // radians per frame
+        fractal.update(anim_speed);
 
-        term.sleep(state.speed);
+        term.sleep(FRAME_TIME);
     }
 
     Ok(())
