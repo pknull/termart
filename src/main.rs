@@ -1,23 +1,23 @@
 // Prevent new unwrap() calls - existing code should migrate to proper error handling
 #![warn(clippy::unwrap_used)]
 
-mod config;
-mod terminal;
-mod colors;
-mod help;
 mod bonsai;
-mod fractal;
-mod viz;
-mod monitor;
-mod weather;
-mod pomodoro;
-mod fah;
-mod settings;
-mod net_geo;
+mod colors;
+mod config;
 mod evdev_util;
+mod fah;
+mod fractal;
+mod help;
+mod monitor;
+mod net_geo;
+mod pomodoro;
+mod settings;
+mod terminal;
 mod tui;
+mod viz;
+mod weather;
 
-use clap::{Parser, Subcommand, Args};
+use clap::{Args, Parser, Subcommand};
 use config::{BonsaiConfig, FractalConfig, FractalKind};
 use monitor::{MonitorConfig, MonitorType};
 use std::io;
@@ -423,6 +423,21 @@ enum Commands {
         #[command(flatten)]
         opts: TuiOptions,
     },
+
+    /// Claude AI usage monitor (TokenEater-style)
+    ClaudeTokens {
+        /// UI refresh interval (seconds)
+        #[arg(short, long, default_value = "0.1")]
+        time: f32,
+
+        /// API refresh interval (seconds)
+        #[arg(short, long, default_value = "300")]
+        refresh: u64,
+
+        /// Run OAuth authorization flow to get proper API access
+        #[arg(short, long)]
+        auth: bool,
+    },
 }
 
 fn run_viz(kind: FractalKind, opts: VizOptions) -> io::Result<()> {
@@ -503,7 +518,13 @@ fn main() -> io::Result<()> {
         Commands::Globe { opts, geoip, tilt } => {
             let settings = settings::Settings::load();
             let geoip_db = geoip.or(settings.globe.geoip_db);
-            run_viz(FractalKind::Globe { geoip_db, tilt: tilt.to_radians() }, opts)?
+            run_viz(
+                FractalKind::Globe {
+                    geoip_db,
+                    tilt: tilt.to_radians(),
+                },
+                opts,
+            )?
         }
         Commands::Hex { opts } => run_viz(FractalKind::Hex, opts)?,
         Commands::Keyboard { opts } => run_viz(FractalKind::Keyboard, opts)?,
@@ -527,16 +548,22 @@ fn main() -> io::Result<()> {
             };
             viz::clock::run(config)?;
         }
-        Commands::Sunlight { time, lat, lon, no_gamma, demo, demo_speed, night_temp, night_blue, night_green } => {
+        Commands::Sunlight {
+            time,
+            lat,
+            lon,
+            no_gamma,
+            demo,
+            demo_speed,
+            night_temp,
+            night_blue,
+            night_green,
+        } => {
             let settings = settings::Settings::load();
 
             // Location: CLI > config file > NYC default
-            let latitude = lat
-                .or(settings.sunlight.latitude)
-                .unwrap_or(40.7128);
-            let longitude = lon
-                .or(settings.sunlight.longitude)
-                .unwrap_or(-74.0060);
+            let latitude = lat.or(settings.sunlight.latitude).unwrap_or(40.7128);
+            let longitude = lon.or(settings.sunlight.longitude).unwrap_or(-74.0060);
 
             // Night temperature: --night-temp in Kelvin, or individual --night-blue/--night-green
             // Default is 3400K (f.lux default)
@@ -547,7 +574,10 @@ fn main() -> io::Result<()> {
                 let (_, g, b) = viz::sunlight::kelvin_to_gamma(kelvin);
                 (g, b)
             } else {
-                (night_green.unwrap_or(default_g), night_blue.unwrap_or(default_b))
+                (
+                    night_green.unwrap_or(default_g),
+                    night_blue.unwrap_or(default_b),
+                )
             };
 
             let config = viz::sunlight::SunlightConfig {
@@ -580,12 +610,15 @@ fn main() -> io::Result<()> {
             monitor::ps::run(config)?;
         }
         Commands::Docker { time } => {
-            let config = monitor::docker::DockerConfig {
-                time_step: time,
-            };
+            let config = monitor::docker::DockerConfig { time_step: time };
             monitor::docker::run(config)?;
         }
-        Commands::Weather { location, time, demo, demo_speed } => {
+        Commands::Weather {
+            location,
+            time,
+            demo,
+            demo_speed,
+        } => {
             let config = weather::WeatherConfig {
                 location,
                 time_step: time,
@@ -594,7 +627,12 @@ fn main() -> io::Result<()> {
             };
             weather::run(config)?;
         }
-        Commands::Pomodoro { work, short_break, long_break, count } => {
+        Commands::Pomodoro {
+            work,
+            short_break,
+            long_break,
+            count,
+        } => {
             let config = pomodoro::PomodoroConfig {
                 work_mins: work,
                 short_break_mins: short_break,
@@ -608,8 +646,10 @@ fn main() -> io::Result<()> {
 
             // Username: CLI > config file
             let username = user.or(settings.fah.username).unwrap_or_else(|| {
-                eprintln!("Error: FAH username required. Use --user or set in {}",
-                    settings::Settings::config_path().display());
+                eprintln!(
+                    "Error: FAH username required. Use --user or set in {}",
+                    settings::Settings::config_path().display()
+                );
                 std::process::exit(1);
             });
 
@@ -625,6 +665,18 @@ fn main() -> io::Result<()> {
         }
         Commands::TuiCover { opts } => run_tui(FractalKind::TuiCover, opts)?,
         Commands::TuiControl { opts } => run_tui(FractalKind::TuiControl, opts)?,
+        Commands::ClaudeTokens {
+            time,
+            refresh,
+            auth,
+        } => {
+            let config = viz::tokeneater::TokenEaterConfig {
+                time_step: time,
+                refresh_interval: refresh,
+                auth_mode: auth,
+            };
+            viz::tokeneater::run(config)?;
+        }
     }
 
     Ok(())

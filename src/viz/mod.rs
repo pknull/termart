@@ -2,34 +2,35 @@
 //!
 //! Each visualization is its own module with a `run()` function.
 
-pub mod invaders;
-pub mod matrix;
-pub mod life;
-pub mod plasma;
-pub mod fire;
-pub mod rain;
-pub mod waves;
+pub mod audio;
+pub mod clock;
 pub mod cube;
-pub mod hypercube;
-pub mod pipes;
 pub mod donut;
+pub mod dygma;
+pub mod fire;
+pub mod fractal;
 pub mod globe;
 pub mod hex;
+pub mod hypercube;
+pub mod invaders;
 pub mod keyboard;
-pub mod clock;
-pub mod pong;
-pub mod dygma;
-pub mod sunlight;
-pub mod audio;
+pub mod life;
 pub mod lissajous;
-pub mod tui_cover;
+pub mod matrix;
+pub mod pipes;
+pub mod plasma;
+pub mod pong;
+pub mod rain;
+pub mod sunlight;
+pub mod tokeneater;
 pub mod tui_control;
-pub mod fractal;
+pub mod tui_cover;
+pub mod waves;
 
-use crossterm::event::{KeyCode, KeyModifiers};
 use crate::colors::ColorState;
 use crate::help::render_help_overlay;
 use crate::terminal::Terminal;
+use crossterm::event::{KeyCode, KeyModifiers};
 
 // Re-export scheme_color from colors module for viz users
 pub use crate::colors::scheme_color;
@@ -50,10 +51,10 @@ const GLOBAL_HELP: &str = "\
 
 /// Runtime state for interactive controls (shared by all visualizations)
 pub struct VizState {
-    pub speed: f32,        // Current speed (time per frame)
+    pub speed: f32,         // Current speed (time per frame)
     pub colors: ColorState, // Color scheme state (delegated)
     pub paused: bool,
-    pub show_help: bool,   // Whether help overlay is visible
+    pub show_help: bool,     // Whether help overlay is visible
     help_text: &'static str, // Visualizer-specific help text
 }
 
