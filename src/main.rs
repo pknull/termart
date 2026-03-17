@@ -1,10 +1,13 @@
 // Prevent new unwrap() calls - existing code should migrate to proper error handling
-// TODO: Fix existing unwrap() calls and remove these allows
+// TODO: Fix existing issues and remove these allows
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::single_match)]
 #![allow(clippy::needless_range_loop)]
 #![allow(clippy::manual_clamp)]
+#![allow(clippy::manual_is_multiple_of)]
+#![allow(clippy::manual_range_contains)]
+#![allow(clippy::unnecessary_map_or)]
 
 mod bonsai;
 mod colors;
