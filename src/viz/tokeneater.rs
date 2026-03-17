@@ -380,14 +380,11 @@ pub fn run_auth() -> io::Result<()> {
         Err(ureq::Error::Status(status, resp)) => {
             let body = resp.into_string().unwrap_or_default();
             eprintln!("Token exchange failed (HTTP {}): {}", status, body);
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("HTTP {}: {}", status, body),
-            ));
+            return Err(io::Error::other(format!("HTTP {}: {}", status, body)));
         }
         Err(e) => {
             eprintln!("Failed to exchange code for token: {}", e);
-            return Err(io::Error::new(io::ErrorKind::Other, e.to_string()));
+            return Err(io::Error::other(e.to_string()));
         }
     }
 
@@ -470,6 +467,7 @@ fn format_duration(d: Duration) -> String {
 
 /// Draw a usage bar with optional pacing ghost
 /// expected_pct: if Some, draws a dim underlay showing elapsed time as expected usage
+#[allow(clippy::too_many_arguments)]
 fn draw_usage_bar(
     term: &mut Terminal,
     x: usize,
