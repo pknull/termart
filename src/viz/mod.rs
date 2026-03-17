@@ -87,7 +87,10 @@ impl VizState {
             KeyCode::Char('?') => self.show_help = !self.show_help,
             // Number keys: change speed (1=fastest, 9=slowest, 0=very slow)
             KeyCode::Char(c) if c.is_ascii_digit() => {
-                let n = c.to_digit(10).unwrap() as u8;
+                let Some(n) = c.to_digit(10) else {
+                    return false;
+                };
+                let n = n as u8;
                 self.speed = match n {
                     0 => 0.2,
                     1 => 0.005,

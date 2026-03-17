@@ -1,4 +1,4 @@
-use crate::colors::{ColorState, scheme_color};
+use crate::colors::{scheme_color, ColorState};
 use crate::help::render_help_overlay;
 use crate::terminal::Terminal;
 use crossterm::event::KeyCode;
@@ -87,7 +87,7 @@ struct CurrentWeather {
     winddirection: f64,
     weathercode: i32,
     is_day: i32,
-    time: String,  // ISO8601 format: "2025-12-13T16:30"
+    time: String, // ISO8601 format: "2025-12-13T16:30"
 }
 
 #[derive(Debug, Deserialize)]
@@ -111,7 +111,7 @@ pub struct WeatherData {
     pub condition: WeatherCondition,
     pub is_day: bool,
     pub location: String,
-    pub observation_time: String,  // When weather was observed
+    pub observation_time: String, // When weather was observed
 }
 
 struct Particle {
@@ -169,35 +169,42 @@ impl WeatherDisplay {
         );
 
         match ureq::get(&url).call() {
-            Ok(response) => {
-                match response.into_json::<WeatherResponse>() {
-                    Ok(weather) => {
-                        let cw = weather.current_weather;
-                        let (high, low) = weather.daily
-                            .map(|d| {
-                                let h = d.temperature_2m_max.first().copied().unwrap_or(cw.temperature);
-                                let l = d.temperature_2m_min.first().copied().unwrap_or(cw.temperature);
-                                (h, l)
-                            })
-                            .unwrap_or((cw.temperature, cw.temperature));
-                        self.data = Some(WeatherData {
-                            temperature: cw.temperature,
-                            temp_high: high,
-                            temp_low: low,
-                            wind_speed: cw.windspeed,
-                            wind_direction: cw.winddirection,
-                            condition: WeatherCondition::from_code(cw.weathercode, cw.is_day == 1),
-                            is_day: cw.is_day == 1,
-                            location: loc_name,
-                            observation_time: cw.time,
-                        });
-                        self.error = None;
-                    }
-                    Err(e) => {
-                        self.error = Some(format!("Parse error: {}", e));
-                    }
+            Ok(response) => match response.into_json::<WeatherResponse>() {
+                Ok(weather) => {
+                    let cw = weather.current_weather;
+                    let (high, low) = weather
+                        .daily
+                        .map(|d| {
+                            let h = d
+                                .temperature_2m_max
+                                .first()
+                                .copied()
+                                .unwrap_or(cw.temperature);
+                            let l = d
+                                .temperature_2m_min
+                                .first()
+                                .copied()
+                                .unwrap_or(cw.temperature);
+                            (h, l)
+                        })
+                        .unwrap_or((cw.temperature, cw.temperature));
+                    self.data = Some(WeatherData {
+                        temperature: cw.temperature,
+                        temp_high: high,
+                        temp_low: low,
+                        wind_speed: cw.windspeed,
+                        wind_direction: cw.winddirection,
+                        condition: WeatherCondition::from_code(cw.weathercode, cw.is_day == 1),
+                        is_day: cw.is_day == 1,
+                        location: loc_name,
+                        observation_time: cw.time,
+                    });
+                    self.error = None;
                 }
-            }
+                Err(e) => {
+                    self.error = Some(format!("Parse error: {}", e));
+                }
+            },
             Err(e) => {
                 self.error = Some(format!("Network error: {}", e));
             }
@@ -243,9 +250,7 @@ impl WeatherDisplay {
             results: Option<Vec<GeoResult>>,
         }
 
-        let response = ureq::get(&url)
-            .call()
-            .map_err(|e| e.to_string())?;
+        let response = ureq::get(&url).call().map_err(|e| e.to_string())?;
 
         let results: GeoResults = response.into_json().map_err(|e| e.to_string())?;
 
@@ -302,7 +307,10 @@ impl WeatherDisplay {
         let mut rng = rand::thread_rng();
 
         // Update particles
-        let is_snow = matches!(data.condition, WeatherCondition::Snow | WeatherCondition::HeavySnow);
+        let is_snow = matches!(
+            data.condition,
+            WeatherCondition::Snow | WeatherCondition::HeavySnow
+        );
 
         for p in &mut self.particles {
             p.y += p.speed;
@@ -317,8 +325,12 @@ impl WeatherDisplay {
                 p.y = 0.0;
                 p.x = rng.gen_range(0.0..w as f32);
             }
-            if p.x < 0.0 { p.x = w as f32 - 1.0; }
-            if p.x >= w as f32 { p.x = 0.0; }
+            if p.x < 0.0 {
+                p.x = w as f32 - 1.0;
+            }
+            if p.x >= w as f32 {
+                p.x = 0.0;
+            }
         }
 
         // Lightning for thunderstorms
@@ -331,26 +343,41 @@ impl WeatherDisplay {
         }
     }
 
-    pub fn render(&self, term: &mut Terminal, w: usize, h: usize, colors: &ColorState, use_fahrenheit: bool) {
+    pub fn render(
+        &self,
+        term: &mut Terminal,
+        w: usize,
+        h: usize,
+        colors: &ColorState,
+        use_fahrenheit: bool,
+    ) {
         let Some(ref data) = self.data else {
             if let Some(ref err) = self.error {
                 let cy = h / 2;
                 let msg = format!("Error: {}", err);
                 let cx = w.saturating_sub(msg.len()) / 2;
-                let c = if colors.is_mono() { Color::Red } else { scheme_color(colors.scheme, 3, true).0 };
+                let c = if colors.is_mono() {
+                    Color::Red
+                } else {
+                    scheme_color(colors.scheme, 3, true).0
+                };
                 term.set_str(cx as i32, cy as i32, &msg, Some(c), false);
             } else {
                 let cy = h / 2;
                 let msg = "Fetching weather...";
                 let cx = w.saturating_sub(msg.len()) / 2;
-                let c = if colors.is_mono() { Color::Yellow } else { scheme_color(colors.scheme, 2, false).0 };
+                let c = if colors.is_mono() {
+                    Color::Yellow
+                } else {
+                    scheme_color(colors.scheme, 2, false).0
+                };
                 term.set_str(cx as i32, cy as i32, msg, Some(c), false);
             }
             return;
         };
 
         // Background color based on conditions
-        let bg_flash = self.lightning_flash > 0 && self.lightning_flash % 2 == 0;
+        let bg_flash = self.lightning_flash > 0 && self.lightning_flash.is_multiple_of(2);
 
         // Draw sky gradient
         self.draw_sky(term, w, h, data, bg_flash, colors);
@@ -379,7 +406,15 @@ impl WeatherDisplay {
         self.draw_info(term, w, h, data, colors, use_fahrenheit);
     }
 
-    fn draw_sky(&self, term: &mut Terminal, w: usize, h: usize, data: &WeatherData, flash: bool, colors: &ColorState) {
+    fn draw_sky(
+        &self,
+        term: &mut Terminal,
+        w: usize,
+        h: usize,
+        data: &WeatherData,
+        flash: bool,
+        colors: &ColorState,
+    ) {
         // Fog obscures the sky completely
         if data.condition == WeatherCondition::Fog {
             return;
@@ -402,7 +437,7 @@ impl WeatherDisplay {
         };
 
         // Fill with sky color using faint dots
-        for y in 0..h/2 {
+        for y in 0..h / 2 {
             for x in 0..w {
                 if (x + y) % 4 == 0 {
                     term.set(x as i32, y as i32, '·', Some(color), false);
@@ -411,7 +446,14 @@ impl WeatherDisplay {
         }
     }
 
-    fn draw_clear(&self, term: &mut Terminal, w: usize, h: usize, data: &WeatherData, colors: &ColorState) {
+    fn draw_clear(
+        &self,
+        term: &mut Terminal,
+        w: usize,
+        h: usize,
+        data: &WeatherData,
+        colors: &ColorState,
+    ) {
         let cx = w / 2;
         let cy = h / 4;
 
@@ -425,25 +467,50 @@ impl WeatherDisplay {
                 r"    /   |   \    ",
             ];
 
-            let sun_color = if colors.is_mono() { Color::Yellow } else { scheme_color(colors.scheme, 3, true).0 };
+            let sun_color = if colors.is_mono() {
+                Color::Yellow
+            } else {
+                scheme_color(colors.scheme, 3, true).0
+            };
             let start_y = cy.saturating_sub(2);
             for (i, line) in sun.iter().enumerate() {
                 let start_x = cx.saturating_sub(line.len() / 2);
-                term.set_str(start_x as i32, (start_y + i) as i32, line, Some(sun_color), true);
+                term.set_str(
+                    start_x as i32,
+                    (start_y + i) as i32,
+                    line,
+                    Some(sun_color),
+                    true,
+                );
             }
         } else {
             // Just stars for nighttime - no moon
             // Stable star field with twinkling effect
-            let star_color = if colors.is_mono() { Color::White } else { scheme_color(colors.scheme, 2, false).0 };
+            let star_color = if colors.is_mono() {
+                Color::White
+            } else {
+                scheme_color(colors.scheme, 2, false).0
+            };
             let star_positions = [
-                (w/8, h/8), (w/6, h/5), (w/4, h/10), (w/3, h/7),
-                (2*w/5, h/9), (w/2, h/6), (3*w/5, h/11), (2*w/3, h/8),
-                (3*w/4, h/5), (5*w/6, h/9), (7*w/8, h/7), (w/10, h/4),
-                (9*w/10, h/10), (w/7, h/3), (4*w/5, h/12)
+                (w / 8, h / 8),
+                (w / 6, h / 5),
+                (w / 4, h / 10),
+                (w / 3, h / 7),
+                (2 * w / 5, h / 9),
+                (w / 2, h / 6),
+                (3 * w / 5, h / 11),
+                (2 * w / 3, h / 8),
+                (3 * w / 4, h / 5),
+                (5 * w / 6, h / 9),
+                (7 * w / 8, h / 7),
+                (w / 10, h / 4),
+                (9 * w / 10, h / 10),
+                (w / 7, h / 3),
+                (4 * w / 5, h / 12),
             ];
-            
+
             for &(sx, sy) in &star_positions {
-                if sx < w && sy < h/2 {
+                if sx < w && sy < h / 2 {
                     // Twinkle based on position and frame to create shimmer
                     let twinkle = ((self.frame / 3 + sx + sy) % 17) < 12;
                     let star = if twinkle { '✦' } else { '·' };
@@ -460,25 +527,32 @@ impl WeatherDisplay {
         }
     }
 
-    fn draw_partly_cloudy(&self, term: &mut Terminal, w: usize, h: usize, data: &WeatherData, colors: &ColorState) {
+    fn draw_partly_cloudy(
+        &self,
+        term: &mut Terminal,
+        w: usize,
+        h: usize,
+        data: &WeatherData,
+        colors: &ColorState,
+    ) {
         // Draw sun/moon first
         self.draw_clear(term, w, h, data, colors);
 
         // Then draw some clouds
-        let cloud = [
-            r"     .--.    ",
-            r"  .-(    ). ",
-            r" (___.__)__)",
-        ];
+        let cloud = [r"     .--.    ", r"  .-(    ). ", r" (___.__)__)"];
 
-        let cloud_color = if colors.is_mono() { Color::White } else { scheme_color(colors.scheme, 2, false).0 };
+        let cloud_color = if colors.is_mono() {
+            Color::White
+        } else {
+            scheme_color(colors.scheme, 2, false).0
+        };
 
         // Cloud positions (animated drift)
         let drift = (self.frame / 4) % w;
-        let positions = [(w/4 + drift) % w, (3*w/4 + drift/2) % w];
+        let positions = [(w / 4 + drift) % w, (3 * w / 4 + drift / 2) % w];
 
         for (i, &px) in positions.iter().enumerate() {
-            let py = h/3 + i * 2;
+            let py = h / 3 + i * 2;
             for (j, line) in cloud.iter().enumerate() {
                 let x = px.saturating_sub(line.len() / 2);
                 term.set_str(x as i32, (py + j) as i32, line, Some(cloud_color), false);
@@ -492,15 +566,23 @@ impl WeatherDisplay {
             (r"    .--.    ", r" .-(    ). ", r"(___.__)__)"),
         ];
 
-        let cloud_top = if colors.is_mono() { Color::White } else { scheme_color(colors.scheme, 2, false).0 };
-        let cloud_bottom = if colors.is_mono() { Color::Grey } else { scheme_color(colors.scheme, 1, false).0 };
+        let cloud_top = if colors.is_mono() {
+            Color::White
+        } else {
+            scheme_color(colors.scheme, 2, false).0
+        };
+        let cloud_bottom = if colors.is_mono() {
+            Color::Grey
+        } else {
+            scheme_color(colors.scheme, 1, false).0
+        };
 
         let drift = (self.frame / 6) % w;
         let positions = [
-            (w/5 + drift, h/4),
-            (2*w/5 + drift/2, h/3),
-            (3*w/5 + drift, h/4 + 1),
-            (4*w/5 + drift/3, h/3 + 1),
+            (w / 5 + drift, h / 4),
+            (2 * w / 5 + drift / 2, h / 3),
+            (3 * w / 5 + drift, h / 4 + 1),
+            (4 * w / 5 + drift / 3, h / 3 + 1),
         ];
 
         for (i, &(px, py)) in positions.iter().enumerate() {
@@ -508,19 +590,29 @@ impl WeatherDisplay {
             let x = (px % w).saturating_sub(cloud.0.len() / 2);
             term.set_str(x as i32, py as i32, cloud.0, Some(cloud_top), false);
             term.set_str(x as i32, (py + 1) as i32, cloud.1, Some(cloud_top), false);
-            term.set_str(x as i32, (py + 2) as i32, cloud.2, Some(cloud_bottom), false);
+            term.set_str(
+                x as i32,
+                (py + 2) as i32,
+                cloud.2,
+                Some(cloud_bottom),
+                false,
+            );
         }
     }
 
     fn draw_fog(&self, term: &mut Terminal, w: usize, h: usize, colors: &ColorState) {
         let fog_chars = ['~', '-', '~', '_', '-'];
-        let fog_color = if colors.is_mono() { Color::Grey } else { scheme_color(colors.scheme, 1, false).0 };
+        let fog_color = if colors.is_mono() {
+            Color::Grey
+        } else {
+            scheme_color(colors.scheme, 1, false).0
+        };
         let mut rng = rand::thread_rng();
 
-        for y in h/3..2*h/3 {
+        for y in h / 3..2 * h / 3 {
             for x in 0..w {
                 if rng.gen_ratio(1, 3) {
-                    let ch = fog_chars[(x + y + self.frame/2) % fog_chars.len()];
+                    let ch = fog_chars[(x + y + self.frame / 2) % fog_chars.len()];
                     term.set(x as i32, y as i32, ch, Some(fog_color), false);
                 }
             }
@@ -528,20 +620,32 @@ impl WeatherDisplay {
     }
 
     fn draw_rain_clouds(&self, term: &mut Terminal, w: usize, h: usize, colors: &ColorState) {
-        let cloud = [
-            r"      .--.      ",
-            r"   .-(    ).   ",
-            r"  (___.__)__)  ",
-        ];
+        let cloud = [r"      .--.      ", r"   .-(    ).   ", r"  (___.__)__)  "];
 
-        let cloud_color = if colors.is_mono() { Color::DarkGrey } else { scheme_color(colors.scheme, 1, false).0 };
-        let positions = [(w/4, h/5), (w/2, h/6), (3*w/4, h/5)];
+        let cloud_color = if colors.is_mono() {
+            Color::DarkGrey
+        } else {
+            scheme_color(colors.scheme, 1, false).0
+        };
+        let positions = [(w / 4, h / 5), (w / 2, h / 6), (3 * w / 4, h / 5)];
 
         for &(px, py) in &positions {
             let x = px.saturating_sub(cloud[0].len() / 2);
             term.set_str(x as i32, py as i32, cloud[0], Some(cloud_color), false);
-            term.set_str(x as i32, (py + 1) as i32, cloud[1], Some(cloud_color), false);
-            term.set_str(x as i32, (py + 2) as i32, cloud[2], Some(cloud_color), false);
+            term.set_str(
+                x as i32,
+                (py + 1) as i32,
+                cloud[1],
+                Some(cloud_color),
+                false,
+            );
+            term.set_str(
+                x as i32,
+                (py + 2) as i32,
+                cloud[2],
+                Some(cloud_color),
+                false,
+            );
         }
     }
 
@@ -550,12 +654,15 @@ impl WeatherDisplay {
         self.draw_rain_clouds(term, w, h, colors);
     }
 
-    fn draw_storm_clouds(&self, term: &mut Terminal, w: usize, h: usize, flash: bool, colors: &ColorState) {
-        let cloud = [
-            r"      .--.      ",
-            r"   .-(    ).   ",
-            r"  (___.__)__)  ",
-        ];
+    fn draw_storm_clouds(
+        &self,
+        term: &mut Terminal,
+        w: usize,
+        h: usize,
+        flash: bool,
+        colors: &ColorState,
+    ) {
+        let cloud = [r"      .--.      ", r"   .-(    ).   ", r"  (___.__)__)  "];
 
         let color = if flash {
             Color::White
@@ -564,7 +671,7 @@ impl WeatherDisplay {
         } else {
             scheme_color(colors.scheme, 1, false).0
         };
-        let positions = [(w/4, h/6), (w/2, h/7), (3*w/4, h/6)];
+        let positions = [(w / 4, h / 6), (w / 2, h / 7), (3 * w / 4, h / 6)];
 
         for &(px, py) in &positions {
             let x = px.saturating_sub(cloud[0].len() / 2);
@@ -579,7 +686,13 @@ impl WeatherDisplay {
             let bx = w / 2;
             let by = h / 4;
             for (i, &ch) in bolt.iter().enumerate() {
-                term.set_str((bx + i % 2) as i32, (by + i) as i32, ch, Some(Color::Yellow), true);
+                term.set_str(
+                    (bx + i % 2) as i32,
+                    (by + i) as i32,
+                    ch,
+                    Some(Color::Yellow),
+                    true,
+                );
             }
         }
     }
@@ -599,13 +712,25 @@ impl WeatherDisplay {
         }
     }
 
-    fn draw_info(&self, term: &mut Terminal, _w: usize, h: usize, data: &WeatherData, colors: &ColorState, use_fahrenheit: bool) {
+    fn draw_info(
+        &self,
+        term: &mut Terminal,
+        _w: usize,
+        h: usize,
+        data: &WeatherData,
+        colors: &ColorState,
+        use_fahrenheit: bool,
+    ) {
         // Info panel at bottom
         let panel_y = h - 6;
 
         // Location
         let loc = &data.location;
-        let loc_color = if colors.is_mono() { Color::White } else { scheme_color(colors.scheme, 3, true).0 };
+        let loc_color = if colors.is_mono() {
+            Color::White
+        } else {
+            scheme_color(colors.scheme, 3, true).0
+        };
         term.set_str(2, panel_y as i32, loc, Some(loc_color), true);
 
         // Helper to convert C to F
@@ -639,17 +764,41 @@ impl WeatherDisplay {
         term.set_str(2, (panel_y + 1) as i32, &temp, Some(temp_color), true);
 
         // High/Low
-        let hi_lo = format!("H:{}{}  L:{}{}", to_display(data.temp_high), unit, to_display(data.temp_low), unit);
-        let hi_lo_color = if colors.is_mono() { Color::Grey } else { scheme_color(colors.scheme, 1, false).0 };
+        let hi_lo = format!(
+            "H:{}{}  L:{}{}",
+            to_display(data.temp_high),
+            unit,
+            to_display(data.temp_low),
+            unit
+        );
+        let hi_lo_color = if colors.is_mono() {
+            Color::Grey
+        } else {
+            scheme_color(colors.scheme, 1, false).0
+        };
         term.set_str(2, (panel_y + 2) as i32, &hi_lo, Some(hi_lo_color), false);
 
         // Condition
-        let cond_color = if colors.is_mono() { Color::Grey } else { scheme_color(colors.scheme, 1, false).0 };
-        term.set_str(2, (panel_y + 3) as i32, data.condition.description(), Some(cond_color), false);
+        let cond_color = if colors.is_mono() {
+            Color::Grey
+        } else {
+            scheme_color(colors.scheme, 1, false).0
+        };
+        term.set_str(
+            2,
+            (panel_y + 3) as i32,
+            data.condition.description(),
+            Some(cond_color),
+            false,
+        );
 
         // Wind
         let wind = format!("Wind: {} km/h", data.wind_speed.round() as i32);
-        let wind_color = if colors.is_mono() { Color::DarkGrey } else { scheme_color(colors.scheme, 0, false).0 };
+        let wind_color = if colors.is_mono() {
+            Color::DarkGrey
+        } else {
+            scheme_color(colors.scheme, 0, false).0
+        };
         term.set_str(2, (panel_y + 4) as i32, &wind, Some(wind_color), false);
 
         // Wind direction arrow
@@ -664,12 +813,22 @@ impl WeatherDisplay {
             293..=337 => "↖",
             _ => "?",
         };
-        term.set_str((2 + wind.len() + 1) as i32, (panel_y + 4) as i32, arrow, Some(wind_color), false);
+        term.set_str(
+            (2 + wind.len() + 1) as i32,
+            (panel_y + 4) as i32,
+            arrow,
+            Some(wind_color),
+            false,
+        );
 
         // Observation time at bottom
         let obs_time = parse_observation_time(&data.observation_time);
         let time_str = format!("Updated {}", obs_time);
-        let time_color = if colors.is_mono() { Color::DarkGrey } else { scheme_color(colors.scheme, 0, false).0 };
+        let time_color = if colors.is_mono() {
+            Color::DarkGrey
+        } else {
+            scheme_color(colors.scheme, 0, false).0
+        };
         term.set_str(2, (panel_y + 5) as i32, &time_str, Some(time_color), false);
     }
 }
@@ -746,7 +905,9 @@ impl WeatherDisplay {
             WeatherCondition::Clear => 15.0,
             WeatherCondition::Fog => 8.0,
             WeatherCondition::Thunderstorm => 22.0,
-            WeatherCondition::Rain | WeatherCondition::HeavyRain | WeatherCondition::Drizzle => 12.0,
+            WeatherCondition::Rain | WeatherCondition::HeavyRain | WeatherCondition::Drizzle => {
+                12.0
+            }
             _ => 18.0,
         };
 
@@ -763,7 +924,11 @@ impl WeatherDisplay {
             wind_direction: 225.0, // SW
             condition,
             is_day,
-            location: format!("Demo: {} {}", condition.description(), if is_day { "(Day)" } else { "(Night)" }),
+            location: format!(
+                "Demo: {} {}",
+                condition.description(),
+                if is_day { "(Day)" } else { "(Night)" }
+            ),
             observation_time: "2025-01-16T12:00".to_string(),
         }
     }
@@ -818,7 +983,7 @@ pub fn run(config: WeatherConfig) -> io::Result<()> {
                         demo_index = (demo_index + 1) % demo_total_states;
                         demo_elapsed = 0.0;
                         let condition = ALL_CONDITIONS[demo_index / 2];
-                        let is_day = demo_index % 2 == 0;
+                        let is_day = demo_index.is_multiple_of(2);
                         display.data = Some(WeatherDisplay::demo_data(condition, is_day));
                         display.init_particles(term.size().0 as usize, term.size().1 as usize);
                     }
@@ -826,7 +991,7 @@ pub fn run(config: WeatherConfig) -> io::Result<()> {
                         demo_index = (demo_index + demo_total_states - 1) % demo_total_states;
                         demo_elapsed = 0.0;
                         let condition = ALL_CONDITIONS[demo_index / 2];
-                        let is_day = demo_index % 2 == 0;
+                        let is_day = demo_index.is_multiple_of(2);
                         display.data = Some(WeatherDisplay::demo_data(condition, is_day));
                         display.init_particles(term.size().0 as usize, term.size().1 as usize);
                     }
@@ -842,7 +1007,7 @@ pub fn run(config: WeatherConfig) -> io::Result<()> {
                 demo_elapsed = 0.0;
                 demo_index = (demo_index + 1) % demo_total_states;
                 let condition = ALL_CONDITIONS[demo_index / 2];
-                let is_day = demo_index % 2 == 0;
+                let is_day = demo_index.is_multiple_of(2);
                 display.data = Some(WeatherDisplay::demo_data(condition, is_day));
                 display.init_particles(term.size().0 as usize, term.size().1 as usize);
             }
@@ -872,7 +1037,11 @@ pub fn run(config: WeatherConfig) -> io::Result<()> {
 
         // Demo mode progress indicator
         if config.demo {
-            let progress = format!("[Demo {}/{}] ←/→ or n/p to navigate", demo_index + 1, demo_total_states);
+            let progress = format!(
+                "[Demo {}/{}] ←/→ or n/p to navigate",
+                demo_index + 1,
+                demo_total_states
+            );
             term.set_str(2, (h - 1) as i32, &progress, Some(Color::DarkGrey), false);
         }
 
