@@ -16,19 +16,19 @@
 //! - Space: Pause
 //! - q/Esc: Quit
 
+use super::{scheme_color, VizState};
 use crate::config::FractalConfig;
 use crate::terminal::Terminal;
-use super::{scheme_color, VizState};
-use std::io;
-use std::sync::{Arc, Mutex};
-use std::os::unix::io::AsRawFd;
-use std::os::unix::fs::OpenOptionsExt;
-use std::fs::File;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use spectrum_analyzer::{samples_fft_to_spectrum, FrequencyLimit};
-use spectrum_analyzer::windows::hann_window;
-use spectrum_analyzer::scaling::divide_by_N_sqrt;
 use crossterm::style::Color;
+use spectrum_analyzer::scaling::divide_by_N_sqrt;
+use spectrum_analyzer::windows::hann_window;
+use spectrum_analyzer::{samples_fft_to_spectrum, FrequencyLimit};
+use std::fs::File;
+use std::io;
+use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::io::AsRawFd;
+use std::sync::{Arc, Mutex};
 
 /// Configuration constants for the audio visualizer
 mod constants {
@@ -131,7 +131,9 @@ impl StderrSuppressor {
         let dup2_result = unsafe { libc::dup2(dev_null.as_raw_fd(), 2) };
         if dup2_result < 0 {
             // dup2 failed - close saved_fd and return None
-            unsafe { libc::close(saved_fd); }
+            unsafe {
+                libc::close(saved_fd);
+            }
             return None;
         }
 
@@ -158,9 +160,10 @@ fn suppress_alsa_errors() -> Option<StderrSuppressor> {
 /// Valid names: alphanumeric, dots, dashes, underscores, colons, at-signs
 /// (e.g., "alsa_output.pci-0000_03_00.1.hdmi-stereo.monitor", "@DEFAULT_SINK@")
 fn is_valid_source_name(name: &str) -> bool {
-    !name.is_empty() && name.chars().all(|c| {
-        c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | ':' | '@')
-    })
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | ':' | '@'))
 }
 
 /// Shared audio buffer between capture thread and render thread
@@ -270,7 +273,7 @@ impl BarDecayState {
 
         // Smoothly decay visual height using exponential decay
         // Total tier decay time determines how fast height shrinks
-        let total_tier_time = (0..NUM_TIERS).map(|t| decay_time_for_tier(t)).sum::<f32>();
+        let total_tier_time = (0..NUM_TIERS).map(decay_time_for_tier).sum::<f32>();
         let decay_rate = 1.0 / (total_tier_time * VISUAL_HEIGHT_DECAY_FACTOR);
         self.visual_height *= 1.0 - (decay_rate * dt).min(1.0);
     }
@@ -279,7 +282,7 @@ impl BarDecayState {
     /// Levels above hit_height continue their decay
     fn hit(&mut self, hit_height: usize) {
         let hit_level = hit_height.min(self.max_levels);
-        let top_tier = (NUM_TIERS - 1) as i8; // Tier 3
+        let top_tier = NUM_TIERS - 1; // Tier 3
         for level in 0..hit_level {
             self.level_tiers[level] = top_tier;
             self.level_timers[level] = decay_time_for_tier(top_tier);
@@ -316,7 +319,13 @@ fn display_error_and_wait(
     for (line_idx, line) in lines.iter().enumerate() {
         let x_start = width as i32 / 2 - line.len() as i32 / 2;
         for (char_idx, ch) in line.chars().enumerate() {
-            term.set(x_start + char_idx as i32, start_y + line_idx as i32, ch, None, false);
+            term.set(
+                x_start + char_idx as i32,
+                start_y + line_idx as i32,
+                ch,
+                None,
+                false,
+            );
         }
     }
     term.present()?;
@@ -355,7 +364,9 @@ fn process_channel_spectrum(
         Err(_) => return,
     };
 
-    let freq_data: Vec<(f32, f32)> = spectrum.data().iter()
+    let freq_data: Vec<(f32, f32)> = spectrum
+        .data()
+        .iter()
         .map(|(freq, val)| (freq.val(), val.val()))
         .collect();
 
@@ -375,15 +386,18 @@ fn process_channel_spectrum(
         // Average nearby bins (±2) for smoother response
         let bin_start = freq_idx.saturating_sub(2);
         let bin_end = (freq_idx + 3).min(freq_data.len());
-        let amplitude_avg: f32 = freq_data[bin_start..bin_end].iter()
+        let amplitude_avg: f32 = freq_data[bin_start..bin_end]
+            .iter()
             .map(|(_, val)| *val)
-            .sum::<f32>() / (bin_end - bin_start).max(1) as f32;
+            .sum::<f32>()
+            / (bin_end - bin_start).max(1) as f32;
 
         let raw_target = (amplitude_avg * SENSITIVITY).min(available_height);
 
         // Smooth the target height for attack/decay feel
         if raw_target > target_heights[bar_idx] {
-            target_heights[bar_idx] = target_heights[bar_idx] * (1.0 - ATTACK_RATE) + raw_target * ATTACK_RATE;
+            target_heights[bar_idx] =
+                target_heights[bar_idx] * (1.0 - ATTACK_RATE) + raw_target * ATTACK_RATE;
         } else {
             target_heights[bar_idx] *= DECAY_RATE;
         }
@@ -407,12 +421,7 @@ fn process_channel_spectrum(
 
 /// Get color for a bar cell based on color scheme, position, and decay tier
 /// tier: 0-3 where 3 is brightest (newest hit), 0 is dimmest (about to collapse)
-fn get_bar_color(
-    color_scheme: u8,
-    x_ratio: f32,
-    tier: i8,
-    is_peak: bool,
-) -> (Color, bool) {
+fn get_bar_color(color_scheme: u8, x_ratio: f32, tier: i8, is_peak: bool) -> (Color, bool) {
     if color_scheme == RAINBOW_SCHEME {
         // Rainbow mode: color based on X position, bold for high tiers
         (rainbow_color(x_ratio), tier >= 2)
@@ -524,7 +533,10 @@ fn detect_and_set_monitor_source() -> (Option<String>, bool) {
                 let expected_monitor = format!("{}.monitor", sink);
                 for line in &lines {
                     let parts: Vec<&str> = line.split('\t').collect();
-                    if parts.len() >= 2 && parts[1] == expected_monitor && is_valid_source_name(parts[1]) {
+                    if parts.len() >= 2
+                        && parts[1] == expected_monitor
+                        && is_valid_source_name(parts[1])
+                    {
                         let _ = std::process::Command::new("pactl")
                             .args(["set-default-source", parts[1]])
                             .output();
@@ -536,7 +548,10 @@ fn detect_and_set_monitor_source() -> (Option<String>, bool) {
             // Fallback: find any monitor source
             for line in &lines {
                 let parts: Vec<&str> = line.split('\t').collect();
-                if parts.len() >= 2 && parts[1].contains(".monitor") && is_valid_source_name(parts[1]) {
+                if parts.len() >= 2
+                    && parts[1].contains(".monitor")
+                    && is_valid_source_name(parts[1])
+                {
                     let _ = std::process::Command::new("pactl")
                         .args(["set-default-source", parts[1]])
                         .output();
@@ -672,7 +687,13 @@ fn render_channel_bar(
 
         if in_bounds {
             for x_offset in 0..bar_width as i32 {
-                term.set(bar_x + x_offset, screen_y, bar_chars[char_idx], Some(color), bold);
+                term.set(
+                    bar_x + x_offset,
+                    screen_y,
+                    bar_chars[char_idx],
+                    Some(color),
+                    bold,
+                );
             }
         }
     }
@@ -709,7 +730,6 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
 
     let mut state = VizState::new(config.time_step, HELP);
 
-
     // Suppress ALSA debug spam by redirecting stderr temporarily during device enumeration
     // This prevents ALSA lib errors from corrupting the terminal display
     dbg_log!(log, "Suppressing ALSA errors");
@@ -728,7 +748,12 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     // Like CAVA, try to auto-select a monitor source for system audio
     dbg_log!(log, "Looking for monitor source via pactl");
     let (original_source, monitor_was_set) = detect_and_set_monitor_source();
-    dbg_log!(log, "Monitor source detection: original={:?}, set={}", original_source, monitor_was_set);
+    dbg_log!(
+        log,
+        "Monitor source detection: original={:?}, set={}",
+        original_source,
+        monitor_was_set
+    );
 
     // Create RAII guard immediately - will restore on any exit path (normal, early return, panic)
     let _source_guard = MonitorSourceGuard::new(original_source, monitor_was_set);
@@ -740,15 +765,19 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     let device = match device {
         Some(d) => d,
         None => {
-            return display_error_and_wait(term, &mut state, &[
-                "No audio input device found",
-                "",
-                "For system audio, set a monitor source as default:",
-                "  pactl set-default-source \\",
-                "    $(pactl list sources short | grep monitor | head -1 | cut -f1)",
-                "",
-                "Or use pavucontrol to select the monitor source",
-            ]);
+            return display_error_and_wait(
+                term,
+                &mut state,
+                &[
+                    "No audio input device found",
+                    "",
+                    "For system audio, set a monitor source as default:",
+                    "  pactl set-default-source \\",
+                    "    $(pactl list sources short | grep monitor | head -1 | cut -f1)",
+                    "",
+                    "Or use pavucontrol to select the monitor source",
+                ],
+            );
         }
     };
 
@@ -757,9 +786,9 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
 
     // Get device's default config, or construct a reasonable default
     dbg_log!(log, "Getting device config");
-    let supported_config = device.default_input_config().map_err(|e| {
-        io::Error::new(io::ErrorKind::Other, format!("No supported config: {}", e))
-    })?;
+    let supported_config = device
+        .default_input_config()
+        .map_err(|e| io::Error::other(format!("No supported config: {}", e)))?;
 
     let sample_rate = supported_config.sample_rate().0;
     let channels = supported_config.channels();
@@ -793,7 +822,8 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
                 } else {
                     // Multi-channel: take first two channels as L/R
                     // Guard against empty chunks to prevent panic
-                    let stereo: Vec<f32> = data.chunks(channels as usize)
+                    let stereo: Vec<f32> = data
+                        .chunks(channels as usize)
                         .flat_map(|chunk| {
                             if chunk.is_empty() {
                                 [0.0, 0.0]
@@ -894,7 +924,9 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         }
 
         // Calculate bar count from terminal width and bar width
-        let num_bars = (width as usize / (bar_width + BAR_GAP)).max(1).min(MAX_BARS);
+        let num_bars = (width as usize / (bar_width + BAR_GAP))
+            .max(1)
+            .min(MAX_BARS);
 
         // Ensure arrays match current bar count
         if target_heights_left.len() != num_bars {
@@ -996,22 +1028,40 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
 
             // Left channel (top half, grows upward)
             render_channel_bar(
-                term, &decay_left[bar_idx], bar_x, bar_width, x_ratio,
-                half_height, center_y, max_top, height,
-                BarDirection::Up, &bar_chars_lower, state.color_scheme(),
+                term,
+                &decay_left[bar_idx],
+                bar_x,
+                bar_width,
+                x_ratio,
+                half_height,
+                center_y,
+                max_top,
+                height,
+                BarDirection::Up,
+                &bar_chars_lower,
+                state.color_scheme(),
             );
 
             // Right channel (bottom half, grows downward)
             render_channel_bar(
-                term, &decay_right[bar_idx], bar_x, bar_width, x_ratio,
-                half_height, center_y, max_bottom, height,
-                BarDirection::Down, &bar_chars_upper, state.color_scheme(),
+                term,
+                &decay_right[bar_idx],
+                bar_x,
+                bar_width,
+                x_ratio,
+                half_height,
+                center_y,
+                max_bottom,
+                height,
+                BarDirection::Down,
+                &bar_chars_upper,
+                state.color_scheme(),
             );
         }
 
         state.render_help(term, width, height);
         term.present()?;
-        term.sleep(state.speed.max(MIN_FRAME_TIME as f32));
+        term.sleep(state.speed.max(MIN_FRAME_TIME));
     }
 
     // Note: _source_guard handles restoration automatically via Drop
