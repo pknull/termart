@@ -30,3 +30,6 @@ Memory/reasoning_bank/
 .claude/
 .codex
 Work/
+
+# Asha push-retry queue (transient runtime state)
+Memory/events/push-queue.jsonl
