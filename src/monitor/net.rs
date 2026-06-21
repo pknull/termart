@@ -86,9 +86,11 @@ impl NetMonitor {
             interface.rx_rate = rx_diff as f64 / interval as f64;
             interface.tx_rate = tx_diff as f64 / interval as f64;
 
-            // Update stats
-            interface.prev_rx_bytes = interface.rx_bytes;
-            interface.prev_tx_bytes = interface.tx_bytes;
+            // Update stats. prev_* must hold THIS cycle's reading so next cycle's
+            // diff spans exactly one interval (storing the old interface.rx_bytes
+            // here lagged it a cycle, doubling the reported rate).
+            interface.prev_rx_bytes = rx_bytes;
+            interface.prev_tx_bytes = tx_bytes;
             interface.rx_bytes = rx_bytes;
             interface.tx_bytes = tx_bytes;
 

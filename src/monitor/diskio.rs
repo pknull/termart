@@ -104,9 +104,11 @@ impl IoMonitor {
             disk.read_rate = read_diff as f64 / interval as f64;
             disk.write_rate = write_diff as f64 / interval as f64;
 
-            // Update stats
-            disk.prev_read_bytes = disk.read_bytes;
-            disk.prev_write_bytes = disk.write_bytes;
+            // Update stats. prev_* must hold THIS cycle's reading so next cycle's
+            // diff spans exactly one interval (storing the old disk.read_bytes here
+            // lagged it a cycle, doubling the reported rate).
+            disk.prev_read_bytes = read_bytes;
+            disk.prev_write_bytes = write_bytes;
             disk.read_bytes = read_bytes;
             disk.write_bytes = write_bytes;
 

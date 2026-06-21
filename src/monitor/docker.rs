@@ -247,10 +247,12 @@ fn parse_container_line(line: &str) -> Option<ContainerInfo> {
 }
 
 fn truncate_str(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
+    // Count/slice by chars, not bytes, to avoid panicking on a multibyte boundary.
+    if s.chars().count() <= max_len {
         s.to_string()
     } else {
-        format!("{}...", &s[..max_len.saturating_sub(3)])
+        let truncated: String = s.chars().take(max_len.saturating_sub(3)).collect();
+        format!("{}...", truncated)
     }
 }
 

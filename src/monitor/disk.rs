@@ -207,7 +207,9 @@ impl DiskMonitor {
             if short.len() < mount_w {
                 format!("{:<width$}", short, width = mount_w)
             } else {
-                format!("{:<width$}", &short[..mount_w - 1], width = mount_w)
+                // Truncate by chars, not bytes, to avoid panicking on a multibyte boundary.
+                let truncated: String = short.chars().take(mount_w.saturating_sub(1)).collect();
+                format!("{:<width$}", truncated, width = mount_w)
             }
         };
         term.set_str(
