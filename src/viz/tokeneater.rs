@@ -27,6 +27,11 @@ const OAUTH_TOKEN_URL: &str = "https://console.anthropic.com/v1/oauth/token";
 const OAUTH_SCOPES: &str = "user:inference user:profile";
 const OAUTH_CLIENT_ID: &str = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"; // Claude Code's client ID
 
+// Backoff ceiling (seconds) for the usage endpoint when it returns HTTP 429.
+// Anthropic rate limits /api/oauth/usage aggressively and without a usable
+// Retry-After, so we back off exponentially up to this cap.
+const MAX_BACKOFF_SECS: u64 = 1800;
+
 /// OAuth credentials from ~/.claude/.credentials.json
 #[derive(Deserialize)]
 struct Credentials {
@@ -82,6 +87,29 @@ struct ApiErrorDetail {
     message: Option<String>,
 }
 
+/// Outcome of a failed usage fetch. `rate_limited` distinguishes HTTP 429 so the
+/// caller can apply exponential backoff instead of hammering the endpoint.
+struct FetchError {
+    message: String,
+    rate_limited: bool,
+}
+
+impl FetchError {
+    fn other(message: String) -> Self {
+        Self {
+            message,
+            rate_limited: false,
+        }
+    }
+
+    fn rate_limited(message: String) -> Self {
+        Self {
+            message,
+            rate_limited: true,
+        }
+    }
+}
+
 /// OAuth token response
 #[derive(Deserialize)]
 struct TokenResponse {
@@ -100,7 +128,7 @@ impl Default for TokenEaterConfig {
     fn default() -> Self {
         Self {
             time_step: 0.1,
-            refresh_interval: 300,
+            refresh_interval: 600,
             auth_mode: false,
         }
     }
@@ -180,6 +208,17 @@ fn save_token(token: &TokenResponse) -> io::Result<()> {
     Ok(())
 }
 
+/// Read Claude Code's live OAuth token from ~/.claude/.credentials.json.
+/// Claude Code keeps this refreshed, so we piggyback on it and never have to
+/// drive our own (rate-limited) token exchange.
+fn read_claude_credentials() -> Option<String> {
+    let home = std::env::var("HOME").ok()?;
+    let path = format!("{}/.claude/.credentials.json", home);
+    let data = std::fs::read_to_string(path).ok()?;
+    let creds: Credentials = serde_json::from_str(&data).ok()?;
+    creds.claude_ai_oauth?.access_token
+}
+
 /// Read OAuth token - auto-refresh if expired
 fn read_token() -> Option<String> {
     // Try our stored token first
@@ -193,18 +232,17 @@ fn read_token() -> Option<String> {
                     return Some(new_token.access_token);
                 }
             }
-            // Refresh failed or no refresh token - token is expired
-            return None;
+            // Refresh failed or no refresh token - this commonly happens when the
+            // OAuth token endpoint is rate limited (HTTP 429) or the refresh token
+            // has been rotated out by Claude Code. Fall back to Claude Code's live
+            // credentials instead of giving up.
+            return read_claude_credentials();
         }
         return Some(stored.access_token);
     }
 
-    // Fall back to Claude credentials
-    let home = std::env::var("HOME").ok()?;
-    let path = format!("{}/.claude/.credentials.json", home);
-    let data = std::fs::read_to_string(path).ok()?;
-    let creds: Credentials = serde_json::from_str(&data).ok()?;
-    creds.claude_ai_oauth?.access_token
+    // No stored token - use Claude Code's credentials directly.
+    read_claude_credentials()
 }
 
 /// Generate PKCE code verifier (random 64 chars)
@@ -392,10 +430,12 @@ pub fn run_auth() -> io::Result<()> {
 }
 
 /// Fetch usage data from Anthropic API
-fn fetch_usage(token: &str) -> Result<UsageResponse, String> {
+fn fetch_usage(token: &str) -> Result<UsageResponse, FetchError> {
     let output = std::process::Command::new("curl")
         .args([
-            "-s",
+            "-sS",
+            "-w",
+            "\nHTTPSTATUS:%{http_code}",
             "-H",
             &format!("Authorization: Bearer {}", token),
             "-H",
@@ -403,34 +443,54 @@ fn fetch_usage(token: &str) -> Result<UsageResponse, String> {
             "https://api.anthropic.com/api/oauth/usage",
         ])
         .output()
-        .map_err(|e| format!("Failed to run curl: {}", e))?;
+        .map_err(|e| FetchError::other(format!("Failed to run curl: {}", e)))?;
 
     if !output.status.success() {
-        return Err(format!(
-            "HTTP error: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ));
+        return Err(FetchError::other(format!(
+            "Network error: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
     }
 
-    // Check for API error response
-    if let Ok(api_error) = serde_json::from_slice::<ApiError>(&output.stdout) {
-        if api_error.error_type.as_deref() == Some("error") {
-            if let Some(detail) = api_error.error {
-                let msg = detail
-                    .message
-                    .unwrap_or_else(|| "Unknown error".to_string());
-                if msg.contains("scope") {
-                    return Err(
-                        "OAuth scope error - run 'termart claude-tokens --auth' to authorize"
-                            .to_string(),
-                    );
-                }
-                return Err(msg);
-            }
+    // Split the trailing "\nHTTPSTATUS:<code>" marker (added via curl -w) off the body.
+    let raw = String::from_utf8_lossy(&output.stdout).into_owned();
+    let (body, status) = match raw.rsplit_once("\nHTTPSTATUS:") {
+        Some((b, s)) => (b, s.trim().parse::<u16>().unwrap_or(0)),
+        None => (raw.as_str(), 0),
+    };
+
+    // Extract the API's error message, if the body carries one.
+    let api_message = serde_json::from_str::<ApiError>(body)
+        .ok()
+        .filter(|e| e.error_type.as_deref() == Some("error"))
+        .and_then(|e| e.error)
+        .and_then(|d| d.message);
+
+    // Rate limited: surface a clear message and signal backoff to the caller.
+    if status == 429 {
+        let msg = api_message.unwrap_or_else(|| "rate limited".to_string());
+        return Err(FetchError::rate_limited(msg));
+    }
+
+    if let Some(msg) = api_message {
+        if msg.contains("scope") {
+            return Err(FetchError::other(
+                "OAuth scope error - run 'termart claude-tokens --auth' to authorize".to_string(),
+            ));
         }
+        return Err(FetchError::other(msg));
     }
 
-    serde_json::from_slice(&output.stdout).map_err(|e| format!("JSON parse error: {}", e))
+    if status != 0 && !(200..300).contains(&status) {
+        let snippet = body.trim();
+        return Err(FetchError::other(format!(
+            "HTTP {}: {}",
+            status,
+            &snippet[..snippet.len().min(120)]
+        )));
+    }
+
+    serde_json::from_str(body).map_err(|e| FetchError::other(format!("JSON parse error: {}", e)))
 }
 
 /// Parse ISO 8601 timestamp to Duration until reset
@@ -463,6 +523,10 @@ fn format_duration(d: Duration) -> String {
     } else {
         format!("{}m", mins)
     }
+}
+
+fn text_columns(text: &str) -> usize {
+    text.chars().count()
 }
 
 /// Draw a usage bar with optional pacing ghost
@@ -559,9 +623,27 @@ fn draw_meter_with_pacing(
     }
 }
 
+/// Check if current time is during peak hours (reduced session quotas)
+/// Peak hours: 13:00-19:00 UTC (05:00-11:00 PT) weekdays
+/// As of March 2026, Anthropic reduces 5-hour session limits during peak.
+fn is_peak_time() -> bool {
+    use chrono::{Datelike, Timelike, Utc, Weekday};
+
+    let now = Utc::now();
+    let hour = now.hour();
+    let weekday = now.weekday();
+
+    // Peak only applies on weekdays
+    matches!(
+        weekday,
+        Weekday::Mon | Weekday::Tue | Weekday::Wed | Weekday::Thu | Weekday::Fri
+    ) && (13..19).contains(&hour)
+}
+
 /// Draw pacing indicator inline (right-aligned to right_edge)
 fn draw_pacing_inline(
     term: &mut Terminal,
+    min_x: usize,
     right_edge: usize,
     y: usize,
     pct: f64,
@@ -571,7 +653,7 @@ fn draw_pacing_inline(
     let expected = (hours_elapsed / 5.0) * 100.0;
     let diff = pct - expected;
 
-    let (indicator, color, label) = if diff < -15.0 {
+    let (indicator, color, base_label) = if diff < -15.0 {
         ("▼", scheme_color(scheme, 0, false).0, "chill")
     } else if diff < 15.0 {
         ("●", scheme_color(scheme, 2, false).0, "on pace")
@@ -579,9 +661,89 @@ fn draw_pacing_inline(
         ("▲", scheme_color(scheme, 3, true).0, "hot")
     };
 
-    let text = format!("{} {}", indicator, label);
-    let x = right_edge.saturating_sub(text.len());
-    term.set_str(x as i32, y as i32, &text, Some(color), false);
+    // Show PEAK indicator during reduced-quota hours (red)
+    let full_text = if is_peak_time() {
+        format!("{} PEAK {}", indicator, base_label)
+    } else {
+        format!("{} {}", indicator, base_label)
+    };
+
+    let compact_text = if is_peak_time() {
+        format!("{} PEAK", indicator)
+    } else {
+        indicator.to_string()
+    };
+
+    let available_width = right_edge.saturating_sub(min_x);
+    let text = if text_columns(&full_text) <= available_width {
+        full_text
+    } else if text_columns(&compact_text) <= available_width {
+        compact_text
+    } else {
+        return;
+    };
+
+    let x = right_edge.saturating_sub(text_columns(&text));
+    if text.contains("PEAK") {
+        // Draw "PEAK" in red, rest in normal color
+        let (before, after) = text.split_once("PEAK").unwrap_or(("", ""));
+        let peak_start = text_columns(before);
+        term.set_str(x as i32, y as i32, before, Some(color), false);
+        term.set_str(
+            (x + peak_start) as i32,
+            y as i32,
+            "PEAK",
+            Some(Color::Rgb {
+                r: 255,
+                g: 60,
+                b: 60,
+            }),
+            false,
+        );
+        term.set_str(
+            (x + peak_start + 4) as i32,
+            y as i32,
+            after,
+            Some(color),
+            false,
+        );
+    } else {
+        term.set_str(x as i32, y as i32, &text, Some(color), false);
+    }
+}
+
+/// Run one usage fetch and fold the result into the render state. On HTTP 429
+/// the poll interval is doubled (capped at `max_backoff`); any success resets it
+/// back to `base_interval`. This keeps the widget from hammering Anthropic's
+/// aggressively rate-limited usage endpoint.
+fn apply_fetch(
+    token: &str,
+    usage: &mut UsageResponse,
+    fetch_error: &mut Option<String>,
+    current_interval: &mut Duration,
+    base_interval: Duration,
+    max_backoff: Duration,
+) {
+    match fetch_usage(token) {
+        Ok(u) => {
+            *usage = u;
+            *fetch_error = None;
+            *current_interval = base_interval;
+        }
+        Err(e) => {
+            if e.rate_limited {
+                let doubled = current_interval.saturating_mul(2);
+                *current_interval = doubled.min(max_backoff).max(base_interval);
+                *fetch_error = Some(format!(
+                    "Rate limited - {} (retry in {}s)",
+                    e.message,
+                    current_interval.as_secs()
+                ));
+            } else {
+                *fetch_error = Some(e.message);
+            }
+        }
+    }
 }
 
 pub fn run(config: TokenEaterConfig) -> io::Result<()> {
@@ -604,11 +766,20 @@ pub fn run(config: TokenEaterConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
     let mut state = VizState::new(config.time_step, HELP_TEXT);
 
+    let base_interval = Duration::from_secs(config.refresh_interval.max(1));
+    let max_backoff = Duration::from_secs(MAX_BACKOFF_SECS.max(config.refresh_interval));
+    let mut current_interval = base_interval;
     let mut last_fetch = Instant::now();
-    let (mut usage, mut fetch_error) = match fetch_usage(&token) {
-        Ok(u) => (u, None),
-        Err(e) => (UsageResponse::default(), Some(e)),
-    };
+    let mut usage = UsageResponse::default();
+    let mut fetch_error: Option<String> = None;
+    apply_fetch(
+        &token,
+        &mut usage,
+        &mut fetch_error,
+        &mut current_interval,
+        base_interval,
+        max_backoff,
+    );
 
     let (mut w, mut h) = term.size();
 
@@ -622,13 +793,14 @@ pub fn run(config: TokenEaterConfig) -> io::Result<()> {
                 if let Some(fresh_token) = read_token() {
                     token = fresh_token;
                 }
-                match fetch_usage(&token) {
-                    Ok(u) => {
-                        usage = u;
-                        fetch_error = None;
-                    }
-                    Err(e) => fetch_error = Some(e),
-                }
+                apply_fetch(
+                    &token,
+                    &mut usage,
+                    &mut fetch_error,
+                    &mut current_interval,
+                    base_interval,
+                    max_backoff,
+                );
                 last_fetch = Instant::now();
             }
         }
@@ -642,18 +814,19 @@ pub fn run(config: TokenEaterConfig) -> io::Result<()> {
             }
         }
 
-        if last_fetch.elapsed() > Duration::from_secs(config.refresh_interval) {
+        if last_fetch.elapsed() > current_interval {
             // Re-read token (handles auto-refresh if expired)
             if let Some(fresh_token) = read_token() {
                 token = fresh_token;
             }
-            match fetch_usage(&token) {
-                Ok(u) => {
-                    usage = u;
-                    fetch_error = None;
-                }
-                Err(e) => fetch_error = Some(e),
-            }
+            apply_fetch(
+                &token,
+                &mut usage,
+                &mut fetch_error,
+                &mut current_interval,
+                base_interval,
+                max_backoff,
+            );
             last_fetch = Instant::now();
         }
 
@@ -668,6 +841,8 @@ pub fn run(config: TokenEaterConfig) -> io::Result<()> {
         // Title with pacing indicator right-aligned
         let title = "CLAUDE TOKENS";
         term.set_str(bar_x as i32, y as i32, title, Some(Color::White), true);
+        let title_status_gap = 2;
+        let pacing_min_x = bar_x + text_columns(title) + title_status_gap;
 
         // Pacing indicator on title row, right-aligned
         let five_hour = usage
@@ -680,11 +855,11 @@ pub fn run(config: TokenEaterConfig) -> io::Result<()> {
                 if let Some(dur) = time_until_reset(resets_at) {
                     let hours_remaining = dur.as_secs_f64() / 3600.0;
                     let hours_elapsed = 5.0 - hours_remaining;
-                    // Align so last char falls over the '%' column
-                    // '%' is at bar_x + bar_width (end of "{:5.1}%" format)
+                    // Align so last char falls within terminal width
                     draw_pacing_inline(
                         &mut term,
-                        bar_x + bar_width + 1,
+                        pacing_min_x,
+                        (bar_x + bar_width + 1).min(w as usize),
                         y,
                         five_hour,
                         hours_elapsed.max(0.0),

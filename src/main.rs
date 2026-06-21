@@ -71,7 +71,7 @@ struct TuiOptions {
 #[derive(Parser)]
 #[command(name = "termart")]
 #[command(author = "Terminal Art Generator")]
-#[command(version = "0.1.0")]
+#[command(version)]
 #[command(about = "Terminal-based generative art", long_about = None)]
 struct Cli {
     #[command(subcommand)]
@@ -250,7 +250,7 @@ enum Commands {
         opts: VizOptions,
     },
 
-    /// Fractal visualization (Mandelbrot, Julia) with braille rendering
+    /// Julia fractal visualization with braille rendering
     Fractal {
         #[command(flatten)]
         opts: VizOptions,
@@ -439,7 +439,7 @@ enum Commands {
         time: f32,
 
         /// API refresh interval (seconds)
-        #[arg(short, long, default_value = "300")]
+        #[arg(short, long, default_value = "600")]
         refresh: u64,
 
         /// Run OAuth authorization flow to get proper API access
