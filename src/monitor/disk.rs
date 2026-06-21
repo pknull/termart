@@ -1,11 +1,11 @@
 use crate::colors::ColorState;
 use crate::help::render_help_overlay;
-use crate::terminal::Terminal;
-use crate::monitor::{build_help, MonitorConfig, MonitorState};
 use crate::monitor::layout::{
-    Rect, draw_meter_btop_scheme, cpu_gradient_color_scheme, format_bytes,
-    text_color_scheme, muted_color_scheme, header_color_scheme,
+    cpu_gradient_color_scheme, draw_meter_btop_scheme, format_bytes, header_color_scheme,
+    muted_color_scheme, text_color_scheme, Rect,
 };
+use crate::monitor::{build_help, MonitorConfig, MonitorState};
+use crate::terminal::Terminal;
 use crossterm::style::Color;
 use crossterm::terminal::size;
 use std::fs;
@@ -33,9 +33,7 @@ pub struct DiskMonitor {
 
 impl DiskMonitor {
     pub fn new() -> Self {
-        Self {
-            disks: Vec::new(),
-        }
+        Self { disks: Vec::new() }
     }
 
     pub fn update(&mut self) -> io::Result<()> {
@@ -79,10 +77,11 @@ impl DiskMonitor {
     }
 
     fn statvfs(path: &str) -> io::Result<StatVfs> {
-        use std::mem::MaybeUninit;
         use std::ffi::CString;
+        use std::mem::MaybeUninit;
 
-        let c_path = CString::new(path).map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid path"))?;
+        let c_path = CString::new(path)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid path"))?;
         let mut stat: MaybeUninit<libc::statvfs> = MaybeUninit::uninit();
 
         let result = unsafe { libc::statvfs(c_path.as_ptr(), stat.as_mut_ptr()) };
@@ -112,8 +111,18 @@ impl DiskMonitor {
         self.render_at(term, 0, 0, w, h, colors);
     }
 
-    fn render_at(&self, term: &mut Terminal, x: i32, y: i32, w: usize, h: usize, colors: &ColorState) {
-        if h < 4 || w < 30 { return; }
+    fn render_at(
+        &self,
+        term: &mut Terminal,
+        x: i32,
+        y: i32,
+        w: usize,
+        h: usize,
+        colors: &ColorState,
+    ) {
+        if h < 4 || w < 30 {
+            return;
+        }
 
         if self.disks.is_empty() {
             let cy = y + (h as i32 / 2);
@@ -136,7 +145,13 @@ impl DiskMonitor {
         // Title with total storage
         term.set_str(x, cy, "Disks", Some(text_color_scheme(colors)), true);
         let total_str = format!("{}/{}", format_bytes(total_used), format_bytes(total_size));
-        term.set_str(x + w as i32 - total_str.len() as i32, cy, &total_str, Some(muted_color_scheme(colors)), false);
+        term.set_str(
+            x + w as i32 - total_str.len() as i32,
+            cy,
+            &total_str,
+            Some(muted_color_scheme(colors)),
+            false,
+        );
         cy += 1;
 
         // Each disk
@@ -151,12 +166,28 @@ impl DiskMonitor {
         if self.disks.len() > max_disks {
             let remaining = self.disks.len() - max_disks;
             let msg = format!("+{} more", remaining);
-            term.set_str(x + w as i32 - msg.len() as i32, cy - 1, &msg, Some(muted_color_scheme(colors)), false);
+            term.set_str(
+                x + w as i32 - msg.len() as i32,
+                cy - 1,
+                &msg,
+                Some(muted_color_scheme(colors)),
+                false,
+            );
         }
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn draw_disk_row(&self, term: &mut Terminal, x: i32, y: i32, width: usize, mount: &str, percent: f32, size_str: &str, colors: &ColorState) {
+    fn draw_disk_row(
+        &self,
+        term: &mut Terminal,
+        x: i32,
+        y: i32,
+        width: usize,
+        mount: &str,
+        percent: f32,
+        size_str: &str,
+        colors: &ColorState,
+    ) {
         // Layout: Mount(12) + Meter(dynamic) + Pct(6) + Size(18)
         let mount_w = 12;
         let pct_w = 6;
@@ -179,7 +210,13 @@ impl DiskMonitor {
                 format!("{:<width$}", &short[..mount_w - 1], width = mount_w)
             }
         };
-        term.set_str(pos, y, &mount_display, Some(header_color_scheme(colors)), false);
+        term.set_str(
+            pos,
+            y,
+            &mount_display,
+            Some(header_color_scheme(colors)),
+            false,
+        );
         pos += mount_w as i32;
 
         let color = cpu_gradient_color_scheme(percent, colors);
@@ -197,7 +234,13 @@ impl DiskMonitor {
 
         // Size right-aligned
         let size_pad = size_w.saturating_sub(size_str.len());
-        term.set_str(pos + size_pad as i32, y, size_str, Some(muted_color_scheme(colors)), false);
+        term.set_str(
+            pos + size_pad as i32,
+            y,
+            size_str,
+            Some(muted_color_scheme(colors)),
+            false,
+        );
     }
 }
 

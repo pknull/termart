@@ -1,12 +1,12 @@
-pub mod layout;
 pub mod cpu;
-pub mod mem;
 pub mod disk;
 pub mod diskio;
-pub mod net;
-pub mod gpu;
-pub mod ps;
 pub mod docker;
+pub mod gpu;
+pub mod layout;
+pub mod mem;
+pub mod net;
+pub mod ps;
 
 use crate::colors::ColorState;
 use crossterm::event::{KeyCode, KeyModifiers};
@@ -108,7 +108,7 @@ pub fn run(config: MonitorConfig) -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_help, MONITOR_GLOBAL_HELP, MonitorState};
+    use super::{build_help, MonitorState, MONITOR_GLOBAL_HELP};
     use crossterm::event::{KeyCode, KeyModifiers};
 
     #[test]

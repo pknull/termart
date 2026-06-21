@@ -1,8 +1,8 @@
 //! Conway's Game of Life visualization
 
+use super::{scheme_color, VizState};
 use crate::config::FractalConfig;
 use crate::terminal::Terminal;
-use super::{scheme_color, VizState};
 use rand::prelude::*;
 use std::io;
 
@@ -14,7 +14,12 @@ const INJECTION_INTERVAL: u64 = 100;
 const INJECTION_DIVISOR: usize = 50;
 
 /// Run the Game of Life visualization
-pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng, draw_char: char) -> io::Result<()> {
+pub fn run(
+    term: &mut Terminal,
+    config: &FractalConfig,
+    rng: &mut StdRng,
+    draw_char: char,
+) -> io::Result<()> {
     let mut state = VizState::new(config.time_step, "");
 
     let (init_w, init_h) = term.size();
@@ -67,9 +72,12 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng, draw_c
         term.clear();
         for (y, (grid_row, count_row)) in grid.iter().zip(neighbor_counts.iter()).enumerate() {
             for (x, (&alive, &neighbors)) in grid_row.iter().zip(count_row.iter()).enumerate() {
-
                 if alive {
-                    let intensity = match neighbors { 2 => 1, 3 => 2, _ => 0 };
+                    let intensity = match neighbors {
+                        2 => 1,
+                        3 => 2,
+                        _ => 0,
+                    };
                     let (color, bold) = scheme_color(state.color_scheme(), intensity, false);
                     term.set(x as i32, y as i32, draw_char, Some(color), bold);
                 }
@@ -86,7 +94,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng, draw_c
         generation += 1;
 
         // Periodically inject new life to prevent stagnation
-        if generation % INJECTION_INTERVAL == 0 && w > 0 && h > 0 {
+        if generation.is_multiple_of(INJECTION_INTERVAL) && w > 0 && h > 0 {
             for _ in 0..((w * h) / INJECTION_DIVISOR) {
                 let x = rng.gen_range(0..w);
                 let y = rng.gen_range(0..h);
@@ -107,17 +115,31 @@ fn count_neighbors(grid: &[Vec<bool>], x: usize, y: usize, w: usize, h: usize) -
     let hi = h as i32;
     // Unrolled loop for all 8 neighbors
     let neighbors = [
-        ((xi - 1).rem_euclid(wi) as usize, (yi - 1).rem_euclid(hi) as usize),
+        (
+            (xi - 1).rem_euclid(wi) as usize,
+            (yi - 1).rem_euclid(hi) as usize,
+        ),
         (x, (yi - 1).rem_euclid(hi) as usize),
-        ((xi + 1).rem_euclid(wi) as usize, (yi - 1).rem_euclid(hi) as usize),
+        (
+            (xi + 1).rem_euclid(wi) as usize,
+            (yi - 1).rem_euclid(hi) as usize,
+        ),
         ((xi - 1).rem_euclid(wi) as usize, y),
         ((xi + 1).rem_euclid(wi) as usize, y),
-        ((xi - 1).rem_euclid(wi) as usize, (yi + 1).rem_euclid(hi) as usize),
+        (
+            (xi - 1).rem_euclid(wi) as usize,
+            (yi + 1).rem_euclid(hi) as usize,
+        ),
         (x, (yi + 1).rem_euclid(hi) as usize),
-        ((xi + 1).rem_euclid(wi) as usize, (yi + 1).rem_euclid(hi) as usize),
+        (
+            (xi + 1).rem_euclid(wi) as usize,
+            (yi + 1).rem_euclid(hi) as usize,
+        ),
     ];
     for (nx, ny) in neighbors {
-        if grid[ny][nx] { count += 1; }
+        if grid[ny][nx] {
+            count += 1;
+        }
     }
     count
 }

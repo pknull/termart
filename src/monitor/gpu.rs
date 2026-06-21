@@ -1,11 +1,11 @@
 use crate::colors::ColorState;
 use crate::help::render_help_overlay;
-use crate::terminal::Terminal;
-use crate::monitor::{build_help, MonitorConfig, MonitorState};
 use crate::monitor::layout::{
-    Rect, draw_meter_btop_scheme, cpu_gradient_color_scheme, format_bytes,
-    muted_color_scheme, header_color_scheme, temp_gradient_color_scheme,
+    cpu_gradient_color_scheme, draw_meter_btop_scheme, format_bytes, header_color_scheme,
+    muted_color_scheme, temp_gradient_color_scheme, Rect,
 };
+use crate::monitor::{build_help, MonitorConfig, MonitorState};
+use crate::terminal::Terminal;
 use crossterm::style::Color;
 use crossterm::terminal::size;
 use std::fs;
@@ -175,8 +175,12 @@ impl GpuMonitor {
                         let gpu = GpuInfo {
                             name: parts[0].trim().to_string(),
                             utilization: parts[1].trim().parse().unwrap_or(0.0),
-                            memory_used: (parts[2].trim().parse::<f64>().unwrap_or(0.0) * 1024.0 * 1024.0) as u64,
-                            memory_total: (parts[3].trim().parse::<f64>().unwrap_or(0.0) * 1024.0 * 1024.0) as u64,
+                            memory_used: (parts[2].trim().parse::<f64>().unwrap_or(0.0)
+                                * 1024.0
+                                * 1024.0) as u64,
+                            memory_total: (parts[3].trim().parse::<f64>().unwrap_or(0.0)
+                                * 1024.0
+                                * 1024.0) as u64,
                             temperature: parts.get(4).and_then(|s| s.trim().parse().ok()),
                             power_draw: parts.get(5).and_then(|s| s.trim().parse().ok()),
                             power_limit: parts.get(6).and_then(|s| s.trim().parse().ok()),
@@ -218,17 +222,18 @@ impl GpuMonitor {
             .and_then(|e| e.ok())
             .map(|e| e.path().to_string_lossy().to_string());
 
-        let utilization = Self::read_sysfs_u32(&format!("{}/gpu_busy_percent", card_path))
-            .unwrap_or(0) as f32;
+        let utilization =
+            Self::read_sysfs_u32(&format!("{}/gpu_busy_percent", card_path)).unwrap_or(0) as f32;
 
-        let memory_used = Self::read_sysfs_u64(&format!("{}/mem_info_vram_used", card_path))
-            .unwrap_or(0);
-        let memory_total = Self::read_sysfs_u64(&format!("{}/mem_info_vram_total", card_path))
-            .unwrap_or(0);
+        let memory_used =
+            Self::read_sysfs_u64(&format!("{}/mem_info_vram_used", card_path)).unwrap_or(0);
+        let memory_total =
+            Self::read_sysfs_u64(&format!("{}/mem_info_vram_total", card_path)).unwrap_or(0);
 
-        let (temperature, power_draw, power_limit, fan_speed, fan_max) = if let Some(ref hwmon) = hwmon_path {
-            let temp = Self::read_sysfs_u32(&format!("{}/temp1_input", hwmon))
-                .map(|t| t / 1000); // millicelsius to celsius
+        let (temperature, power_draw, power_limit, fan_speed, fan_max) = if let Some(ref hwmon) =
+            hwmon_path
+        {
+            let temp = Self::read_sysfs_u32(&format!("{}/temp1_input", hwmon)).map(|t| t / 1000); // millicelsius to celsius
             let power = Self::read_sysfs_u64(&format!("{}/power1_average", hwmon))
                 .map(|p| p as f32 / 1_000_000.0); // microwatts to watts
             let power_cap = Self::read_sysfs_u64(&format!("{}/power1_cap", hwmon))
@@ -280,8 +285,18 @@ impl GpuMonitor {
         self.render_at(term, 0, 0, w, h, colors);
     }
 
-    fn render_at(&self, term: &mut Terminal, x: i32, y: i32, w: usize, h: usize, colors: &ColorState) {
-        if h < 4 || w < 30 { return; }
+    fn render_at(
+        &self,
+        term: &mut Terminal,
+        x: i32,
+        y: i32,
+        w: usize,
+        h: usize,
+        colors: &ColorState,
+    ) {
+        if h < 4 || w < 30 {
+            return;
+        }
 
         if let Some(ref err) = self.error_msg {
             let cy = y + (h as i32 / 2);
@@ -312,18 +327,34 @@ impl GpuMonitor {
             let max_name_len = w.saturating_sub(temp_len + 2); // +2 for spacing
 
             let name_display = if gpu.name.chars().count() > max_name_len {
-                let truncated: String = gpu.name.chars().take(max_name_len.saturating_sub(1)).collect();
+                let truncated: String = gpu
+                    .name
+                    .chars()
+                    .take(max_name_len.saturating_sub(1))
+                    .collect();
                 format!("{}…", truncated)
             } else {
                 gpu.name.clone()
             };
 
-            term.set_str(x, cy, &name_display, Some(header_color_scheme(colors)), true);
+            term.set_str(
+                x,
+                cy,
+                &name_display,
+                Some(header_color_scheme(colors)),
+                true,
+            );
             if let Some(temp) = gpu.temperature {
                 let temp_pct = ((temp as f32 - 20.0) / 80.0 * 100.0).clamp(0.0, 100.0);
                 let temp_color = temp_gradient_color_scheme(temp_pct, colors);
                 let ts = format!("{:4}°C", temp);
-                term.set_str(x + w as i32 - ts.len() as i32, cy, &ts, Some(temp_color), false);
+                term.set_str(
+                    x + w as i32 - ts.len() as i32,
+                    cy,
+                    &ts,
+                    Some(temp_color),
+                    false,
+                );
             }
             cy += 1;
 
@@ -333,26 +364,72 @@ impl GpuMonitor {
 
             // VRAM
             let mem_pct = gpu.memory_percent();
-            let mem_str = format!("{}/{}", format_bytes(gpu.memory_used), format_bytes(gpu.memory_total));
-            self.draw_gpu_row(term, x, cy, w, "VRAM", mem_pct, Some(&mem_str), colors, false);
+            let mem_str = format!(
+                "{}/{}",
+                format_bytes(gpu.memory_used),
+                format_bytes(gpu.memory_total)
+            );
+            self.draw_gpu_row(
+                term,
+                x,
+                cy,
+                w,
+                "VRAM",
+                mem_pct,
+                Some(&mem_str),
+                colors,
+                false,
+            );
             cy += 1;
 
             // Power
             if let (Some(draw), Some(limit)) = (gpu.power_draw, gpu.power_limit) {
                 let power_pct = (draw / limit * 100.0).min(100.0);
                 let power_str = format!("{:.0}W/{:.0}W", draw, limit);
-                self.draw_gpu_row(term, x, cy, w, "Power", power_pct, Some(&power_str), colors, false);
+                self.draw_gpu_row(
+                    term,
+                    x,
+                    cy,
+                    w,
+                    "Power",
+                    power_pct,
+                    Some(&power_str),
+                    colors,
+                    false,
+                );
             } else {
-                term.set_str(x, cy, "Power   N/A", Some(muted_color_scheme(colors)), false);
+                term.set_str(
+                    x,
+                    cy,
+                    "Power   N/A",
+                    Some(muted_color_scheme(colors)),
+                    false,
+                );
             }
             cy += 1;
 
             // Fan
             if let Some(fan_pct) = gpu.fan_percent() {
                 let fan_str = gpu.fan_speed.map(|rpm| format!("{}RPM", rpm));
-                self.draw_gpu_row(term, x, cy, w, "Fan", fan_pct, fan_str.as_deref(), colors, false);
+                self.draw_gpu_row(
+                    term,
+                    x,
+                    cy,
+                    w,
+                    "Fan",
+                    fan_pct,
+                    fan_str.as_deref(),
+                    colors,
+                    false,
+                );
             } else {
-                term.set_str(x, cy, "Fan     N/A", Some(muted_color_scheme(colors)), false);
+                term.set_str(
+                    x,
+                    cy,
+                    "Fan     N/A",
+                    Some(muted_color_scheme(colors)),
+                    false,
+                );
             }
             cy += 1;
 
@@ -364,7 +441,18 @@ impl GpuMonitor {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn draw_gpu_row(&self, term: &mut Terminal, x: i32, y: i32, width: usize, label: &str, percent: f32, value_str: Option<&str>, colors: &ColorState, is_util: bool) {
+    fn draw_gpu_row(
+        &self,
+        term: &mut Terminal,
+        x: i32,
+        y: i32,
+        width: usize,
+        label: &str,
+        percent: f32,
+        value_str: Option<&str>,
+        colors: &ColorState,
+        is_util: bool,
+    ) {
         // Layout: Label(8) + Meter(dynamic) + Pct(6) + Value(16) - always reserve value space
         let label_w = 8;
         let pct_w = 6;
@@ -382,9 +470,9 @@ impl GpuMonitor {
         let color = if is_util {
             cpu_gradient_color_scheme(percent, colors)
         } else if colors.is_mono() {
-            Color::AnsiValue(12)  // Blue for non-util items in mono
+            Color::AnsiValue(12) // Blue for non-util items in mono
         } else {
-            cpu_gradient_color_scheme(50.0, colors)  // Mid-intensity for non-util
+            cpu_gradient_color_scheme(50.0, colors) // Mid-intensity for non-util
         };
 
         // Meter
@@ -401,7 +489,13 @@ impl GpuMonitor {
         // Value (right-aligned in fixed space)
         if let Some(val) = value_str {
             let val_pad = value_w.saturating_sub(val.len());
-            term.set_str(pos + val_pad as i32, y, val, Some(muted_color_scheme(colors)), false);
+            term.set_str(
+                pos + val_pad as i32,
+                y,
+                val,
+                Some(muted_color_scheme(colors)),
+                false,
+            );
         }
     }
 }

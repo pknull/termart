@@ -2,13 +2,15 @@ use crossterm::{
     cursor::{Hide, MoveTo, Show},
     event::{poll, read, Event, KeyCode, KeyModifiers},
     queue,
-    style::{Color, Print, ResetColor, SetForegroundColor, SetBackgroundColor, Attribute, SetAttribute},
+    style::{
+        Attribute, Color, Print, ResetColor, SetAttribute, SetBackgroundColor, SetForegroundColor,
+    },
     terminal::{
-        disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen,
-        LeaveAlternateScreen, size,
+        disable_raw_mode, enable_raw_mode, size, Clear, ClearType, EnterAlternateScreen,
+        LeaveAlternateScreen,
     },
 };
-use std::io::{self, Write, stdout, BufWriter};
+use std::io::{self, stdout, BufWriter, Write};
 use std::time::Duration;
 
 fn normalize_key(code: KeyCode, mods: KeyModifiers) -> KeyCode {
@@ -118,12 +120,25 @@ impl Terminal {
     /// Set a character in the back buffer
     pub fn set(&mut self, x: i32, y: i32, ch: char, fg: Option<Color>, bold: bool) {
         if x >= 0 && x < self.width as i32 && y >= 0 && y < self.height as i32 {
-            self.back_buffer[y as usize][x as usize] = Cell { ch, fg, bg: None, bold };
+            self.back_buffer[y as usize][x as usize] = Cell {
+                ch,
+                fg,
+                bg: None,
+                bold,
+            };
         }
     }
 
     /// Set a character with both foreground and background color
-    pub fn set_with_bg(&mut self, x: i32, y: i32, ch: char, fg: Option<Color>, bg: Option<Color>, bold: bool) {
+    pub fn set_with_bg(
+        &mut self,
+        x: i32,
+        y: i32,
+        ch: char,
+        fg: Option<Color>,
+        bg: Option<Color>,
+        bold: bool,
+    ) {
         if x >= 0 && x < self.width as i32 && y >= 0 && y < self.height as i32 {
             self.back_buffer[y as usize][x as usize] = Cell { ch, fg, bg, bold };
         }

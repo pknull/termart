@@ -89,9 +89,22 @@ impl Game {
     fn new(h: u16) -> Self {
         let cy = h as f32 / 2.0;
         Self {
-            ball: Ball { x: 0.0, y: cy, vx: BALL_SPEED, vy: 5.0 },
-            left: Paddle { y: cy, score: 0, ai: true },
-            right: Paddle { y: cy, score: 0, ai: true },
+            ball: Ball {
+                x: 0.0,
+                y: cy,
+                vx: BALL_SPEED,
+                vy: 5.0,
+            },
+            left: Paddle {
+                y: cy,
+                score: 0,
+                ai: true,
+            },
+            right: Paddle {
+                y: cy,
+                score: 0,
+                ai: true,
+            },
             paused: false,
             game_over: false,
             winner: Winner::None,
@@ -204,10 +217,24 @@ pub fn run(time_step: f32) -> io::Result<()> {
 
             // Player input
             if !game.left.ai && p1_dir != 0.0 {
-                Game::move_paddle(&mut game.left.y, p1_dir, PADDLE_SPEED, dt, paddle_min, paddle_max);
+                Game::move_paddle(
+                    &mut game.left.y,
+                    p1_dir,
+                    PADDLE_SPEED,
+                    dt,
+                    paddle_min,
+                    paddle_max,
+                );
             }
             if !game.right.ai && p2_dir != 0.0 {
-                Game::move_paddle(&mut game.right.y, p2_dir, PADDLE_SPEED, dt, paddle_min, paddle_max);
+                Game::move_paddle(
+                    &mut game.right.y,
+                    p2_dir,
+                    PADDLE_SPEED,
+                    dt,
+                    paddle_min,
+                    paddle_max,
+                );
             }
             p1_dir = 0.0;
             p2_dir = 0.0;
@@ -236,7 +263,9 @@ pub fn run(time_step: f32) -> io::Result<()> {
 
             // Left paddle collision - symmetric collision zone
             let left_x = PADDLE_X_LEFT as f32;
-            if game.ball.x >= left_x - PADDLE_COLLISION_WIDTH && game.ball.x <= left_x + PADDLE_COLLISION_WIDTH {
+            if game.ball.x >= left_x - PADDLE_COLLISION_WIDTH
+                && game.ball.x <= left_x + PADDLE_COLLISION_WIDTH
+            {
                 let dy = game.ball.y - game.left.y;
                 if dy.abs() <= PADDLE_HALF {
                     game.ball.x = left_x + PADDLE_COLLISION_WIDTH + BALL_NUDGE_DISTANCE;
@@ -247,7 +276,9 @@ pub fn run(time_step: f32) -> io::Result<()> {
 
             // Right paddle collision - symmetric collision zone
             let right_x = paddle_x_right as f32;
-            if game.ball.x >= right_x - PADDLE_COLLISION_WIDTH && game.ball.x <= right_x + PADDLE_COLLISION_WIDTH {
+            if game.ball.x >= right_x - PADDLE_COLLISION_WIDTH
+                && game.ball.x <= right_x + PADDLE_COLLISION_WIDTH
+            {
                 let dy = game.ball.y - game.right.y;
                 if dy.abs() <= PADDLE_HALF {
                     game.ball.x = right_x - PADDLE_COLLISION_WIDTH - BALL_NUDGE_DISTANCE;
@@ -306,18 +337,34 @@ pub fn run(time_step: f32) -> io::Result<()> {
         term.set_str(score_x, 0, &score_buf, Some(ball_color), true);
 
         // AI indicators
-        let (p1_label, p1_col) = if game.left.ai { ("AI", Color::DarkGrey) } else { ("P1", p1_color) };
-        let (p2_label, p2_col) = if game.right.ai { ("AI", Color::DarkGrey) } else { ("P2", p2_color) };
+        let (p1_label, p1_col) = if game.left.ai {
+            ("AI", Color::DarkGrey)
+        } else {
+            ("P1", p1_color)
+        };
+        let (p2_label, p2_col) = if game.right.ai {
+            ("AI", Color::DarkGrey)
+        } else {
+            ("P2", p2_color)
+        };
         term.set_str(1, 0, p1_label, Some(p1_col), false);
         term.set_str(w as i32 - 3, 0, p2_label, Some(p2_col), false);
 
         // Paddles
-        let left_col = if game.left.ai { Color::DarkGrey } else { p1_color };
-        let right_col = if game.right.ai { Color::DarkGrey } else { p2_color };
+        let left_col = if game.left.ai {
+            Color::DarkGrey
+        } else {
+            p1_color
+        };
+        let right_col = if game.right.ai {
+            Color::DarkGrey
+        } else {
+            p2_color
+        };
         let left_y = game.left.y as i32;
         let right_y = game.right.y as i32;
 
-        for dy in -PADDLE_HEIGHT/2..=PADDLE_HEIGHT/2 {
+        for dy in -PADDLE_HEIGHT / 2..=PADDLE_HEIGHT / 2 {
             let ly = left_y + dy;
             let ry = right_y + dy;
             if ly >= 0 && ly < h as i32 {
@@ -338,16 +385,44 @@ pub fn run(time_step: f32) -> io::Result<()> {
         // Messages
         let cy_i32 = cy as i32;
         if game.game_over {
-            let msg = if game.winner == Winner::Left { MSG_P1_WINS } else { MSG_P2_WINS };
-            term.set_str(center_x - msg.len() as i32 / 2, cy_i32, msg, Some(Color::Yellow), true);
-            term.set_str(center_x - MSG_RESTART.len() as i32 / 2, cy_i32 + 1, MSG_RESTART, Some(Color::DarkGrey), false);
+            let msg = if game.winner == Winner::Left {
+                MSG_P1_WINS
+            } else {
+                MSG_P2_WINS
+            };
+            term.set_str(
+                center_x - msg.len() as i32 / 2,
+                cy_i32,
+                msg,
+                Some(Color::Yellow),
+                true,
+            );
+            term.set_str(
+                center_x - MSG_RESTART.len() as i32 / 2,
+                cy_i32 + 1,
+                MSG_RESTART,
+                Some(Color::DarkGrey),
+                false,
+            );
         } else if game.paused {
-            term.set_str(center_x - MSG_PAUSED.len() as i32 / 2, cy_i32, MSG_PAUSED, Some(Color::Yellow), true);
+            term.set_str(
+                center_x - MSG_PAUSED.len() as i32 / 2,
+                cy_i32,
+                MSG_PAUSED,
+                Some(Color::Yellow),
+                true,
+            );
         }
 
         // Controls hint
         if HINT.len() < w as usize {
-            term.set_str(center_x - HINT.len() as i32 / 2, h as i32 - 1, HINT, Some(Color::DarkGrey), false);
+            term.set_str(
+                center_x - HINT.len() as i32 / 2,
+                h as i32 - 1,
+                HINT,
+                Some(Color::DarkGrey),
+                false,
+            );
         }
 
         // Help overlay
@@ -360,11 +435,29 @@ pub fn run(time_step: f32) -> io::Result<()> {
             let start_y = (h as usize).saturating_sub(box_height) / 2;
 
             // Top border
-            term.set(start_x as i32, start_y as i32, '┌', Some(Color::White), false);
+            term.set(
+                start_x as i32,
+                start_y as i32,
+                '┌',
+                Some(Color::White),
+                false,
+            );
             for x in 1..box_width - 1 {
-                term.set((start_x + x) as i32, start_y as i32, '─', Some(Color::White), false);
+                term.set(
+                    (start_x + x) as i32,
+                    start_y as i32,
+                    '─',
+                    Some(Color::White),
+                    false,
+                );
             }
-            term.set((start_x + box_width - 1) as i32, start_y as i32, '┐', Some(Color::White), false);
+            term.set(
+                (start_x + box_width - 1) as i32,
+                start_y as i32,
+                '┐',
+                Some(Color::White),
+                false,
+            );
 
             // Content rows
             for (i, line) in lines.iter().enumerate() {
@@ -373,18 +466,48 @@ pub fn run(time_step: f32) -> io::Result<()> {
                 let padding = max_width.saturating_sub(line.chars().count());
                 let padded = format!(" {}{} ", line, " ".repeat(padding));
                 for (j, ch) in padded.chars().enumerate() {
-                    term.set((start_x + 1 + j) as i32, y as i32, ch, Some(Color::Grey), false);
+                    term.set(
+                        (start_x + 1 + j) as i32,
+                        y as i32,
+                        ch,
+                        Some(Color::Grey),
+                        false,
+                    );
                 }
-                term.set((start_x + box_width - 1) as i32, y as i32, '│', Some(Color::White), false);
+                term.set(
+                    (start_x + box_width - 1) as i32,
+                    y as i32,
+                    '│',
+                    Some(Color::White),
+                    false,
+                );
             }
 
             // Bottom border
             let bottom_y = start_y + box_height - 1;
-            term.set(start_x as i32, bottom_y as i32, '└', Some(Color::White), false);
+            term.set(
+                start_x as i32,
+                bottom_y as i32,
+                '└',
+                Some(Color::White),
+                false,
+            );
             for x in 1..box_width - 1 {
-                term.set((start_x + x) as i32, bottom_y as i32, '─', Some(Color::White), false);
+                term.set(
+                    (start_x + x) as i32,
+                    bottom_y as i32,
+                    '─',
+                    Some(Color::White),
+                    false,
+                );
             }
-            term.set((start_x + box_width - 1) as i32, bottom_y as i32, '┘', Some(Color::White), false);
+            term.set(
+                (start_x + box_width - 1) as i32,
+                bottom_y as i32,
+                '┘',
+                Some(Color::White),
+                false,
+            );
         }
 
         term.present()?;

@@ -1,11 +1,11 @@
 use crate::colors::ColorState;
 use crate::help::render_help_overlay;
-use crate::terminal::Terminal;
-use crate::monitor::{build_help, MonitorConfig, MonitorState};
 use crate::monitor::layout::{
-    Rect, draw_meter_btop_scheme, format_rate, format_bytes,
-    cpu_gradient_color_scheme, text_color_scheme, muted_color_scheme, header_color_scheme,
+    cpu_gradient_color_scheme, draw_meter_btop_scheme, format_bytes, format_rate,
+    header_color_scheme, muted_color_scheme, text_color_scheme, Rect,
 };
+use crate::monitor::{build_help, MonitorConfig, MonitorState};
+use crate::terminal::Terminal;
 use crossterm::style::Color;
 use crossterm::terminal::size;
 use std::fs;
@@ -59,8 +59,13 @@ impl IoMonitor {
             // Skip partitions - only show whole disks
             // For sd/hd devices: skip if ends with digit (sda1, sdb2)
             // For nvme devices: skip if contains 'p' partition marker (nvme0n1p1)
-            if (name.starts_with("sd") || name.starts_with("hd")) &&
-               name.chars().last().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+            if (name.starts_with("sd") || name.starts_with("hd"))
+                && name
+                    .chars()
+                    .last()
+                    .map(|c| c.is_ascii_digit())
+                    .unwrap_or(false)
+            {
                 continue;
             }
             if name.starts_with("nvme") && name.contains('p') {
@@ -78,21 +83,20 @@ impl IoMonitor {
             }
 
             // Find existing disk or create new
-            let mut disk = if let Some(existing) = self.disks.iter()
-                .find(|d| d.name == name)
-                .cloned() {
-                existing
-            } else {
-                DiskStats {
-                    name: name.to_string(),
-                    read_bytes: 0,
-                    write_bytes: 0,
-                    read_rate: 0.0,
-                    write_rate: 0.0,
-                    prev_read_bytes: read_bytes, // Start with current for new disks
-                    prev_write_bytes: write_bytes,
-                }
-            };
+            let mut disk =
+                if let Some(existing) = self.disks.iter().find(|d| d.name == name).cloned() {
+                    existing
+                } else {
+                    DiskStats {
+                        name: name.to_string(),
+                        read_bytes: 0,
+                        write_bytes: 0,
+                        read_rate: 0.0,
+                        write_rate: 0.0,
+                        prev_read_bytes: read_bytes, // Start with current for new disks
+                        prev_write_bytes: write_bytes,
+                    }
+                };
 
             // Calculate rates
             let read_diff = read_bytes.saturating_sub(disk.prev_read_bytes);
@@ -147,8 +151,18 @@ impl IoMonitor {
         self.render_at(term, 0, 0, w, h, colors);
     }
 
-    fn render_at(&self, term: &mut Terminal, x: i32, y: i32, w: usize, h: usize, colors: &ColorState) {
-        if h < 4 || w < 30 { return; }
+    fn render_at(
+        &self,
+        term: &mut Terminal,
+        x: i32,
+        y: i32,
+        w: usize,
+        h: usize,
+        colors: &ColorState,
+    ) {
+        if h < 4 || w < 30 {
+            return;
+        }
 
         let num_disks = self.disks.len().min(6);
         if num_disks == 0 {
@@ -168,8 +182,18 @@ impl IoMonitor {
         let total_read: u64 = self.disks.iter().map(|d| d.read_bytes).sum();
         let total_write: u64 = self.disks.iter().map(|d| d.write_bytes).sum();
         term.set_str(x, cy, "Disk I/O", Some(text_color_scheme(colors)), true);
-        let totals_str = format!("R:{} W:{}", format_bytes(total_read), format_bytes(total_write));
-        term.set_str(x + w as i32 - totals_str.len() as i32, cy, &totals_str, Some(muted_color_scheme(colors)), false);
+        let totals_str = format!(
+            "R:{} W:{}",
+            format_bytes(total_read),
+            format_bytes(total_write)
+        );
+        term.set_str(
+            x + w as i32 - totals_str.len() as i32,
+            cy,
+            &totals_str,
+            Some(muted_color_scheme(colors)),
+            false,
+        );
         cy += 1;
 
         // Per-disk breakdown
@@ -180,18 +204,50 @@ impl IoMonitor {
 
             // Read for this disk
             let disk_read_pct = ((disk.read_rate / self.peak_read_rate) * 100.0).min(100.0) as f32;
-            self.draw_io_row(term, x, cy, w, "  Read", disk_read_pct, disk.read_rate, colors, true);
+            self.draw_io_row(
+                term,
+                x,
+                cy,
+                w,
+                "  Read",
+                disk_read_pct,
+                disk.read_rate,
+                colors,
+                true,
+            );
             cy += 1;
 
             // Write for this disk
-            let disk_write_pct = ((disk.write_rate / self.peak_write_rate) * 100.0).min(100.0) as f32;
-            self.draw_io_row(term, x, cy, w, "  Write", disk_write_pct, disk.write_rate, colors, false);
+            let disk_write_pct =
+                ((disk.write_rate / self.peak_write_rate) * 100.0).min(100.0) as f32;
+            self.draw_io_row(
+                term,
+                x,
+                cy,
+                w,
+                "  Write",
+                disk_write_pct,
+                disk.write_rate,
+                colors,
+                false,
+            );
             cy += 1;
         }
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn draw_io_row(&self, term: &mut Terminal, x: i32, y: i32, width: usize, label: &str, percent: f32, rate: f64, colors: &ColorState, is_read: bool) {
+    fn draw_io_row(
+        &self,
+        term: &mut Terminal,
+        x: i32,
+        y: i32,
+        width: usize,
+        label: &str,
+        percent: f32,
+        rate: f64,
+        colors: &ColorState,
+        is_read: bool,
+    ) {
         // Layout: Label(10) + Meter(dynamic) + Pct(6) + Rate(12)
         let label_w = 10;
         let pct_w = 6;
@@ -207,7 +263,11 @@ impl IoMonitor {
 
         // Color based on scheme
         let color = if colors.is_mono() {
-            if is_read { Color::Green } else { Color::Magenta }
+            if is_read {
+                Color::Green
+            } else {
+                Color::Magenta
+            }
         } else {
             cpu_gradient_color_scheme(percent, colors)
         };
@@ -226,7 +286,13 @@ impl IoMonitor {
         // Rate right-aligned
         let rate_str = format_rate(rate);
         let rate_pad = rate_w.saturating_sub(rate_str.len());
-        term.set_str(pos + rate_pad as i32, y, &rate_str, Some(muted_color_scheme(colors)), false);
+        term.set_str(
+            pos + rate_pad as i32,
+            y,
+            &rate_str,
+            Some(muted_color_scheme(colors)),
+            false,
+        );
     }
 }
 

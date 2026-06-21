@@ -134,13 +134,19 @@ pub fn resized_rgba<'a>(
     image: &DynamicImage,
 ) -> &'a RgbaImage {
     let needs_update = match cache.as_ref() {
-        Some(existing) => existing.url != url || existing.width != pixel_w || existing.height != pixel_h,
+        Some(existing) => {
+            existing.url != url || existing.width != pixel_w || existing.height != pixel_h
+        }
         None => true,
     };
 
     if needs_update {
         let resized = image
-            .resize_exact(pixel_w as u32, pixel_h as u32, image::imageops::FilterType::Triangle)
+            .resize_exact(
+                pixel_w as u32,
+                pixel_h as u32,
+                image::imageops::FilterType::Triangle,
+            )
             .to_rgba8();
         *cache = Some(CoverRenderCache {
             url: url.to_string(),
@@ -191,15 +197,45 @@ pub fn render_cover_halfblock(
                 term.set(tx, ty, ' ', None, false);
             } else if ta < ALPHA_THRESHOLD {
                 // Only bottom pixel visible: use lower half block with fg = bottom color
-                term.set(tx, ty, '▄', Some(Color::Rgb { r: br, g: bg_c, b: bb }), false);
+                term.set(
+                    tx,
+                    ty,
+                    '▄',
+                    Some(Color::Rgb {
+                        r: br,
+                        g: bg_c,
+                        b: bb,
+                    }),
+                    false,
+                );
             } else if !has_bot || ba < ALPHA_THRESHOLD {
                 // Only top pixel visible
-                term.set(tx, ty, '▀', Some(Color::Rgb { r: tr, g: tg, b: tb }), false);
+                term.set(
+                    tx,
+                    ty,
+                    '▀',
+                    Some(Color::Rgb {
+                        r: tr,
+                        g: tg,
+                        b: tb,
+                    }),
+                    false,
+                );
             } else {
                 term.set_with_bg(
-                    tx, ty, '▀',
-                    Some(Color::Rgb { r: tr, g: tg, b: tb }),
-                    Some(Color::Rgb { r: br, g: bg_c, b: bb }),
+                    tx,
+                    ty,
+                    '▀',
+                    Some(Color::Rgb {
+                        r: tr,
+                        g: tg,
+                        b: tb,
+                    }),
+                    Some(Color::Rgb {
+                        r: br,
+                        g: bg_c,
+                        b: bb,
+                    }),
                     false,
                 );
             }
@@ -229,7 +265,11 @@ pub fn render_cover_halfblock_palette(
         for cx in 0..art_w as u32 {
             let top_px = rgba.get_pixel(cx, top_row).0;
             let has_bot = bot_row < rgba.height();
-            let bot_px = if has_bot { rgba.get_pixel(cx, bot_row).0 } else { [0, 0, 0, 0] };
+            let bot_px = if has_bot {
+                rgba.get_pixel(cx, bot_row).0
+            } else {
+                [0, 0, 0, 0]
+            };
 
             let tx = x_offset as i32 + cx as i32;
             let ty = y_offset as i32 + cy as i32;
@@ -263,8 +303,7 @@ pub fn render_cover_halfblock_palette(
 /// Uses the actual Color enum values so the terminal renders them
 /// identically to audio bars, text, and other scheme-colored elements.
 fn luminance_to_scheme(scheme: u8, r: u8, g: u8, b: u8) -> Color {
-    let lum = (0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32)
-        .round() as u8;
+    let lum = (0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32).round() as u8;
     let intensity = match lum {
         0..=30 => return Color::Black,
         31..=95 => 0,
@@ -321,4 +360,3 @@ fn load_image(url: &str, cancel: &AtomicBool) -> Option<DynamicImage> {
         image::load_from_memory(&bytes).ok()
     }
 }
-

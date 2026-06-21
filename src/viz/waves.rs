@@ -1,8 +1,8 @@
 //! Waves effect visualization (animated sine waves)
 
+use super::{scheme_color, VizState};
 use crate::config::FractalConfig;
 use crate::terminal::Terminal;
-use super::{scheme_color, VizState};
 use std::io;
 
 /// Run the waves effect visualization
@@ -72,7 +72,8 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
                 3 => 2,
                 _ => 3,
             };
-            let (color, bold) = scheme_color(state.color_scheme(), intensity, layer == NUM_LAYERS - 1);
+            let (color, bold) =
+                scheme_color(state.color_scheme(), intensity, layer == NUM_LAYERS - 1);
 
             for x in 0..width as usize {
                 let fx = x as f64;
@@ -80,7 +81,9 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
                 let y = wave_y.round() as i32;
 
                 if y >= 0 && y < height as i32 {
-                    let char_idx = (fast_sin(fx * 0.3 + time * 2.0).abs() * (wave_chars.len() - 1) as f64) as usize;
+                    let char_idx = (fast_sin(fx * 0.3 + time * 2.0).abs()
+                        * (wave_chars.len() - 1) as f64)
+                        as usize;
                     let ch = wave_chars[char_idx.min(wave_chars.len() - 1)];
                     term.set(x as i32, y, ch, Some(color), bold);
                 }

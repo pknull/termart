@@ -1,8 +1,8 @@
 //! Classic pipes screensaver visualization
 
+use super::{scheme_color, VizState};
 use crate::config::FractalConfig;
 use crate::terminal::Terminal;
-use super::{scheme_color, VizState};
 use rand::prelude::*;
 use std::io;
 
@@ -20,7 +20,12 @@ struct Pipe {
 fn spawn_pipe(rng: &mut StdRng, w: usize, h: usize) -> Pipe {
     // Guard against zero-size terminal to prevent panic from gen_range(0..0)
     if w == 0 || h == 0 {
-        return Pipe { x: 0, y: 0, dir: 0, steps: 0 };
+        return Pipe {
+            x: 0,
+            y: 0,
+            dir: 0,
+            steps: 0,
+        };
     }
     let dir = rng.gen_range(0..4);
     let (x, y) = match dir {
@@ -29,7 +34,12 @@ fn spawn_pipe(rng: &mut StdRng, w: usize, h: usize) -> Pipe {
         2 => (rng.gen_range(0..w as i32), 0),
         _ => (w as i32 - 1, rng.gen_range(0..h as i32)),
     };
-    Pipe { x, y, dir, steps: 0 }
+    Pipe {
+        x,
+        y,
+        dir,
+        steps: 0,
+    }
 }
 
 /// Run the pipes visualization

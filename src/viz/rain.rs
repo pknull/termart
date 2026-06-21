@@ -1,8 +1,8 @@
 //! Rain effect visualization (falling raindrops with splashes)
 
+use super::{scheme_color, VizState};
 use crate::config::FractalConfig;
 use crate::terminal::Terminal;
-use super::{scheme_color, VizState};
 use rand::prelude::*;
 use std::io;
 
@@ -75,7 +75,11 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
                 x: rng.gen_range(0..w),
                 y: 0.0,
                 speed: rng.gen_range(MIN_SPEED..MAX_SPEED),
-                char: if rng.gen_bool(CHAR_PROBABILITY) { '|' } else { '/' },
+                char: if rng.gen_bool(CHAR_PROBABILITY) {
+                    '|'
+                } else {
+                    '/'
+                },
             });
         }
 
@@ -83,7 +87,11 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
             drop.y += drop.speed;
             let y = drop.y as usize;
             if y >= h - 1 {
-                splashes.push(Splash { x: drop.x, y: h - 1, age: 0 });
+                splashes.push(Splash {
+                    x: drop.x,
+                    y: h - 1,
+                    age: 0,
+                });
                 false
             } else {
                 if y < h && drop.x < w {
@@ -120,7 +128,8 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
                         '~' => 1,
                         _ => 0,
                     };
-                    let (color, bold) = scheme_color(state.color_scheme(), intensity, ch == '|' || ch == '/');
+                    let (color, bold) =
+                        scheme_color(state.color_scheme(), intensity, ch == '|' || ch == '/');
                     term.set(x as i32, y as i32, ch, Some(color), bold);
                 }
             }

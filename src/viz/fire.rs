@@ -1,8 +1,8 @@
 //! Fire effect visualization (doom-style)
 
+use super::{scheme_color, VizState};
 use crate::config::FractalConfig;
 use crate::terminal::Terminal;
-use super::{scheme_color, VizState};
 use rand::prelude::*;
 use std::io;
 
@@ -66,8 +66,16 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
         for y in 0..h - 1 {
             for x in 0..w {
                 let below = fire[y + 1][x] as u16;
-                let left = if x > 0 { fire[y + 1][x - 1] as u16 } else { below };
-                let right = if x < w - 1 { fire[y + 1][x + 1] as u16 } else { below };
+                let left = if x > 0 {
+                    fire[y + 1][x - 1] as u16
+                } else {
+                    below
+                };
+                let right = if x < w - 1 {
+                    fire[y + 1][x + 1] as u16
+                } else {
+                    below
+                };
 
                 let avg = (below + left + right) / 3;
                 let decay = rng.gen_range(0..DECAY_RANGE_MAX);
@@ -81,7 +89,8 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
                 let char_idx = (heat as usize * (fire_chars.len() - 1)) / 255;
                 let ch = fire_chars[char_idx.min(fire_chars.len() - 1)];
                 let intensity = (heat / INTENSITY_DIVISOR).min(INTENSITY_MAX);
-                let (color, bold) = scheme_color(state.color_scheme(), intensity, heat > HOT_THRESHOLD);
+                let (color, bold) =
+                    scheme_color(state.color_scheme(), intensity, heat > HOT_THRESHOLD);
                 term.set(x as i32, y as i32, ch, Some(color), bold);
             }
         }

@@ -10,9 +10,9 @@
 //! - Space: Pause
 //! - Q/Esc: Quit
 
+use super::{scheme_color, VizState};
 use crate::config::FractalConfig;
 use crate::terminal::Terminal;
-use super::{scheme_color, VizState};
 use crossterm::event::KeyCode;
 use std::io;
 
@@ -119,7 +119,8 @@ fn generate_edges(dimensions: usize) -> Vec<(usize, usize)> {
     for v1 in 0..vertex_count {
         for d in 0..dimensions {
             let v2 = v1 ^ (1 << d); // Flip bit d
-            if v1 < v2 { // Avoid duplicate edges
+            if v1 < v2 {
+                // Avoid duplicate edges
                 edges.push((v1, v2));
             }
         }
@@ -177,7 +178,7 @@ fn project_to_2d(coords: &[f32]) -> (f32, f32) {
 
     // Handle different dimensions
     match result.len() {
-        1 => (result[0], 0.0), // 1D: just x
+        1 => (result[0], 0.0),       // 1D: just x
         2 => (result[0], result[1]), // 2D: x and y, no perspective
         _ => {
             // 3D+: perspective projection
@@ -198,7 +199,13 @@ fn project_to_2d(coords: &[f32]) -> (f32, f32) {
 /// [2] [5]          0x04 0x20
 /// [6] [7]          0x40 0x80
 /// ```
-fn encode_braille(dots: &[Vec<bool>], base_y: usize, base_x: usize, max_y: usize, max_x: usize) -> u8 {
+fn encode_braille(
+    dots: &[Vec<bool>],
+    base_y: usize,
+    base_x: usize,
+    max_y: usize,
+    max_x: usize,
+) -> u8 {
     // Lookup table: [row][col] -> bit pattern
     // Row 0-2 are sequential bits, row 3 jumps to bits 6,7
     const BITS: [[u8; 2]; 4] = [
@@ -227,7 +234,15 @@ fn encode_braille(dots: &[Vec<bool>], base_y: usize, base_x: usize, max_y: usize
 ///
 /// Sets all dots along the line from (x0, y0) to (x1, y1) to true,
 /// with bounds checking against the buffer dimensions.
-fn draw_line(dots: &mut [Vec<bool>], x0: i32, y0: i32, x1: i32, y1: i32, width: usize, height: usize) {
+fn draw_line(
+    dots: &mut [Vec<bool>],
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    width: usize,
+    height: usize,
+) {
     let dx = (x1 - x0).abs();
     let dy = -(y1 - y0).abs();
     let sx = if x0 < x1 { 1 } else { -1 };
@@ -385,10 +400,20 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
             // This creates the "inside-out" effect for each dimension
             for d in 3..dimensions {
                 let speed = ROTATION_SPEED_BASE_HIGHER - (d as f32 - 3.0) * ROTATION_SPEED_DECAY;
-                rotate_plane(&mut coord_buffer, 0, d, time * speed.max(ROTATION_SPEED_MIN));
+                rotate_plane(
+                    &mut coord_buffer,
+                    0,
+                    d,
+                    time * speed.max(ROTATION_SPEED_MIN),
+                );
                 // Also rotate alternating axes for visual interest
                 let alt_axis = (d - 1) % 3; // Cycle through 0, 1, 2
-                rotate_plane(&mut coord_buffer, alt_axis, d, time * (speed * ROTATION_SECONDARY_FACTOR));
+                rotate_plane(
+                    &mut coord_buffer,
+                    alt_axis,
+                    d,
+                    time * (speed * ROTATION_SECONDARY_FACTOR),
+                );
             }
 
             let (px, py) = project_to_2d(&coord_buffer);
@@ -396,18 +421,21 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         }
 
         // Find max extent for normalization (so all dimensions appear same size)
-        let max_extent = raw_projected.iter()
+        let max_extent = raw_projected
+            .iter()
             .map(|(x, y)| x.abs().max(y.abs()))
             .fold(0.0f32, |a, b| a.max(b))
             .max(MIN_EXTENT);
 
         // Normalize and scale to screen coordinates (apply zoom)
-        let projected: Vec<(f32, f32)> = raw_projected.iter()
+        let projected: Vec<(f32, f32)> = raw_projected
+            .iter()
             .map(|(px, py)| {
                 let norm_x = px / max_extent;
                 let norm_y = py / max_extent;
                 let screen_x = half_w + norm_x * base_size * SCREEN_SCALE * zoom;
-                let screen_y = half_h + norm_y * base_size * SCREEN_SCALE * ASPECT_CORRECTION * zoom;
+                let screen_y =
+                    half_h + norm_y * base_size * SCREEN_SCALE * ASPECT_CORRECTION * zoom;
                 (screen_x, screen_y)
             })
             .collect();
@@ -447,7 +475,10 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         let dim_text = format!("{}D", dimensions);
         let edge_count = edges.len();
         let vertex_count = vertices.len();
-        let info = format!("{} ({}v/{}e) ↑↓dim ←→zoom:{:.1}x ?:help", dim_text, vertex_count, edge_count, zoom);
+        let info = format!(
+            "{} ({}v/{}e) ↑↓dim ←→zoom:{:.1}x ?:help",
+            dim_text, vertex_count, edge_count, zoom
+        );
         for (i, ch) in info.chars().enumerate() {
             term.set(i as i32 + 1, 0, ch, None, false);
         }

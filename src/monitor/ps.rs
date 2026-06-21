@@ -2,11 +2,9 @@
 
 use crate::colors::ColorState;
 use crate::help::render_help_overlay;
-use crate::terminal::Terminal;
+use crate::monitor::layout::{cpu_gradient_color_scheme, muted_color_scheme, text_color_scheme};
 use crate::monitor::{build_help, MonitorState};
-use crate::monitor::layout::{
-    cpu_gradient_color_scheme, text_color_scheme, muted_color_scheme,
-};
+use crate::terminal::Terminal;
 use crossterm::event::KeyCode;
 use crossterm::terminal::size;
 use std::collections::HashMap;
@@ -21,7 +19,7 @@ struct ProcessInfo {
     name: String,
     cpu_pct: f32,
     mem_pct: f32,
-    cpu_ticks: u64,  // Raw ticks for delta calculation
+    cpu_ticks: u64, // Raw ticks for delta calculation
 }
 
 pub struct PsMonitor {
@@ -47,9 +45,17 @@ impl PsMonitor {
         self.sort_by_mem = !self.sort_by_mem;
         // Re-sort immediately
         if self.sort_by_mem {
-            self.processes.sort_by(|a, b| b.mem_pct.partial_cmp(&a.mem_pct).unwrap_or(std::cmp::Ordering::Equal));
+            self.processes.sort_by(|a, b| {
+                b.mem_pct
+                    .partial_cmp(&a.mem_pct)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
         } else {
-            self.processes.sort_by(|a, b| b.cpu_pct.partial_cmp(&a.cpu_pct).unwrap_or(std::cmp::Ordering::Equal));
+            self.processes.sort_by(|a, b| {
+                b.cpu_pct
+                    .partial_cmp(&a.cpu_pct)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
         }
     }
 
@@ -79,9 +85,17 @@ impl PsMonitor {
 
         // Sort by CPU% or MEM%
         if self.sort_by_mem {
-            new_processes.sort_by(|a, b| b.mem_pct.partial_cmp(&a.mem_pct).unwrap_or(std::cmp::Ordering::Equal));
+            new_processes.sort_by(|a, b| {
+                b.mem_pct
+                    .partial_cmp(&a.mem_pct)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
         } else {
-            new_processes.sort_by(|a, b| b.cpu_pct.partial_cmp(&a.cpu_pct).unwrap_or(std::cmp::Ordering::Equal));
+            new_processes.sort_by(|a, b| {
+                b.cpu_pct
+                    .partial_cmp(&a.cpu_pct)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
         }
 
         self.processes = new_processes;
@@ -146,7 +160,14 @@ impl PsMonitor {
         })
     }
 
-    pub fn render(&self, term: &mut Terminal, w: usize, h: usize, colors: &ColorState, max_procs: usize) {
+    pub fn render(
+        &self,
+        term: &mut Terminal,
+        w: usize,
+        h: usize,
+        colors: &ColorState,
+        max_procs: usize,
+    ) {
         if h < 3 || w < 40 {
             return;
         }
@@ -156,17 +177,26 @@ impl PsMonitor {
 
         // Header: PID, CPU%, MEM%, PROCESS
         let sort_indicator = if self.sort_by_mem { "MEM%" } else { "CPU%" };
-        let header = format!(
-            "{:>7}  {:>6}  {:>6}  {}",
-            "PID", "CPU%", "MEM%", "PROCESS"
-        );
+        let header = format!("{:>7}  {:>6}  {:>6}  {}", "PID", "CPU%", "MEM%", "PROCESS");
         let header_truncated: String = header.chars().take(w).collect();
-        term.set_str(0, header_y, &header_truncated, Some(text_color_scheme(colors)), true);
+        term.set_str(
+            0,
+            header_y,
+            &header_truncated,
+            Some(text_color_scheme(colors)),
+            true,
+        );
 
         // Sort indicator at top right
         let sort_hint = format!("[m]Sort:{}", sort_indicator);
         if w > sort_hint.len() + 2 {
-            term.set_str((w - sort_hint.len()) as i32, header_y, &sort_hint, Some(muted_color_scheme(colors)), false);
+            term.set_str(
+                (w - sort_hint.len()) as i32,
+                header_y,
+                &sort_hint,
+                Some(muted_color_scheme(colors)),
+                false,
+            );
         }
 
         // Process rows
@@ -177,10 +207,7 @@ impl PsMonitor {
             // Format the row: PID, CPU%, MEM%, PROCESS
             let row = format!(
                 "{:>7}  {:>5.1}%  {:>5.1}%  {}",
-                proc.pid,
-                proc.cpu_pct,
-                proc.mem_pct,
-                proc.name
+                proc.pid, proc.cpu_pct, proc.mem_pct, proc.name
             );
 
             // Truncate to terminal width
@@ -226,8 +253,6 @@ fn get_mem_total() -> Option<u64> {
     None
 }
 
-
-
 fn get_cmdline(pid: u32) -> Option<String> {
     let cmdline_path = format!("/proc/{}/cmdline", pid);
     let content = fs::read_to_string(&cmdline_path).ok()?;
@@ -242,10 +267,6 @@ fn get_cmdline(pid: u32) -> Option<String> {
     let program = first_arg.rsplit('/').next().unwrap_or(first_arg);
     Some(program.to_string())
 }
-
-
-
-
 
 pub struct PsConfig {
     pub time_step: f32,
@@ -289,7 +310,13 @@ pub fn run(config: PsConfig) -> io::Result<()> {
         term.clear();
 
         let (w, h) = term.size();
-        monitor.render(&mut term, w as usize, h as usize, &state.colors, config.max_procs);
+        monitor.render(
+            &mut term,
+            w as usize,
+            h as usize,
+            &state.colors,
+            config.max_procs,
+        );
 
         if show_help {
             let (w, h) = term.size();

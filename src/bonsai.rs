@@ -55,7 +55,15 @@ fn run_print_mode(config: &BonsaiConfig, initial_seed: u64) -> io::Result<()> {
         draw_base(&mut term, config.base_type);
 
         // Grow tree (not live)
-        grow_tree(&mut term, config, &mut counters, &mut rng, start_x, start_y, false)?;
+        grow_tree(
+            &mut term,
+            config,
+            &mut counters,
+            &mut rng,
+            start_x,
+            start_y,
+            false,
+        )?;
 
         // Print to stdout
         term.print_to_stdout();
@@ -103,7 +111,15 @@ fn run_interactive(config: &BonsaiConfig, initial_seed: u64) -> io::Result<()> {
         }
 
         // Grow tree
-        let interrupted = grow_tree(&mut term, config, &mut counters, &mut rng, start_x, start_y, config.live)?;
+        let interrupted = grow_tree(
+            &mut term,
+            config,
+            &mut counters,
+            &mut rng,
+            start_x,
+            start_y,
+            config.live,
+        )?;
 
         if interrupted {
             break;
@@ -196,11 +212,7 @@ fn draw_base(term: &mut Terminal, base_type: u8) {
         }
         2 => {
             // Small simple pot
-            let pot = [
-                "(---./~~~\\.---)",
-                " (           ) ",
-                "  (_________) ",
-            ];
+            let pot = ["(---./~~~\\.---)", " (           ) ", "  (_________) "];
             let pot_width = 15;
             let start_x = center_x - pot_width / 2;
 
@@ -241,7 +253,13 @@ fn draw_message(term: &mut Terminal, message: &str) {
     for i in 1..box_width as i32 - 1 {
         term.set(box_x + i, box_y, '-', border_color, false);
     }
-    term.set(box_x + box_width as i32 - 1, box_y, '+', border_color, false);
+    term.set(
+        box_x + box_width as i32 - 1,
+        box_y,
+        '+',
+        border_color,
+        false,
+    );
 
     // Content
     for (i, line) in wrapped.iter().enumerate() {
@@ -257,7 +275,13 @@ fn draw_message(term: &mut Terminal, message: &str) {
     for i in 1..box_width as i32 - 1 {
         term.set(box_x + i, bottom_y, '-', border_color, false);
     }
-    term.set(box_x + box_width as i32 - 1, bottom_y, '+', border_color, false);
+    term.set(
+        box_x + box_width as i32 - 1,
+        bottom_y,
+        '+',
+        border_color,
+        false,
+    );
 }
 
 fn word_wrap(text: &str, width: usize) -> Vec<String> {
@@ -343,13 +367,8 @@ fn grow_tree(
             task.y += actual_dy;
 
             // Choose character and color
-            let (branch_char, color, bold) = choose_char_and_color(
-                rng,
-                config,
-                task.branch_type,
-                dx,
-                actual_dy,
-            );
+            let (branch_char, color, bold) =
+                choose_char_and_color(rng, config, task.branch_type, dx, actual_dy);
 
             // Draw
             term.set(task.x, task.y, branch_char, Some(color), bold);
@@ -416,7 +435,8 @@ fn grow_tree(
                         task.shoot_cooldown = config.multiplier as i32 * 2;
                     }
                 }
-            } else if (task.branch_type == BranchType::ShootLeft || task.branch_type == BranchType::ShootRight)
+            } else if (task.branch_type == BranchType::ShootLeft
+                || task.branch_type == BranchType::ShootRight)
                 && task.life < 4
             {
                 // Shoots create dying branches at the end

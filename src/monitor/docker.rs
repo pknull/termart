@@ -2,11 +2,9 @@
 
 use crate::colors::ColorState;
 use crate::help::render_help_overlay;
-use crate::terminal::Terminal;
+use crate::monitor::layout::{cpu_gradient_color_scheme, muted_color_scheme, text_color_scheme};
 use crate::monitor::{build_help, MonitorState};
-use crate::monitor::layout::{
-    cpu_gradient_color_scheme, text_color_scheme, muted_color_scheme,
-};
+use crate::terminal::Terminal;
 use crossterm::style::Color;
 use crossterm::terminal::size;
 use std::io;
@@ -71,10 +69,14 @@ impl DockerMonitor {
     fn sort_containers(&mut self) {
         match self.sort_by {
             SortBy::Cpu => self.containers.sort_by(|a, b| {
-                b.cpu_pct.partial_cmp(&a.cpu_pct).unwrap_or(std::cmp::Ordering::Equal)
+                b.cpu_pct
+                    .partial_cmp(&a.cpu_pct)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             }),
             SortBy::Mem => self.containers.sort_by(|a, b| {
-                b.mem_pct.partial_cmp(&a.mem_pct).unwrap_or(std::cmp::Ordering::Equal)
+                b.mem_pct
+                    .partial_cmp(&a.mem_pct)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             }),
             SortBy::Name => self.containers.sort_by(|a, b| a.name.cmp(&b.name)),
         }
@@ -144,8 +146,20 @@ impl DockerMonitor {
         let count_str = format!("[{}]", self.containers.len());
         term.set_str(0, header_y, title, Some(text_color_scheme(colors)), true);
         let sort_x = (w - sort_str.len() - count_str.len() - 2) as i32;
-        term.set_str(sort_x, header_y, &sort_str, Some(muted_color_scheme(colors)), false);
-        term.set_str((w - count_str.len()) as i32, header_y, &count_str, Some(muted_color_scheme(colors)), false);
+        term.set_str(
+            sort_x,
+            header_y,
+            &sort_str,
+            Some(muted_color_scheme(colors)),
+            false,
+        );
+        term.set_str(
+            (w - count_str.len()) as i32,
+            header_y,
+            &count_str,
+            Some(muted_color_scheme(colors)),
+            false,
+        );
 
         // Error state
         if !self.docker_available || self.error_msg.is_some() {
@@ -156,7 +170,13 @@ impl DockerMonitor {
 
         // No containers
         if self.containers.is_empty() {
-            term.set_str(0, y, "No running containers", Some(muted_color_scheme(colors)), false);
+            term.set_str(
+                0,
+                y,
+                "No running containers",
+                Some(muted_color_scheme(colors)),
+                false,
+            );
             return;
         }
 
@@ -168,7 +188,13 @@ impl DockerMonitor {
             "NAME", "CPU%", "MEM USAGE", "MEM%", "NET I/O"
         );
         let header_truncated: String = header.chars().take(w).collect();
-        term.set_str(0, y, &header_truncated, Some(text_color_scheme(colors)), false);
+        term.set_str(
+            0,
+            y,
+            &header_truncated,
+            Some(text_color_scheme(colors)),
+            false,
+        );
         y += 1;
 
         // Container rows

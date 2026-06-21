@@ -1,8 +1,8 @@
 //! Plasma effect visualization (animated sine waves)
 
+use super::{scheme_color, VizState};
 use crate::config::FractalConfig;
 use crate::terminal::Terminal;
-use super::{scheme_color, VizState};
 use rand::prelude::*;
 use std::io;
 
@@ -13,17 +13,17 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
     let chars = [' ', '.', ':', ';', 'o', 'O', '0', '@', '#'];
 
     // Seed-dependent parameters for unique patterns
-    let freq1: f64 = rng.gen_range(6.0..14.0);      // X frequency
-    let freq2: f64 = rng.gen_range(6.0..14.0);      // Y frequency
-    let freq3: f64 = rng.gen_range(3.0..8.0);       // Diagonal frequency
-    let freq4: f64 = rng.gen_range(6.0..14.0);      // Radial frequency
-    let phase1: f64 = rng.gen_range(0.0..std::f64::consts::TAU);     // Phase offsets
+    let freq1: f64 = rng.gen_range(6.0..14.0); // X frequency
+    let freq2: f64 = rng.gen_range(6.0..14.0); // Y frequency
+    let freq3: f64 = rng.gen_range(3.0..8.0); // Diagonal frequency
+    let freq4: f64 = rng.gen_range(6.0..14.0); // Radial frequency
+    let phase1: f64 = rng.gen_range(0.0..std::f64::consts::TAU); // Phase offsets
     let phase2: f64 = rng.gen_range(0.0..std::f64::consts::TAU);
     let phase3: f64 = rng.gen_range(0.0..std::f64::consts::TAU);
     let phase4: f64 = rng.gen_range(0.0..std::f64::consts::TAU);
-    let center_x: f64 = rng.gen_range(0.3..0.7);    // Radial center
+    let center_x: f64 = rng.gen_range(0.3..0.7); // Radial center
     let center_y: f64 = rng.gen_range(0.3..0.7);
-    let time_mult1: f64 = rng.gen_range(0.7..1.3);  // Time multipliers
+    let time_mult1: f64 = rng.gen_range(0.7..1.3); // Time multipliers
     let time_mult2: f64 = rng.gen_range(1.2..1.8);
     let time_mult3: f64 = rng.gen_range(0.3..0.7);
 

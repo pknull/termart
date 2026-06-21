@@ -31,10 +31,10 @@ pub struct SunlightConfig {
     pub latitude: f64,
     pub longitude: f64,
     pub adjust_gamma: bool,
-    pub demo: bool,           // Cycle through day quickly instead of real time
-    pub demo_speed: f32,      // Hours per second in demo mode
-    pub night_blue: f64,      // Minimum blue gamma at night (0.0-1.0)
-    pub night_green: f64,     // Minimum green gamma at night (0.0-1.0)
+    pub demo: bool,       // Cycle through day quickly instead of real time
+    pub demo_speed: f32,  // Hours per second in demo mode
+    pub night_blue: f64,  // Minimum blue gamma at night (0.0-1.0)
+    pub night_green: f64, // Minimum green gamma at night (0.0-1.0)
 }
 
 impl Default for SunlightConfig {
@@ -43,13 +43,13 @@ impl Default for SunlightConfig {
         let (_, g, b) = kelvin_to_gamma(3400);
         Self {
             time_step: 0.1,
-            latitude: 40.7128,   // NYC default
+            latitude: 40.7128, // NYC default
             longitude: -74.0060,
             adjust_gamma: true,
             demo: false,
-            demo_speed: 2.0,     // 2 hours per second = full day in 12 seconds
-            night_green: g,      // 3400K (f.lux default)
-            night_blue: b,       // 3400K (f.lux default)
+            demo_speed: 2.0, // 2 hours per second = full day in 12 seconds
+            night_green: g,  // 3400K (f.lux default)
+            night_blue: b,   // 3400K (f.lux default)
         }
     }
 }
@@ -93,8 +93,8 @@ pub fn kelvin_to_gamma(kelvin: u32) -> (f64, f64, f64) {
 }
 
 struct SolarTimes {
-    sunrise_hour: f64,  // Hours since midnight (e.g., 6.5 = 6:30 AM)
-    sunset_hour: f64,   // Hours since midnight (e.g., 18.75 = 6:45 PM)
+    sunrise_hour: f64, // Hours since midnight (e.g., 6.5 = 6:30 AM)
+    sunset_hour: f64,  // Hours since midnight (e.g., 18.75 = 6:45 PM)
 }
 
 /// Cache for solar times to avoid recalculating every frame
@@ -137,10 +137,10 @@ fn calculate_solar_times(lat: f64, lon: f64, unix_time: i64) -> SolarTimes {
 /// f.lux-style phases
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Phase {
-    Night,    // Full warm - midnight to pre-dawn
-    Sunrise,  // Transition warm->cool - pre-dawn to post-sunrise
-    Day,      // Full cool - post-sunrise to pre-sunset
-    Sunset,   // Transition cool->warm - pre-sunset to post-sunset
+    Night,   // Full warm - midnight to pre-dawn
+    Sunrise, // Transition warm->cool - pre-dawn to post-sunrise
+    Day,     // Full cool - post-sunrise to pre-sunset
+    Sunset,  // Transition cool->warm - pre-sunset to post-sunset
 }
 
 impl Phase {
@@ -166,7 +166,11 @@ fn calculate_phase_and_temp(hour: f64, solar: &SolarTimes) -> (Phase, f64) {
 
     // Normalize hour and sunset_end for midnight wrap-around (extreme latitudes)
     // When sunset_end > 24.0, we need to handle the case where hour is in early morning
-    let sunset_end_normalized = if sunset_end > 24.0 { sunset_end - 24.0 } else { sunset_end };
+    let sunset_end_normalized = if sunset_end > 24.0 {
+        sunset_end - 24.0
+    } else {
+        sunset_end
+    };
 
     // Check if we're in the wrapped night period (after midnight but before normalized sunset_end)
     let in_wrapped_night = sunset_end > 24.0 && hour < sunset_end_normalized;
@@ -213,31 +217,144 @@ fn temp_to_gamma(temp: f64, night_green: f64, night_blue: f64) -> (f64, f64, f64
 }
 
 /// Apply gamma via xrandr
-fn apply_gamma(r: f64, g: f64, b: f64) -> io::Result<()> {
-    // Get list of connected outputs
-    let output = Command::new("xrandr")
-        .arg("--query")
-        .output()?;
+/// Parsed xrandr output: name and geometry
+struct OutputInfo {
+    name: String,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+}
+
+/// Get connected outputs with their geometries from xrandr
+fn get_outputs() -> Vec<OutputInfo> {
+    let output = match Command::new("xrandr").arg("--query").output() {
+        Ok(o) => o,
+        Err(_) => return vec![],
+    };
 
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut outputs = Vec::new();
 
-    // Find connected outputs and apply gamma to each
     for line in stdout.lines() {
-        if line.contains(" connected") {
-            if let Some(output_name) = line.split_whitespace().next() {
-                let _ = Command::new("xrandr")
-                    .args(["--output", output_name, "--gamma", &format!("{:.2}:{:.2}:{:.2}", r, g, b)])
-                    .output();
+        if !line.contains(" connected") {
+            continue;
+        }
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        let name = parts[0].to_string();
+        // Look for geometry like "1920x1080+0+0" in the line
+        for part in &parts[2..] {
+            if let Some((dims, offsets)) = part.split_once('+') {
+                if let Some((w, h)) = dims.split_once('x') {
+                    if let (Ok(w), Ok(h)) = (w.parse::<u32>(), h.parse::<u32>()) {
+                        let offset_parts: Vec<&str> = offsets.splitn(2, '+').collect();
+                        if offset_parts.len() == 2 {
+                            if let (Ok(x), Ok(y)) = (
+                                offset_parts[0].parse::<i32>(),
+                                offset_parts[1].parse::<i32>(),
+                            ) {
+                                outputs.push(OutputInfo {
+                                    name,
+                                    x,
+                                    y,
+                                    width: w,
+                                    height: h,
+                                });
+                                break;
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 
+    outputs
+}
+
+fn apply_gamma_to_output(output_name: &str, r: f64, g: f64, b: f64) {
+    let _ = Command::new("xrandr")
+        .args([
+            "--output",
+            output_name,
+            "--gamma",
+            &format!("{:.2}:{:.2}:{:.2}", r, g, b),
+        ])
+        .output();
+}
+
+/// Apply gamma to all connected outputs
+fn apply_gamma(r: f64, g: f64, b: f64) -> io::Result<()> {
+    for output in get_outputs() {
+        apply_gamma_to_output(&output.name, r, g, b);
+    }
     Ok(())
 }
 
 /// Reset gamma to normal (1:1:1)
 fn reset_gamma() -> io::Result<()> {
     apply_gamma(1.0, 1.0, 1.0)
+}
+
+/// Check if the active window is fullscreen; returns the output name it's on
+fn fullscreen_output() -> Option<String> {
+    let active = Command::new("xdotool")
+        .arg("getactivewindow")
+        .output()
+        .ok()?;
+    if !active.status.success() {
+        return None;
+    }
+    let window_id = String::from_utf8_lossy(&active.stdout).trim().to_string();
+
+    // Check if it's actually fullscreen
+    let props = Command::new("xprop")
+        .args(["-id", &window_id, "_NET_WM_STATE"])
+        .output()
+        .ok()?;
+    if !props.status.success() {
+        return None;
+    }
+    let state = String::from_utf8_lossy(&props.stdout);
+    if !state.contains("_NET_WM_STATE_FULLSCREEN") {
+        return None;
+    }
+
+    // Get window geometry to determine which output it's on
+    let geom = Command::new("xdotool")
+        .args(["getwindowgeometry", "--shell", &window_id])
+        .output()
+        .ok()?;
+    if !geom.status.success() {
+        return None;
+    }
+    let geom_str = String::from_utf8_lossy(&geom.stdout);
+    let mut wx: Option<i32> = None;
+    let mut wy: Option<i32> = None;
+    for line in geom_str.lines() {
+        if let Some(val) = line.strip_prefix("X=") {
+            wx = val.parse().ok();
+        } else if let Some(val) = line.strip_prefix("Y=") {
+            wy = val.parse().ok();
+        }
+    }
+
+    let (wx, wy) = (wx?, wy?);
+
+    // Find which output contains this window's position
+    let outputs = get_outputs();
+    for output in &outputs {
+        if wx >= output.x
+            && wx < output.x + output.width as i32
+            && wy >= output.y
+            && wy < output.y + output.height as i32
+        {
+            return Some(output.name.clone());
+        }
+    }
+
+    // Fallback: if we can't match, return first output
+    outputs.into_iter().next().map(|o| o.name)
 }
 
 /// Pick color based on temperature (0=night/warm, 1=day/cool)
@@ -295,6 +412,9 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
     };
     // Set to past so first update happens immediately
     let mut last_gamma_update = std::time::Instant::now() - gamma_update_interval;
+    let fullscreen_check_interval = std::time::Duration::from_secs(2);
+    let mut last_fullscreen_check = std::time::Instant::now() - fullscreen_check_interval;
+    let mut fullscreen_on_output: Option<String> = None;
 
     // Track if we've applied gamma (for cleanup)
     let mut gamma_applied = false;
@@ -309,13 +429,25 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
     // Apply gamma immediately on startup (don't wait for interval)
     if config.adjust_gamma {
         let solar = calculate_solar_times(config.latitude, config.longitude, now_init.timestamp());
-        let init_hour = if config.demo { demo_hour } else {
-            now_init.hour() as f64 + now_init.minute() as f64 / 60.0 + now_init.second() as f64 / 3600.0
+        let init_hour = if config.demo {
+            demo_hour
+        } else {
+            now_init.hour() as f64
+                + now_init.minute() as f64 / 60.0
+                + now_init.second() as f64 / 3600.0
         };
         let (_, temp) = calculate_phase_and_temp(init_hour, &solar);
+        let fs_output = fullscreen_output();
         let (r, g, b) = temp_to_gamma(temp, config.night_green, config.night_blue);
-        let _ = apply_gamma(r, g, b);
+        for output in get_outputs() {
+            if fs_output.as_ref() == Some(&output.name) {
+                apply_gamma_to_output(&output.name, 1.0, 1.0, 1.0);
+            } else {
+                apply_gamma_to_output(&output.name, r, g, b);
+            }
+        }
         gamma_applied = true;
+        fullscreen_on_output = fs_output;
 
         // Initialize cache
         solar_cache = Some(SolarCache {
@@ -365,7 +497,8 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
         let solar = match &solar_cache {
             Some(cache) if cache.cached_date == current_date => &cache.times,
             _ => {
-                let times = calculate_solar_times(config.latitude, config.longitude, now.timestamp());
+                let times =
+                    calculate_solar_times(config.latitude, config.longitude, now.timestamp());
                 solar_cache = Some(SolarCache {
                     times,
                     cached_date: current_date,
@@ -377,10 +510,37 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
         // Calculate phase and temperature (f.lux style)
         let (phase, temp) = calculate_phase_and_temp(current_hour, solar);
 
-        // Apply gamma if enabled and interval passed
+        // Check fullscreen state frequently (every 2s)
+        if config.adjust_gamma && last_fullscreen_check.elapsed() >= fullscreen_check_interval {
+            let prev_fs = fullscreen_on_output.take();
+            let curr_fs = fullscreen_output();
+            last_fullscreen_check = std::time::Instant::now();
+
+            // React to fullscreen state changes
+            if prev_fs != curr_fs {
+                let (r, g, b) = temp_to_gamma(temp, config.night_green, config.night_blue);
+                for output in get_outputs() {
+                    if curr_fs.as_ref() == Some(&output.name) {
+                        apply_gamma_to_output(&output.name, 1.0, 1.0, 1.0);
+                    } else {
+                        apply_gamma_to_output(&output.name, r, g, b);
+                    }
+                }
+                gamma_applied = true;
+            }
+            fullscreen_on_output = curr_fs;
+        }
+
+        // Apply gamma on the normal interval
         if config.adjust_gamma && last_gamma_update.elapsed() >= gamma_update_interval {
             let (r, g, b) = temp_to_gamma(temp, config.night_green, config.night_blue);
-            let _ = apply_gamma(r, g, b);
+            for output in get_outputs() {
+                if fullscreen_on_output.as_ref() == Some(&output.name) {
+                    apply_gamma_to_output(&output.name, 1.0, 1.0, 1.0);
+                } else {
+                    apply_gamma_to_output(&output.name, r, g, b);
+                }
+            }
             gamma_applied = true;
             last_gamma_update = std::time::Instant::now();
         }
@@ -452,30 +612,64 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
         }
 
         // Draw sunrise/sunset info
-        let sunrise_str = format!("↑ {:02}:{:02}",
+        let sunrise_str = format!(
+            "↑ {:02}:{:02}",
             solar.sunrise_hour as u32,
-            ((solar.sunrise_hour % 1.0) * 60.0) as u32);
-        let sunset_str = format!("↓ {:02}:{:02}",
+            ((solar.sunrise_hour % 1.0) * 60.0) as u32
+        );
+        let sunset_str = format!(
+            "↓ {:02}:{:02}",
             solar.sunset_hour as u32,
-            ((solar.sunset_hour % 1.0) * 60.0) as u32);
+            ((solar.sunset_hour % 1.0) * 60.0) as u32
+        );
 
         let info_y = (wave_top_y + wave_height + 1) as i32;
-        term.set_str(wave_start_x as i32, info_y, &sunrise_str, Some(sunrise_color), sunrise_bold);
-        term.set_str((wave_start_x + wave_width - sunset_str.len()) as i32, info_y, &sunset_str, Some(sunset_color), sunset_bold);
+        term.set_str(
+            wave_start_x as i32,
+            info_y,
+            &sunrise_str,
+            Some(sunrise_color),
+            sunrise_bold,
+        );
+        term.set_str(
+            (wave_start_x + wave_width - sunset_str.len()) as i32,
+            info_y,
+            &sunset_str,
+            Some(sunset_color),
+            sunset_bold,
+        );
 
         // Draw phase and gamma info
         let (r, g, b) = temp_to_gamma(temp, config.night_green, config.night_blue);
         let phase_gamma_str = format!("{:8} γ {:.2}:{:.2}:{:.2}", phase.name(), r, g, b);
         let (phase_color, phase_bold) = temp_scheme_color(temp, &colors);
-        term.set_str(cx.saturating_sub(phase_gamma_str.len() / 2) as i32, info_y + 1, &format!("{:8}", phase.name()), Some(phase_color), phase_bold);
-        term.set_str((cx.saturating_sub(phase_gamma_str.len() / 2) + 9) as i32, info_y + 1, &format!("γ {:.2}:{:.2}:{:.2}", r, g, b), Some(text_color), false);
+        term.set_str(
+            cx.saturating_sub(phase_gamma_str.len() / 2) as i32,
+            info_y + 1,
+            &format!("{:8}", phase.name()),
+            Some(phase_color),
+            phase_bold,
+        );
+        term.set_str(
+            (cx.saturating_sub(phase_gamma_str.len() / 2) + 9) as i32,
+            info_y + 1,
+            &format!("γ {:.2}:{:.2}:{:.2}", r, g, b),
+            Some(text_color),
+            false,
+        );
 
         // Draw hour markers
         let marker_y = (wave_top_y + wave_height + 3) as i32;
         for hour in [0, 6, 12, 18, 24] {
             let x = wave_start_x + (hour as f64 / 24.0 * wave_width as f64) as usize;
             let label = format!("{:02}", hour % 24);
-            term.set_str(x.saturating_sub(1) as i32, marker_y, &label, Some(text_color), false);
+            term.set_str(
+                x.saturating_sub(1) as i32,
+                marker_y,
+                &label,
+                Some(text_color),
+                false,
+            );
         }
 
         // Draw time and location on same line (last line of block)
@@ -490,23 +684,41 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
             (now.hour(), now.minute(), now.second())
         };
 
-        let time_loc_str = format!("{:02}:{:02}:{:02}  {:.2}°{} {:.2}°{}",
-            disp_hour, disp_min, disp_sec,
+        let time_loc_str = format!(
+            "{:02}:{:02}:{:02}  {:.2}°{} {:.2}°{}",
+            disp_hour,
+            disp_min,
+            disp_sec,
             config.latitude.abs(),
             if config.latitude >= 0.0 { "N" } else { "S" },
             config.longitude.abs(),
-            if config.longitude >= 0.0 { "E" } else { "W" });
+            if config.longitude >= 0.0 { "E" } else { "W" }
+        );
         let (time_color, time_bold) = temp_scheme_color(temp, &colors);
         let time_x = cx.saturating_sub(time_loc_str.len() / 2);
         // Draw time part in temp color, location in gray
         let time_part = format!("{:02}:{:02}:{:02}", disp_hour, disp_min, disp_sec);
-        term.set_str(time_x as i32, time_loc_y, &time_part, Some(time_color), time_bold);
-        let loc_str = format!("  {:.2}°{} {:.2}°{}",
+        term.set_str(
+            time_x as i32,
+            time_loc_y,
+            &time_part,
+            Some(time_color),
+            time_bold,
+        );
+        let loc_str = format!(
+            "  {:.2}°{} {:.2}°{}",
             config.latitude.abs(),
             if config.latitude >= 0.0 { "N" } else { "S" },
             config.longitude.abs(),
-            if config.longitude >= 0.0 { "E" } else { "W" });
-        term.set_str((time_x + time_part.len()) as i32, time_loc_y, &loc_str, Some(text_color), false);
+            if config.longitude >= 0.0 { "E" } else { "W" }
+        );
+        term.set_str(
+            (time_x + time_part.len()) as i32,
+            time_loc_y,
+            &loc_str,
+            Some(text_color),
+            false,
+        );
 
         if show_help {
             let (w, h) = term.size();

@@ -47,96 +47,96 @@ impl KeyPos {
 /// Outer edge (left) aligned at x=0
 const LEFT_MAIN: &[(usize, KeyPos)] = &[
     // Row 0 (number row): ESC, 1-6 (7 keys)
-    (0,  KeyPos::new(0.0, 0.0, 1.0)),   // ESC
-    (1,  KeyPos::new(1.0, 0.0, 1.0)),   // 1
-    (2,  KeyPos::new(2.0, 0.0, 1.0)),   // 2
-    (3,  KeyPos::new(3.0, 0.0, 1.0)),   // 3
-    (4,  KeyPos::new(4.0, 0.0, 1.0)),   // 4
-    (5,  KeyPos::new(5.0, 0.0, 1.0)),   // 5
-    (6,  KeyPos::new(6.0, 0.0, 1.0)),   // 6
+    (0, KeyPos::new(0.0, 0.0, 1.0)), // ESC
+    (1, KeyPos::new(1.0, 0.0, 1.0)), // 1
+    (2, KeyPos::new(2.0, 0.0, 1.0)), // 2
+    (3, KeyPos::new(3.0, 0.0, 1.0)), // 3
+    (4, KeyPos::new(4.0, 0.0, 1.0)), // 4
+    (5, KeyPos::new(5.0, 0.0, 1.0)), // 5
+    (6, KeyPos::new(6.0, 0.0, 1.0)), // 6
     // Row 1 (top letter): Tab, Q-T (6 keys) - Tab wider
-    (7,  KeyPos::new(0.0, 1.0, 1.5)),   // Tab (1.5 wide)
-    (8,  KeyPos::new(1.5, 1.0, 1.0)),   // Q
-    (9,  KeyPos::new(2.5, 1.0, 1.0)),   // W
-    (10, KeyPos::new(3.5, 1.0, 1.0)),   // E
-    (11, KeyPos::new(4.5, 1.0, 1.0)),   // R
-    (12, KeyPos::new(5.5, 1.0, 1.0)),   // T
+    (7, KeyPos::new(0.0, 1.0, 1.5)),  // Tab (1.5 wide)
+    (8, KeyPos::new(1.5, 1.0, 1.0)),  // Q
+    (9, KeyPos::new(2.5, 1.0, 1.0)),  // W
+    (10, KeyPos::new(3.5, 1.0, 1.0)), // E
+    (11, KeyPos::new(4.5, 1.0, 1.0)), // R
+    (12, KeyPos::new(5.5, 1.0, 1.0)), // T
     // Row 2 (home): Caps, A-G (6 keys) - Caps wider
-    (13, KeyPos::new(0.0, 2.0, 1.5)),   // Caps (1.5 wide)
-    (14, KeyPos::new(1.5, 2.0, 1.0)),   // A
-    (15, KeyPos::new(2.5, 2.0, 1.0)),   // S
-    (16, KeyPos::new(3.5, 2.0, 1.0)),   // D
-    (17, KeyPos::new(4.5, 2.0, 1.0)),   // F
-    (18, KeyPos::new(5.5, 2.0, 1.0)),   // G
+    (13, KeyPos::new(0.0, 2.0, 1.5)), // Caps (1.5 wide)
+    (14, KeyPos::new(1.5, 2.0, 1.0)), // A
+    (15, KeyPos::new(2.5, 2.0, 1.0)), // S
+    (16, KeyPos::new(3.5, 2.0, 1.0)), // D
+    (17, KeyPos::new(4.5, 2.0, 1.0)), // F
+    (18, KeyPos::new(5.5, 2.0, 1.0)), // G
     // Row 3 (bottom): Shift, Z-B (6 keys) - Shift wider
-    (19, KeyPos::new(0.0, 3.0, 1.5)),   // Shift (1.5 wide)
-    (20, KeyPos::new(1.5, 3.0, 1.0)),   // Z
-    (21, KeyPos::new(2.5, 3.0, 1.0)),   // X
-    (22, KeyPos::new(3.5, 3.0, 1.0)),   // C
-    (23, KeyPos::new(4.5, 3.0, 1.0)),   // V
-    (24, KeyPos::new(5.5, 3.0, 1.0)),   // B
+    (19, KeyPos::new(0.0, 3.0, 1.5)), // Shift (1.5 wide)
+    (20, KeyPos::new(1.5, 3.0, 1.0)), // Z
+    (21, KeyPos::new(2.5, 3.0, 1.0)), // X
+    (22, KeyPos::new(3.5, 3.0, 1.0)), // C
+    (23, KeyPos::new(4.5, 3.0, 1.0)), // V
+    (24, KeyPos::new(5.5, 3.0, 1.0)), // B
     // Row 4 (modifiers): Ctrl, Cmd, Alt (3 keys)
-    (25, KeyPos::new(0.0, 4.0, 1.0)),   // Ctrl
-    (26, KeyPos::new(1.0, 4.0, 1.0)),   // Cmd/Meta
-    (27, KeyPos::new(2.0, 4.0, 1.0)),   // Alt
+    (25, KeyPos::new(0.0, 4.0, 1.0)), // Ctrl
+    (26, KeyPos::new(1.0, 4.0, 1.0)), // Cmd/Meta
+    (27, KeyPos::new(2.0, 4.0, 1.0)), // Alt
 ];
 
 /// Left thumb cluster - 4 keys in 2x2 arrangement
 const LEFT_THUMB: &[(usize, KeyPos)] = &[
-    (28, KeyPos::new(4.0, 4.0, 1.0)),   // T1 (upper left)
-    (29, KeyPos::new(5.0, 4.0, 1.0)),   // T2 (upper right)
-    (30, KeyPos::new(4.0, 5.0, 1.0)),   // T3 (lower left)
-    (31, KeyPos::new(5.0, 5.0, 1.0)),   // T4 (lower right)
+    (28, KeyPos::new(4.0, 4.0, 1.0)), // T1 (upper left)
+    (29, KeyPos::new(5.0, 4.0, 1.0)), // T2 (upper right)
+    (30, KeyPos::new(4.0, 5.0, 1.0)), // T3 (lower left)
+    (31, KeyPos::new(5.0, 5.0, 1.0)), // T4 (lower right)
 ];
 
 /// Right half main keys
 /// Outer edge (right) aligned at x=7
 const RIGHT_MAIN: &[(usize, KeyPos)] = &[
     // Row 0 (number row): 7-=, Backspace (7 keys) - right-aligned with row 1
-    (32, KeyPos::new(1.0, 0.0, 1.0)),   // 7
-    (33, KeyPos::new(2.0, 0.0, 1.0)),   // 8
-    (34, KeyPos::new(3.0, 0.0, 1.0)),   // 9
-    (35, KeyPos::new(4.0, 0.0, 1.0)),   // 0
-    (36, KeyPos::new(5.0, 0.0, 1.0)),   // -
-    (37, KeyPos::new(6.0, 0.0, 1.0)),   // =
-    (38, KeyPos::new(7.0, 0.0, 1.0)),   // Backspace
+    (32, KeyPos::new(1.0, 0.0, 1.0)), // 7
+    (33, KeyPos::new(2.0, 0.0, 1.0)), // 8
+    (34, KeyPos::new(3.0, 0.0, 1.0)), // 9
+    (35, KeyPos::new(4.0, 0.0, 1.0)), // 0
+    (36, KeyPos::new(5.0, 0.0, 1.0)), // -
+    (37, KeyPos::new(6.0, 0.0, 1.0)), // =
+    (38, KeyPos::new(7.0, 0.0, 1.0)), // Backspace
     // Row 1 (top letter): Y U I O P [ ] \ (8 keys - backslash on right edge)
-    (39, KeyPos::new(0.0, 1.0, 1.0)),   // Y
-    (40, KeyPos::new(1.0, 1.0, 1.0)),   // U
-    (41, KeyPos::new(2.0, 1.0, 1.0)),   // I
-    (42, KeyPos::new(3.0, 1.0, 1.0)),   // O
-    (43, KeyPos::new(4.0, 1.0, 1.0)),   // P
-    (44, KeyPos::new(5.0, 1.0, 1.0)),   // [
-    (45, KeyPos::new(6.0, 1.0, 1.0)),   // ]
-    (46, KeyPos::new(7.0, 1.0, 1.0)),   // \ (backslash)
+    (39, KeyPos::new(0.0, 1.0, 1.0)), // Y
+    (40, KeyPos::new(1.0, 1.0, 1.0)), // U
+    (41, KeyPos::new(2.0, 1.0, 1.0)), // I
+    (42, KeyPos::new(3.0, 1.0, 1.0)), // O
+    (43, KeyPos::new(4.0, 1.0, 1.0)), // P
+    (44, KeyPos::new(5.0, 1.0, 1.0)), // [
+    (45, KeyPos::new(6.0, 1.0, 1.0)), // ]
+    (46, KeyPos::new(7.0, 1.0, 1.0)), // \ (backslash)
     // Row 2 (home): H J K L ; ' Enter (7 keys - Enter at end)
-    (47, KeyPos::new(1.0, 2.0, 1.0)),   // H
-    (48, KeyPos::new(2.0, 2.0, 1.0)),   // J
-    (49, KeyPos::new(3.0, 2.0, 1.0)),   // K
-    (50, KeyPos::new(4.0, 2.0, 1.0)),   // L
-    (51, KeyPos::new(5.0, 2.0, 1.0)),   // ;
-    (52, KeyPos::new(6.0, 2.0, 1.0)),   // '
-    (53, KeyPos::new(7.0, 2.0, 1.0)),   // Enter
+    (47, KeyPos::new(1.0, 2.0, 1.0)), // H
+    (48, KeyPos::new(2.0, 2.0, 1.0)), // J
+    (49, KeyPos::new(3.0, 2.0, 1.0)), // K
+    (50, KeyPos::new(4.0, 2.0, 1.0)), // L
+    (51, KeyPos::new(5.0, 2.0, 1.0)), // ;
+    (52, KeyPos::new(6.0, 2.0, 1.0)), // '
+    (53, KeyPos::new(7.0, 2.0, 1.0)), // Enter
     // Row 3 (bottom): N-/, Shift (6 keys) - right-aligned with rows above
-    (54, KeyPos::new(2.0, 3.0, 1.0)),   // N
-    (55, KeyPos::new(3.0, 3.0, 1.0)),   // M
-    (56, KeyPos::new(4.0, 3.0, 1.0)),   // ,
-    (57, KeyPos::new(5.0, 3.0, 1.0)),   // .
-    (58, KeyPos::new(6.0, 3.0, 1.0)),   // /
-    (59, KeyPos::new(7.0, 3.0, 1.0)),   // Shift
+    (54, KeyPos::new(2.0, 3.0, 1.0)), // N
+    (55, KeyPos::new(3.0, 3.0, 1.0)), // M
+    (56, KeyPos::new(4.0, 3.0, 1.0)), // ,
+    (57, KeyPos::new(5.0, 3.0, 1.0)), // .
+    (58, KeyPos::new(6.0, 3.0, 1.0)), // /
+    (59, KeyPos::new(7.0, 3.0, 1.0)), // Shift
     // Row 4 (modifiers): Alt, FN, Meta, Ctrl (4 keys)
-    (60, KeyPos::new(4.0, 4.0, 1.0)),   // Alt
-    (61, KeyPos::new(5.0, 4.0, 1.0)),   // FN
-    (62, KeyPos::new(6.0, 4.0, 1.0)),   // Meta
-    (63, KeyPos::new(7.0, 4.0, 1.0)),   // Ctrl
+    (60, KeyPos::new(4.0, 4.0, 1.0)), // Alt
+    (61, KeyPos::new(5.0, 4.0, 1.0)), // FN
+    (62, KeyPos::new(6.0, 4.0, 1.0)), // Meta
+    (63, KeyPos::new(7.0, 4.0, 1.0)), // Ctrl
 ];
 
 /// Right thumb cluster - 4 keys in 2x2 arrangement
 const RIGHT_THUMB: &[(usize, KeyPos)] = &[
-    (64, KeyPos::new(1.0, 4.0, 1.0)),   // T5 (upper left)
-    (65, KeyPos::new(2.0, 4.0, 1.0)),   // T6 (upper right)
-    (66, KeyPos::new(1.0, 5.0, 1.0)),   // T7 (lower left)
-    (67, KeyPos::new(2.0, 5.0, 1.0)),   // T8 (lower right)
+    (64, KeyPos::new(1.0, 4.0, 1.0)), // T5 (upper left)
+    (65, KeyPos::new(2.0, 4.0, 1.0)), // T6 (upper right)
+    (66, KeyPos::new(1.0, 5.0, 1.0)), // T7 (lower left)
+    (67, KeyPos::new(2.0, 5.0, 1.0)), // T8 (lower right)
 ];
 
 /// Map from physical key index (our layout) to Dygma keymap index
@@ -146,16 +146,13 @@ const RIGHT_THUMB: &[(usize, KeyPos)] = &[
 const PHYSICAL_TO_KEYMAP: &[usize] = &[
     // LEFT HALF (indices 0-31) - 32 keys
     // Row 0: ESC, 1-6 (physical 0-6) → keymap row 0, cols 0-6
-    0, 1, 2, 3, 4, 5, 6,
-    // Row 1: Tab, Q-T (physical 7-12) → keymap row 1, cols 0-5
-    16, 17, 18, 19, 20, 21,
-    // Row 2: Caps, A-G (physical 13-18) → keymap row 2, cols 0-5
+    0, 1, 2, 3, 4, 5, 6, // Row 1: Tab, Q-T (physical 7-12) → keymap row 1, cols 0-5
+    16, 17, 18, 19, 20, 21, // Row 2: Caps, A-G (physical 13-18) → keymap row 2, cols 0-5
     32, 33, 34, 35, 36, 37,
     // Row 3: Shift, Z-B (physical 19-24) → keymap 48 for shift, skip 49 (ISO key)
     48, 50, 51, 52, 53, 54,
     // Row 4: Ctrl, Meta, Alt (physical 25-27) → keymap row 4, cols 0-2
-    64, 65, 66,
-    // Thumb: T1-T4 (physical 28-31) → keymap indices
+    64, 65, 66, // Thumb: T1-T4 (physical 28-31) → keymap indices
     67, 68, 70, 71,
     // RIGHT HALF (indices 32-67) - 36 keys
     // Row 0: 7-=, Backspace (physical 32-38) → keymap row 0, cols 9-15
@@ -176,16 +173,11 @@ const PHYSICAL_TO_KEYMAP: &[usize] = &[
 const DEFAULT_LABELS: &[&str] = &[
     // Left half (0-31) - 32 keys
     // Row 0: ESC, 1-6 (indices 0-6)
-    "ESC", "1", "2", "3", "4", "5", "6",
-    // Row 1: Tab, Q-T (indices 7-12)
-    "TAB", "Q", "W", "E", "R", "T",
-    // Row 2: Caps, A-G (indices 13-18)
-    "CAP", "A", "S", "D", "F", "G",
-    // Row 3: Shift, Z-B (indices 19-24)
-    "SHF", "Z", "X", "C", "V", "B",
-    // Row 4: Ctrl, Meta, Alt (indices 25-27)
-    "CTL", "MET", "ALT",
-    // Left thumb: T1-T4 (indices 28-31)
+    "ESC", "1", "2", "3", "4", "5", "6", // Row 1: Tab, Q-T (indices 7-12)
+    "TAB", "Q", "W", "E", "R", "T", // Row 2: Caps, A-G (indices 13-18)
+    "CAP", "A", "S", "D", "F", "G", // Row 3: Shift, Z-B (indices 19-24)
+    "SHF", "Z", "X", "C", "V", "B", // Row 4: Ctrl, Meta, Alt (indices 25-27)
+    "CTL", "MET", "ALT", // Left thumb: T1-T4 (indices 28-31)
     "T1", "T2", "T3", "T4",
     // Right half (32-67) - 36 keys
     // Row 0: 7-=, Backspace (indices 32-38)
@@ -193,12 +185,9 @@ const DEFAULT_LABELS: &[&str] = &[
     // Row 1: Y U I O P [ ] \ (indices 39-46) - Backslash on right edge
     "Y", "U", "I", "O", "P", "[", "]", "\\",
     // Row 2: H J K L ; ' Enter (indices 47-53) - Enter at end of home row
-    "H", "J", "K", "L", ";", "'", "ENT",
-    // Row 3: N-/, Shift (indices 54-59)
-    "N", "M", ",", ".", "/", "SHF",
-    // Row 4: Alt, FN, Meta, Ctrl (indices 60-63)
-    "ALT", "FN", "MET", "CTL",
-    // Right thumb: T5-T8 (indices 64-67)
+    "H", "J", "K", "L", ";", "'", "ENT", // Row 3: N-/, Shift (indices 54-59)
+    "N", "M", ",", ".", "/", "SHF", // Row 4: Alt, FN, Meta, Ctrl (indices 60-63)
+    "ALT", "FN", "MET", "CTL", // Right thumb: T5-T8 (indices 64-67)
     "T5", "T6", "T7", "T8",
 ];
 
@@ -208,13 +197,21 @@ const LED_MAP: [[u8; 16]; 5] = [
     // Row 0: [0,1,2,3,4,5,6,XX,XX,39,38,37,36,35,34,33]
     [0, 1, 2, 3, 4, 5, 6, 255, 255, 39, 38, 37, 36, 35, 34, 33],
     // Row 1: [7,8,9,10,11,12,XX,XX,47,46,45,44,43,42,41,40]
-    [7, 8, 9, 10, 11, 12, 255, 255, 47, 46, 45, 44, 43, 42, 41, 40],
+    [
+        7, 8, 9, 10, 11, 12, 255, 255, 47, 46, 45, 44, 43, 42, 41, 40,
+    ],
     // Row 2: [13,14,15,16,17,18,XX,29,XX,54,53,52,51,50,49,48]
-    [13, 14, 15, 16, 17, 18, 255, 29, 255, 54, 53, 52, 51, 50, 49, 48],
+    [
+        13, 14, 15, 16, 17, 18, 255, 29, 255, 54, 53, 52, 51, 50, 49, 48,
+    ],
     // Row 3: [19,20,21,22,23,24,25,XX,XX,XX,60,59,58,57,56,55]
-    [19, 20, 21, 22, 23, 24, 25, 255, 255, 255, 60, 59, 58, 57, 56, 55],
+    [
+        19, 20, 21, 22, 23, 24, 25, 255, 255, 255, 60, 59, 58, 57, 56, 55,
+    ],
     // Row 4: [26,27,28,29,30,XX,31,32,68,67,66,65,64,63,62,61]
-    [26, 27, 28, 29, 30, 255, 31, 32, 68, 67, 66, 65, 64, 63, 62, 61],
+    [
+        26, 27, 28, 29, 30, 255, 31, 32, 68, 67, 66, 65, 64, 63, 62, 61,
+    ],
 ];
 
 /// Convert physical key index to LED colormap index via keymap position
@@ -228,7 +225,11 @@ fn physical_to_led_index(physical_idx: usize) -> Option<u8> {
     // Look up LED index from led_map
     if row < 5 {
         let led = LED_MAP[row][col];
-        if led != 255 { Some(led) } else { None }
+        if led != 255 {
+            Some(led)
+        } else {
+            None
+        }
     } else {
         None
     }
@@ -266,60 +267,129 @@ fn keycode_to_label(code: u16, shifted: bool) -> String {
         0x39 => "CAP".into(),
 
         // Function keys
-        0x3A => "F1".into(), 0x3B => "F2".into(), 0x3C => "F3".into(), 0x3D => "F4".into(),
-        0x3E => "F5".into(), 0x3F => "F6".into(), 0x40 => "F7".into(), 0x41 => "F8".into(),
-        0x42 => "F9".into(), 0x43 => "F10".into(), 0x44 => "F11".into(), 0x45 => "F12".into(),
+        0x3A => "F1".into(),
+        0x3B => "F2".into(),
+        0x3C => "F3".into(),
+        0x3D => "F4".into(),
+        0x3E => "F5".into(),
+        0x3F => "F6".into(),
+        0x40 => "F7".into(),
+        0x41 => "F8".into(),
+        0x42 => "F9".into(),
+        0x43 => "F10".into(),
+        0x44 => "F11".into(),
+        0x45 => "F12".into(),
 
-        0x46 => "PRT".into(), 0x47 => "SCR".into(), 0x48 => "PAU".into(),
-        0x49 => "INS".into(), 0x4A => "HOM".into(), 0x4B => "PGU".into(),
-        0x4C => "DEL".into(), 0x4D => "END".into(), 0x4E => "PGD".into(),
+        0x46 => "PRT".into(),
+        0x47 => "SCR".into(),
+        0x48 => "PAU".into(),
+        0x49 => "INS".into(),
+        0x4A => "HOM".into(),
+        0x4B => "PGU".into(),
+        0x4C => "DEL".into(),
+        0x4D => "END".into(),
+        0x4E => "PGD".into(),
 
         // Arrow keys
-        0x4F => "→".into(), 0x50 => "←".into(), 0x51 => "↓".into(), 0x52 => "↑".into(),
+        0x4F => "→".into(),
+        0x50 => "←".into(),
+        0x51 => "↓".into(),
+        0x52 => "↑".into(),
 
         // Numpad
-        0x53 => "NUM".into(), 0x54 => "N/".into(), 0x55 => "N*".into(), 0x56 => "N-".into(),
-        0x57 => "N+".into(), 0x58 => "NEN".into(),
-        0x59 => "N1".into(), 0x5A => "N2".into(), 0x5B => "N3".into(), 0x5C => "N4".into(),
-        0x5D => "N5".into(), 0x5E => "N6".into(), 0x5F => "N7".into(), 0x60 => "N8".into(),
-        0x61 => "N9".into(), 0x62 => "N0".into(), 0x63 => "N.".into(),
-        0x64 => "ISO".into(), 0x65 => "APP".into(), 0x66 => "PWR".into(), 0x67 => "KP=".into(),
+        0x53 => "NUM".into(),
+        0x54 => "N/".into(),
+        0x55 => "N*".into(),
+        0x56 => "N-".into(),
+        0x57 => "N+".into(),
+        0x58 => "NEN".into(),
+        0x59 => "N1".into(),
+        0x5A => "N2".into(),
+        0x5B => "N3".into(),
+        0x5C => "N4".into(),
+        0x5D => "N5".into(),
+        0x5E => "N6".into(),
+        0x5F => "N7".into(),
+        0x60 => "N8".into(),
+        0x61 => "N9".into(),
+        0x62 => "N0".into(),
+        0x63 => "N.".into(),
+        0x64 => "ISO".into(),
+        0x65 => "APP".into(),
+        0x66 => "PWR".into(),
+        0x67 => "KP=".into(),
 
         // Extended function keys (F13-F24)
-        0x68 => "F13".into(), 0x69 => "F14".into(), 0x6A => "F15".into(), 0x6B => "F16".into(),
-        0x6C => "F17".into(), 0x6D => "F18".into(), 0x6E => "F19".into(), 0x6F => "F20".into(),
-        0x70 => "F21".into(), 0x71 => "F22".into(), 0x72 => "F23".into(), 0x73 => "F24".into(),
+        0x68 => "F13".into(),
+        0x69 => "F14".into(),
+        0x6A => "F15".into(),
+        0x6B => "F16".into(),
+        0x6C => "F17".into(),
+        0x6D => "F18".into(),
+        0x6E => "F19".into(),
+        0x6F => "F20".into(),
+        0x70 => "F21".into(),
+        0x71 => "F22".into(),
+        0x72 => "F23".into(),
+        0x73 => "F24".into(),
 
         // Modifiers (HID codes 0xE0-0xE7)
-        0xE0 => "CTL".into(), 0xE1 => "SHF".into(), 0xE2 => "ALT".into(), 0xE3 => "GUI".into(),
-        0xE4 => "CTL".into(), 0xE5 => "SHF".into(), 0xE6 => "ALT".into(), 0xE7 => "GUI".into(),
+        0xE0 => "CTL".into(),
+        0xE1 => "SHF".into(),
+        0xE2 => "ALT".into(),
+        0xE3 => "GUI".into(),
+        0xE4 => "CTL".into(),
+        0xE5 => "SHF".into(),
+        0xE6 => "ALT".into(),
+        0xE7 => "GUI".into(),
 
         // Kaleidoscope modifier keys (high byte encodes modifier)
         // Bazecor modifier offsets: Ctrl=0x0100, Alt=0x0200, AltGr=0x0400, Shift=0x0800, GUI=0x1000
         // 0x01xx = Ctrl + key
         c if (0x0100..0x0200).contains(&c) => {
             let base = c & 0xFF;
-            if base == 0 { "CTL".into() } else { format!("C-{}", keycode_to_label(base, false)) }
+            if base == 0 {
+                "CTL".into()
+            } else {
+                format!("C-{}", keycode_to_label(base, false))
+            }
         }
         // 0x02xx = Alt + key
         c if (0x0200..0x0400).contains(&c) => {
             let base = c & 0xFF;
-            if base == 0 { "ALT".into() } else { format!("A-{}", keycode_to_label(base, false)) }
+            if base == 0 {
+                "ALT".into()
+            } else {
+                format!("A-{}", keycode_to_label(base, false))
+            }
         }
         // 0x04xx = AltGr + key
         c if (0x0400..0x0800).contains(&c) => {
             let base = c & 0xFF;
-            if base == 0 { "AGR".into() } else { format!("R-{}", keycode_to_label(base, false)) }
+            if base == 0 {
+                "AGR".into()
+            } else {
+                format!("R-{}", keycode_to_label(base, false))
+            }
         }
         // 0x08xx = Shift + key
         c if (0x0800..0x1000).contains(&c) => {
             let base = c & 0xFF;
-            if base == 0 { "SHF".into() } else { shifted_label(base).unwrap_or_else(|| format!("S-{}", keycode_to_label(base, false))) }
+            if base == 0 {
+                "SHF".into()
+            } else {
+                shifted_label(base)
+                    .unwrap_or_else(|| format!("S-{}", keycode_to_label(base, false)))
+            }
         }
         // 0x10xx = GUI + key
         c if (0x1000..0x1100).contains(&c) => {
             let base = c & 0xFF;
-            if base == 0 { "GUI".into() } else { format!("G-{}", keycode_to_label(base, false)) }
+            if base == 0 {
+                "GUI".into()
+            } else {
+                format!("G-{}", keycode_to_label(base, false))
+            }
         }
 
         // Kaleidoscope/Bazecor layer keys
@@ -333,16 +403,16 @@ fn keycode_to_label(code: u16, shifted: bool) -> String {
         c if (0x4449..0x4454).contains(&c) => format!("+L{}", c - 0x4449),
         // Additional layer ranges (legacy/alternate encodings)
         c if (0x4410..0x4420).contains(&c) => format!("=L{}", c - 0x4410),
-        c if (0x443F..0x4449).contains(&c) => format!("*L{}", c - 0x443F),  // Unknown layer op
+        c if (0x443F..0x4449).contains(&c) => format!("*L{}", c - 0x443F), // Unknown layer op
 
         // OneShot layers: 49153+ (0xC001)
         c if (0xC001..0xC010).contains(&c) => format!("1L{}", c - 0xC001),
 
         // OneShot modifiers
-        0xC011 => "1S".into(),   // OneShot Shift
-        0xC012 => "1C".into(),   // OneShot Ctrl
-        0xC014 => "1A".into(),   // OneShot Alt
-        0xC018 => "1G".into(),   // OneShot GUI
+        0xC011 => "1S".into(), // OneShot Shift
+        0xC012 => "1C".into(), // OneShot Ctrl
+        0xC014 => "1A".into(), // OneShot Alt
+        0xC018 => "1G".into(), // OneShot GUI
 
         // Shifted keys (0xC1xx = Shift + HID key)
         c if (0xC100..0xC200).contains(&c) => {
@@ -366,33 +436,33 @@ fn keycode_to_label(code: u16, shifted: bool) -> String {
         }
 
         // LED Effect keys (0x4300-0x4302)
-        0x4300 => "LED>".into(),  // Next LED effect
-        0x4301 => "LED<".into(),  // Previous LED effect
-        0x4302 => "LED~".into(),  // Toggle LED effect
+        0x4300 => "LED>".into(), // Next LED effect
+        0x4301 => "LED<".into(), // Previous LED effect
+        0x4302 => "LED~".into(), // Toggle LED effect
 
         // Media/Consumer keys - HID format (0x00xx)
         0x00E8 => "MUT".into(),
         0x00E9 => "V+".into(),
         0x00EA => "V-".into(),
-        0x00B5 => ">>".into(),   // Next track
-        0x00B6 => "<<".into(),   // Previous track
-        0x00B7 => "STP".into(),  // Stop
-        0x00CD => "P/P".into(),  // Play/Pause
+        0x00B5 => ">>".into(),  // Next track
+        0x00B6 => "<<".into(),  // Previous track
+        0x00B7 => "STP".into(), // Stop
+        0x00CD => "P/P".into(), // Play/Pause
 
         // Media/Consumer keys - Bazecor format (decimal values from Bazecor source)
-        0x4CE2 => "MUT".into(),  // 19682 = Mute
-        0x58B5 => ">>".into(),   // 22709 = Next track
-        0x58B6 => "<<".into(),   // 22710 = Previous track
-        0x58B7 => "STP".into(),  // 22711 = Stop
-        0x58CD => "P/P".into(),  // 22733 = Play/Pause
-        0x5CE9 => "V+".into(),   // 23785 = Volume up
-        0x5CEA => "V-".into(),   // 23786 = Volume down
-        0x58B8 => "EJT".into(),  // 22712 = Eject
-        0x4878 => "CAM".into(),  // 18552 = Camera
-        0x5C6F => "BR+".into(),  // 23663 = Brightness up
-        0x5C70 => "BR-".into(),  // 23664 = Brightness down
-        0x4992 => "CAL".into(),  // 18834 = Calculator
-        0x58B9 => "SHF".into(),  // 22713 = Shuffle
+        0x4CE2 => "MUT".into(), // 19682 = Mute
+        0x58B5 => ">>".into(),  // 22709 = Next track
+        0x58B6 => "<<".into(),  // 22710 = Previous track
+        0x58B7 => "STP".into(), // 22711 = Stop
+        0x58CD => "P/P".into(), // 22733 = Play/Pause
+        0x5CE9 => "V+".into(),  // 23785 = Volume up
+        0x5CEA => "V-".into(),  // 23786 = Volume down
+        0x58B8 => "EJT".into(), // 22712 = Eject
+        0x4878 => "CAM".into(), // 18552 = Camera
+        0x5C6F => "BR+".into(), // 23663 = Brightness up
+        0x5C70 => "BR-".into(), // 23664 = Brightness down
+        0x4992 => "CAL".into(), // 18834 = Calculator
+        0x58B9 => "SHF".into(), // 22713 = Shuffle
 
         0x4E00..=0x4EFF => "MED".into(),
 
@@ -403,11 +473,11 @@ fn keycode_to_label(code: u16, shifted: bool) -> String {
 
         // DualUse modifier keys (Bazecor format: 0xC031-0xC5B1)
         // These are tap-key/hold-modifier combinations
-        c if (0xC031..0xC040).contains(&c) => "D/C".into(),  // DualUse Ctrl
-        c if (0xC0C1..0xC0D0).contains(&c) => "D/S".into(),  // DualUse Shift
-        c if (0xC149..0xC158).contains(&c) => "D/A".into(),  // DualUse Alt
-        c if (0xC1D1..0xC1E0).contains(&c) => "D/G".into(),  // DualUse GUI
-        c if (0xC5B1..0xC5C0).contains(&c) => "D/R".into(),  // DualUse AltGr
+        c if (0xC031..0xC040).contains(&c) => "D/C".into(), // DualUse Ctrl
+        c if (0xC0C1..0xC0D0).contains(&c) => "D/S".into(), // DualUse Shift
+        c if (0xC149..0xC158).contains(&c) => "D/A".into(), // DualUse Alt
+        c if (0xC1D1..0xC1E0).contains(&c) => "D/G".into(), // DualUse GUI
+        c if (0xC5B1..0xC5C0).contains(&c) => "D/R".into(), // DualUse AltGr
 
         // DualUse layer keys (Bazecor format: 0xC812-0xCCE2)
         c if (0xC812..0xC8C2).contains(&c) => "DL1".into(),
@@ -432,7 +502,6 @@ fn keycode_to_label(code: u16, shifted: bool) -> String {
                 keycode_to_label(key, false)
             }
         }
-
 
         // Dygma SuperKeys (0xD2CC base, range 0xD2CC-0xD300)
         c if (0xD2CC..0xD300).contains(&c) => format!("S{}", c - 0xD2CC),
@@ -482,14 +551,33 @@ fn shifted_label(code: u16) -> Option<String> {
 /// Get unshifted label for number/punctuation keys (0x1E-0x38)
 fn unshifted_label(code: u16) -> String {
     match code {
-        0x1E => "1".into(), 0x1F => "2".into(), 0x20 => "3".into(), 0x21 => "4".into(),
-        0x22 => "5".into(), 0x23 => "6".into(), 0x24 => "7".into(), 0x25 => "8".into(),
-        0x26 => "9".into(), 0x27 => "0".into(),
-        0x28 => "ENT".into(), 0x29 => "ESC".into(), 0x2A => "BSP".into(),
-        0x2B => "TAB".into(), 0x2C => "SPC".into(),
-        0x2D => "-".into(), 0x2E => "=".into(), 0x2F => "[".into(), 0x30 => "]".into(),
-        0x31 => "\\".into(), 0x32 => "#".into(), 0x33 => ";".into(), 0x34 => "'".into(),
-        0x35 => "`".into(), 0x36 => ",".into(), 0x37 => ".".into(), 0x38 => "/".into(),
+        0x1E => "1".into(),
+        0x1F => "2".into(),
+        0x20 => "3".into(),
+        0x21 => "4".into(),
+        0x22 => "5".into(),
+        0x23 => "6".into(),
+        0x24 => "7".into(),
+        0x25 => "8".into(),
+        0x26 => "9".into(),
+        0x27 => "0".into(),
+        0x28 => "ENT".into(),
+        0x29 => "ESC".into(),
+        0x2A => "BSP".into(),
+        0x2B => "TAB".into(),
+        0x2C => "SPC".into(),
+        0x2D => "-".into(),
+        0x2E => "=".into(),
+        0x2F => "[".into(),
+        0x30 => "]".into(),
+        0x31 => "\\".into(),
+        0x32 => "#".into(),
+        0x33 => ";".into(),
+        0x34 => "'".into(),
+        0x35 => "`".into(),
+        0x36 => ",".into(),
+        0x37 => ".".into(),
+        0x38 => "/".into(),
         _ => format!("x{:02X}", code),
     }
 }
@@ -509,29 +597,74 @@ fn evdev_key_to_label(key: evdev::Key) -> Option<&'static str> {
     use evdev::Key;
     Some(match key {
         Key::KEY_ESC => "ESC",
-        Key::KEY_1 => "1", Key::KEY_2 => "2", Key::KEY_3 => "3", Key::KEY_4 => "4", Key::KEY_5 => "5",
-        Key::KEY_6 => "6", Key::KEY_7 => "7", Key::KEY_8 => "8", Key::KEY_9 => "9", Key::KEY_0 => "0",
-        Key::KEY_MINUS => "-", Key::KEY_EQUAL => "=", Key::KEY_BACKSPACE => "BSP",
+        Key::KEY_1 => "1",
+        Key::KEY_2 => "2",
+        Key::KEY_3 => "3",
+        Key::KEY_4 => "4",
+        Key::KEY_5 => "5",
+        Key::KEY_6 => "6",
+        Key::KEY_7 => "7",
+        Key::KEY_8 => "8",
+        Key::KEY_9 => "9",
+        Key::KEY_0 => "0",
+        Key::KEY_MINUS => "-",
+        Key::KEY_EQUAL => "=",
+        Key::KEY_BACKSPACE => "BSP",
         Key::KEY_TAB => "TAB",
-        Key::KEY_Q => "Q", Key::KEY_W => "W", Key::KEY_E => "E", Key::KEY_R => "R", Key::KEY_T => "T",
-        Key::KEY_Y => "Y", Key::KEY_U => "U", Key::KEY_I => "I", Key::KEY_O => "O", Key::KEY_P => "P",
-        Key::KEY_LEFTBRACE => "[", Key::KEY_RIGHTBRACE => "]", Key::KEY_BACKSLASH => "\\",
+        Key::KEY_Q => "Q",
+        Key::KEY_W => "W",
+        Key::KEY_E => "E",
+        Key::KEY_R => "R",
+        Key::KEY_T => "T",
+        Key::KEY_Y => "Y",
+        Key::KEY_U => "U",
+        Key::KEY_I => "I",
+        Key::KEY_O => "O",
+        Key::KEY_P => "P",
+        Key::KEY_LEFTBRACE => "[",
+        Key::KEY_RIGHTBRACE => "]",
+        Key::KEY_BACKSLASH => "\\",
         Key::KEY_CAPSLOCK => "CAP",
-        Key::KEY_A => "A", Key::KEY_S => "S", Key::KEY_D => "D", Key::KEY_F => "F", Key::KEY_G => "G",
-        Key::KEY_H => "H", Key::KEY_J => "J", Key::KEY_K => "K", Key::KEY_L => "L",
-        Key::KEY_SEMICOLON => ";", Key::KEY_APOSTROPHE => "'", Key::KEY_ENTER => "ENT",
+        Key::KEY_A => "A",
+        Key::KEY_S => "S",
+        Key::KEY_D => "D",
+        Key::KEY_F => "F",
+        Key::KEY_G => "G",
+        Key::KEY_H => "H",
+        Key::KEY_J => "J",
+        Key::KEY_K => "K",
+        Key::KEY_L => "L",
+        Key::KEY_SEMICOLON => ";",
+        Key::KEY_APOSTROPHE => "'",
+        Key::KEY_ENTER => "ENT",
         Key::KEY_LEFTSHIFT | Key::KEY_RIGHTSHIFT => "SHF",
-        Key::KEY_Z => "Z", Key::KEY_X => "X", Key::KEY_C => "C", Key::KEY_V => "V", Key::KEY_B => "B",
-        Key::KEY_N => "N", Key::KEY_M => "M",
-        Key::KEY_COMMA => ",", Key::KEY_DOT => ".", Key::KEY_SLASH => "/",
+        Key::KEY_Z => "Z",
+        Key::KEY_X => "X",
+        Key::KEY_C => "C",
+        Key::KEY_V => "V",
+        Key::KEY_B => "B",
+        Key::KEY_N => "N",
+        Key::KEY_M => "M",
+        Key::KEY_COMMA => ",",
+        Key::KEY_DOT => ".",
+        Key::KEY_SLASH => "/",
         Key::KEY_LEFTCTRL | Key::KEY_RIGHTCTRL => "CTL",
         Key::KEY_LEFTMETA | Key::KEY_RIGHTMETA => "WIN",
         Key::KEY_LEFTALT | Key::KEY_RIGHTALT => "ALT",
         Key::KEY_SPACE => "SPC",
         Key::KEY_GRAVE => "`",
-        Key::KEY_F1 => "F1", Key::KEY_F2 => "F2", Key::KEY_F3 => "F3", Key::KEY_F4 => "F4",
-        Key::KEY_F5 => "F5", Key::KEY_F6 => "F6", Key::KEY_F7 => "F7", Key::KEY_F8 => "F8",
-        Key::KEY_F9 => "F9", Key::KEY_F10 => "F10", Key::KEY_F11 => "F11", Key::KEY_F12 => "F12",
+        Key::KEY_F1 => "F1",
+        Key::KEY_F2 => "F2",
+        Key::KEY_F3 => "F3",
+        Key::KEY_F4 => "F4",
+        Key::KEY_F5 => "F5",
+        Key::KEY_F6 => "F6",
+        Key::KEY_F7 => "F7",
+        Key::KEY_F8 => "F8",
+        Key::KEY_F9 => "F9",
+        Key::KEY_F10 => "F10",
+        Key::KEY_F11 => "F11",
+        Key::KEY_F12 => "F12",
         Key::KEY_COMPOSE => "MNU",
         // Additional keys that thumb clusters might use
         Key::KEY_DELETE => "DEL",
@@ -705,10 +838,11 @@ impl FocusConnection {
         let mut response = String::new();
 
         // Read lines until we get "." (Focus protocol terminator)
-        for _ in 0..10 {  // Max 10 lines to prevent infinite loop
+        for _ in 0..10 {
+            // Max 10 lines to prevent infinite loop
             let mut line = String::new();
             match reader.read_line(&mut line) {
-                Ok(0) => break,  // EOF
+                Ok(0) => break, // EOF
                 Ok(_) => {
                     let trimmed = line.trim();
                     if trimmed == "." {
@@ -895,7 +1029,9 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
     let led_status = match (&led_palette, &led_colormap) {
         (Some(p), Some(c)) => {
             // Show first 4 palette colors for debugging
-            let colors: Vec<String> = p.iter().take(4)
+            let colors: Vec<String> = p
+                .iter()
+                .take(4)
                 .map(|(r, g, b)| format!("{:02X}{:02X}{:02X}", r, g, b))
                 .collect();
             format!("LED:{}c/{}L [{}]", p.len(), c.len(), colors.join(","))
@@ -917,15 +1053,22 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
     // This is critical because Dygma Raise appears as multiple devices (one per half)
     // and synthetic modifiers from one half need to be cancelled by keys from the other
     // Tuple: (label, timestamp, is_shift)
-    let pending_mods: Arc<Mutex<Vec<(String, std::time::Instant, bool)>>> = Arc::new(Mutex::new(Vec::new()));
+    let pending_mods: Arc<Mutex<Vec<(String, std::time::Instant, bool)>>> =
+        Arc::new(Mutex::new(Vec::new()));
     const MOD_DELAY_MS: u128 = 50; // If another key follows within 50ms, modifier is synthetic
 
     fn is_modifier(key: evdev::Key) -> bool {
-        matches!(key,
-            evdev::Key::KEY_LEFTSHIFT | evdev::Key::KEY_RIGHTSHIFT |
-            evdev::Key::KEY_LEFTCTRL | evdev::Key::KEY_RIGHTCTRL |
-            evdev::Key::KEY_LEFTALT | evdev::Key::KEY_RIGHTALT |
-            evdev::Key::KEY_LEFTMETA | evdev::Key::KEY_RIGHTMETA)
+        matches!(
+            key,
+            evdev::Key::KEY_LEFTSHIFT
+                | evdev::Key::KEY_RIGHTSHIFT
+                | evdev::Key::KEY_LEFTCTRL
+                | evdev::Key::KEY_RIGHTCTRL
+                | evdev::Key::KEY_LEFTALT
+                | evdev::Key::KEY_RIGHTALT
+                | evdev::Key::KEY_LEFTMETA
+                | evdev::Key::KEY_RIGHTMETA
+        )
     }
 
     fn is_shift(key: evdev::Key) -> bool {
@@ -936,23 +1079,54 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
     fn evdev_shifted_label(key: evdev::Key) -> Option<&'static str> {
         use evdev::Key;
         Some(match key {
-            Key::KEY_1 => "!", Key::KEY_2 => "@", Key::KEY_3 => "#", Key::KEY_4 => "$",
-            Key::KEY_5 => "%", Key::KEY_6 => "^", Key::KEY_7 => "&", Key::KEY_8 => "*",
-            Key::KEY_9 => "(", Key::KEY_0 => ")",
-            Key::KEY_MINUS => "_", Key::KEY_EQUAL => "+",
-            Key::KEY_LEFTBRACE => "{", Key::KEY_RIGHTBRACE => "}",
+            Key::KEY_1 => "!",
+            Key::KEY_2 => "@",
+            Key::KEY_3 => "#",
+            Key::KEY_4 => "$",
+            Key::KEY_5 => "%",
+            Key::KEY_6 => "^",
+            Key::KEY_7 => "&",
+            Key::KEY_8 => "*",
+            Key::KEY_9 => "(",
+            Key::KEY_0 => ")",
+            Key::KEY_MINUS => "_",
+            Key::KEY_EQUAL => "+",
+            Key::KEY_LEFTBRACE => "{",
+            Key::KEY_RIGHTBRACE => "}",
             Key::KEY_BACKSLASH => "|",
-            Key::KEY_SEMICOLON => ":", Key::KEY_APOSTROPHE => "\"",
+            Key::KEY_SEMICOLON => ":",
+            Key::KEY_APOSTROPHE => "\"",
             Key::KEY_GRAVE => "~",
-            Key::KEY_COMMA => "<", Key::KEY_DOT => ">", Key::KEY_SLASH => "?",
+            Key::KEY_COMMA => "<",
+            Key::KEY_DOT => ">",
+            Key::KEY_SLASH => "?",
             // Letters become uppercase
-            Key::KEY_A => "A", Key::KEY_B => "B", Key::KEY_C => "C", Key::KEY_D => "D",
-            Key::KEY_E => "E", Key::KEY_F => "F", Key::KEY_G => "G", Key::KEY_H => "H",
-            Key::KEY_I => "I", Key::KEY_J => "J", Key::KEY_K => "K", Key::KEY_L => "L",
-            Key::KEY_M => "M", Key::KEY_N => "N", Key::KEY_O => "O", Key::KEY_P => "P",
-            Key::KEY_Q => "Q", Key::KEY_R => "R", Key::KEY_S => "S", Key::KEY_T => "T",
-            Key::KEY_U => "U", Key::KEY_V => "V", Key::KEY_W => "W", Key::KEY_X => "X",
-            Key::KEY_Y => "Y", Key::KEY_Z => "Z",
+            Key::KEY_A => "A",
+            Key::KEY_B => "B",
+            Key::KEY_C => "C",
+            Key::KEY_D => "D",
+            Key::KEY_E => "E",
+            Key::KEY_F => "F",
+            Key::KEY_G => "G",
+            Key::KEY_H => "H",
+            Key::KEY_I => "I",
+            Key::KEY_J => "J",
+            Key::KEY_K => "K",
+            Key::KEY_L => "L",
+            Key::KEY_M => "M",
+            Key::KEY_N => "N",
+            Key::KEY_O => "O",
+            Key::KEY_P => "P",
+            Key::KEY_Q => "Q",
+            Key::KEY_R => "R",
+            Key::KEY_S => "S",
+            Key::KEY_T => "T",
+            Key::KEY_U => "U",
+            Key::KEY_V => "V",
+            Key::KEY_W => "W",
+            Key::KEY_X => "X",
+            Key::KEY_Y => "Y",
+            Key::KEY_Z => "Z",
             _ => return None,
         })
     }
@@ -1008,12 +1182,15 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
 
                             if is_modifier(key) {
                                 // Queue modifier - wait to see if it's synthetic
-                                let mut pending = pending_mods_clone.lock().unwrap_or_else(|e| e.into_inner());
+                                let mut pending =
+                                    pending_mods_clone.lock().unwrap_or_else(|e| e.into_inner());
                                 pending.push((label.clone(), now, is_shift(key)));
                             } else {
                                 // Non-modifier key pressed - check if Shift was pending (synthetic)
                                 let had_synthetic_shift = {
-                                    let mut pending = pending_mods_clone.lock().unwrap_or_else(|e| e.into_inner());
+                                    let mut pending = pending_mods_clone
+                                        .lock()
+                                        .unwrap_or_else(|e| e.into_inner());
                                     let had_shift = pending.iter().any(|(_, _, is_s)| *is_s);
                                     pending.clear();
                                     had_shift
@@ -1034,7 +1211,8 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
 
                             // Store for debug display
                             if debug_mode {
-                                let mut lk = last_key_clone.lock().unwrap_or_else(|e| e.into_inner());
+                                let mut lk =
+                                    last_key_clone.lock().unwrap_or_else(|e| e.into_inner());
                                 *lk = format!("{:?} -> {}", key, label);
                             }
                         }
@@ -1048,7 +1226,7 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
 
     // Layer query interval
     let mut layer_query_timer = 0.0f32;
-    let mut prev_layer_mask: u32 = 1;  // Track previous layer to detect changes
+    let mut prev_layer_mask: u32 = 1; // Track previous layer to detect changes
 
     loop {
         let (width, height) = crossterm::terminal::size().unwrap_or(term.size());
@@ -1087,7 +1265,9 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
                     // Parse layer state into bitmask
                     let mut mask: u32 = 0;
                     for (i, s) in resp.split_whitespace().enumerate() {
-                        if i >= 32 { break; }
+                        if i >= 32 {
+                            break;
+                        }
                         if let Ok(v) = s.parse::<u8>() {
                             if v != 0 {
                                 mask |= 1 << i;
@@ -1123,9 +1303,7 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
         let shifted = shift_held.load(Ordering::Relaxed);
 
         // Extract active layers from bitmask, highest first (for layer stacking)
-        let mut layer_stack: Vec<u8> = (0..32u8)
-            .filter(|&i| layer_mask & (1 << i) != 0)
-            .collect();
+        let mut layer_stack: Vec<u8> = (0..32u8).filter(|&i| layer_mask & (1 << i) != 0).collect();
         layer_stack.reverse(); // Highest layer first for priority lookup
 
         term.clear();
@@ -1134,8 +1312,8 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
         let _h = height as f32;
 
         // Calculate scaling based on available space for each half
-        let half_char_width = HALF_WIDTH * 3.0;  // Each half in character units
-        let available_per_half = w * 0.45;  // ~45% of width per half
+        let half_char_width = HALF_WIDTH * 3.0; // Each half in character units
+        let available_per_half = w * 0.45; // ~45% of width per half
         let scale_x = available_per_half / half_char_width;
         // Keep vertical scale at 1.0 to avoid gaps between rows
         let scale = scale_x.min(1.5); // Cap horizontal scale, vertical is always 1.0
@@ -1144,14 +1322,20 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
         let half_width_chars = (HALF_WIDTH * scale * 3.0) as usize;
 
         // Edge-align: left half to left edge, right half to right edge
-        let layout_height = TOTAL_HEIGHT as usize;  // No vertical scaling
-        let left_start_x: usize = 1;  // Small margin from left edge
-        let right_start_x = (width as usize).saturating_sub(half_width_chars + 1);  // Small margin from right edge
+        let layout_height = TOTAL_HEIGHT as usize; // No vertical scaling
+        let left_start_x: usize = 1; // Small margin from left edge
+        let right_start_x = (width as usize).saturating_sub(half_width_chars + 1); // Small margin from right edge
         let start_y = (height as usize).saturating_sub(layout_height) / 2;
 
         // Draw layer indicator with connection status
         let top_layer = layer_stack.first().copied().unwrap_or(0);
-        let connection_status = if has_focus { "Focus" } else if has_evdev { "evdev" } else { "none" };
+        let connection_status = if has_focus {
+            "Focus"
+        } else if has_evdev {
+            "evdev"
+        } else {
+            "none"
+        };
         let layer_text = format!("[ Layer {} : {} ]", top_layer + 1, connection_status);
         let layer_x = (width as usize - layer_text.len()) / 2;
         let (layer_color, _) = scheme_color(state.color_scheme(), 2, true);
@@ -1187,14 +1371,24 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
             };
             // Debug: show LED info for H key (physical 47 → LED 54)
             let h_led_info = if let (Some(ref p), Some(ref c)) = (&led_palette, &led_colormap) {
-                if let Some(h_led_idx) = physical_to_led_index(47) { // H key
-                    let layer0 = c.first().map(|l| {
-                        let led_info = l.get(h_led_idx as usize).map(|&pi| {
-                            let color = p.get(pi as usize).map(|(r,g,b)| format!("{:02X}{:02X}{:02X}", r, g, b)).unwrap_or("?".into());
-                            format!("H:L{}→p{}={}", h_led_idx, pi, color)
-                        }).unwrap_or(format!("H:L{}:?", h_led_idx));
-                        led_info
-                    }).unwrap_or_default();
+                if let Some(h_led_idx) = physical_to_led_index(47) {
+                    // H key
+                    let layer0 = c
+                        .first()
+                        .map(|l| {
+                            let led_info = l
+                                .get(h_led_idx as usize)
+                                .map(|&pi| {
+                                    let color = p
+                                        .get(pi as usize)
+                                        .map(|(r, g, b)| format!("{:02X}{:02X}{:02X}", r, g, b))
+                                        .unwrap_or("?".into());
+                                    format!("H:L{}→p{}={}", h_led_idx, pi, color)
+                                })
+                                .unwrap_or(format!("H:L{}:?", h_led_idx));
+                            led_info
+                        })
+                        .unwrap_or_default();
                     layer0
                 } else {
                     "H:NoLED".to_string()
@@ -1202,8 +1396,17 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
             } else {
                 String::new()
             };
-            let debug_status = format!("{} | {} | {} | {} | {}", keymap_status, led_status, h_led_info, km_samples, debug_info);
-            term.set_str(1, height as i32 - 1, &debug_status, Some(status_color), false);
+            let debug_status = format!(
+                "{} | {} | {} | {} | {}",
+                keymap_status, led_status, h_led_info, km_samples, debug_info
+            );
+            term.set_str(
+                1,
+                height as i32 - 1,
+                &debug_status,
+                Some(status_color),
+                false,
+            );
         }
 
         // Draw left half (aligned to left edge)
@@ -1268,7 +1471,7 @@ fn draw_half(
     heat: &HashMap<String, f32>,
     scheme: u8,
     keymap: Option<&Vec<Vec<u16>>>,
-    layers: &[u8],  // Active layers from highest to lowest for stacking
+    layers: &[u8], // Active layers from highest to lowest for stacking
     shifted: bool,
     led_palette: Option<&Vec<(u8, u8, u8)>>,
     led_colormap: Option<&Vec<Vec<u8>>>,
@@ -1276,8 +1479,8 @@ fn draw_half(
     for (idx, pos) in main_keys.iter().chain(thumb_keys.iter()) {
         // Use signed math to handle negative offsets (for right half stagger)
         let x = (base_x as i32 + (pos.x * scale * 3.0) as i32).max(0) as usize;
-        let y = base_y + pos.y as usize;  // No vertical scaling - rows always 1 char apart
-        let w = ((pos.w * scale * 3.0) as usize).max(1);  // 3 char label width
+        let y = base_y + pos.y as usize; // No vertical scaling - rows always 1 char apart
+        let w = ((pos.w * scale * 3.0) as usize).max(1); // 3 char label width
 
         // Get keymap index for this physical key
         let keymap_idx = PHYSICAL_TO_KEYMAP.get(*idx).copied().unwrap_or(255);
@@ -1287,7 +1490,7 @@ fn draw_half(
             if keymap_idx != 255 {
                 // Try each active layer from highest to lowest
                 let mut found_label = String::new();
-                let mut found_any_keycode = false;  // Track if we found keymap data (even transparent)
+                let mut found_any_keycode = false; // Track if we found keymap data (even transparent)
                 for &layer in layers {
                     let layer_idx = (layer as usize).min(km.len().saturating_sub(1));
                     if let Some(layer_keys) = km.get(layer_idx) {
@@ -1321,7 +1524,13 @@ fn draw_half(
         } else {
             // No keymap - use defaults with shift handling for letters
             let default = DEFAULT_LABELS.get(*idx).copied().unwrap_or("");
-            if default.len() == 1 && default.chars().next().map(|c| c.is_ascii_uppercase()).unwrap_or(false) {
+            if default.len() == 1
+                && default
+                    .chars()
+                    .next()
+                    .map(|c| c.is_ascii_uppercase())
+                    .unwrap_or(false)
+            {
                 if shifted {
                     default.to_string()
                 } else {
@@ -1339,15 +1548,19 @@ fn draw_half(
 
         // Get LED color for this key from colormap (use top active layer)
         // Uses Bazecor led_map: left 0-32, right 33-68 (reverse order per row)
-        let led_color: Option<(u8, u8, u8)> = if let (Some(palette), Some(colormap)) = (led_palette, led_colormap) {
-            if let Some(led_idx) = physical_to_led_index(*idx) {
-                // Use top active layer for LED color
-                let top_layer = layers.first().copied().unwrap_or(0) as usize;
-                if let Some(layer_colors) = colormap.get(top_layer) {
-                    if let Some(&palette_idx) = layer_colors.get(led_idx as usize) {
-                        // Palette index 255 often means "off" or "transparent"
-                        if palette_idx < 16 {
-                            palette.get(palette_idx as usize).copied()
+        let led_color: Option<(u8, u8, u8)> =
+            if let (Some(palette), Some(colormap)) = (led_palette, led_colormap) {
+                if let Some(led_idx) = physical_to_led_index(*idx) {
+                    // Use top active layer for LED color
+                    let top_layer = layers.first().copied().unwrap_or(0) as usize;
+                    if let Some(layer_colors) = colormap.get(top_layer) {
+                        if let Some(&palette_idx) = layer_colors.get(led_idx as usize) {
+                            // Palette index 255 often means "off" or "transparent"
+                            if palette_idx < 16 {
+                                palette.get(palette_idx as usize).copied()
+                            } else {
+                                None
+                            }
                         } else {
                             None
                         }
@@ -1359,10 +1572,7 @@ fn draw_half(
                 }
             } else {
                 None
-            }
-        } else {
-            None
-        };
+            };
 
         // Get heat for this key (match by uppercase label for consistency)
         let heat_key = label.to_uppercase();
@@ -1390,17 +1600,29 @@ fn draw_key(
         if heat > 0.0 {
             // Key is pressed - brighten the LED color
             let brighten = |c: u8| -> u8 { c.saturating_add(80) };
-            (Color::Rgb { r: brighten(r), g: brighten(g), b: brighten(b) }, true)
+            (
+                Color::Rgb {
+                    r: brighten(r),
+                    g: brighten(g),
+                    b: brighten(b),
+                },
+                true,
+            )
         } else {
             // Use LED color directly
             (Color::Rgb { r, g, b }, false)
         }
     } else {
         // Fallback to scheme color
-        let intensity = if heat > 0.7 { 3 }
-            else if heat > 0.3 { 2 }
-            else if heat > 0.0 { 1 }
-            else { 0 };
+        let intensity = if heat > 0.7 {
+            3
+        } else if heat > 0.3 {
+            2
+        } else if heat > 0.0 {
+            1
+        } else {
+            0
+        };
         scheme_color(scheme, intensity, heat > 0.7)
     };
 
@@ -1408,11 +1630,5 @@ fn draw_key(
     let display: String = label.chars().take(width).collect();
     let padding = width.saturating_sub(display.len()) / 2;
 
-    term.set_str(
-        (x + padding) as i32,
-        y as i32,
-        &display,
-        Some(color),
-        bold,
-    );
+    term.set_str((x + padding) as i32, y as i32, &display, Some(color), bold);
 }

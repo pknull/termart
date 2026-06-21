@@ -2,10 +2,10 @@
 
 use crate::colors::ColorState;
 use crate::terminal::Terminal;
+use chrono::{Datelike, Local, Timelike};
 use crossterm::event::KeyCode;
 use crossterm::style::Color;
 use crossterm::terminal::size;
-use chrono::{Datelike, Local, Timelike};
 use std::env;
 use std::fs;
 use std::io;
@@ -63,11 +63,21 @@ fn get_tz_abbrev_now() -> String {
 /// This is a heuristic - exact DST transitions vary by region/year
 fn is_dst_active(tz: &str, month: u32) -> bool {
     // Timezones that don't observe DST
-    let no_dst = matches!(tz,
-        "America/Phoenix" | "Pacific/Honolulu" | "US/Hawaii" | "US/Arizona" |
-        "Asia/Tokyo" | "Japan" | "Asia/Shanghai" | "Asia/Hong_Kong" |
-        "Asia/Kolkata" | "Asia/Calcutta" | "Asia/Dubai" |
-        "UTC" | "Etc/UTC"
+    let no_dst = matches!(
+        tz,
+        "America/Phoenix"
+            | "Pacific/Honolulu"
+            | "US/Hawaii"
+            | "US/Arizona"
+            | "Asia/Tokyo"
+            | "Japan"
+            | "Asia/Shanghai"
+            | "Asia/Hong_Kong"
+            | "Asia/Kolkata"
+            | "Asia/Calcutta"
+            | "Asia/Dubai"
+            | "UTC"
+            | "Etc/UTC"
     );
 
     if no_dst {
@@ -75,16 +85,14 @@ fn is_dst_active(tz: &str, month: u32) -> bool {
     }
 
     // Southern hemisphere (reversed DST seasons)
-    let southern = matches!(tz,
-        "Australia/Sydney" | "Pacific/Auckland" | "NZ"
-    );
+    let southern = matches!(tz, "Australia/Sydney" | "Pacific/Auckland" | "NZ");
 
     if southern {
         // DST roughly Oct-Mar in Southern Hemisphere
         month >= 10 || month <= 3
     } else {
         // DST roughly Mar-Nov in Northern Hemisphere
-        month >= 3 && month <= 11
+        (3..=11).contains(&month)
     }
 }
 
@@ -92,34 +100,92 @@ fn is_dst_active(tz: &str, month: u32) -> bool {
 #[inline]
 fn tz_to_abbrev(tz: &str, in_dst: bool) -> String {
     match tz {
-        "America/New_York" | "US/Eastern" => if in_dst { "EDT" } else { "EST" },
-        "America/Chicago" | "US/Central" => if in_dst { "CDT" } else { "CST" },
-        "America/Denver" | "US/Mountain" => if in_dst { "MDT" } else { "MST" },
+        "America/New_York" | "US/Eastern" => {
+            if in_dst {
+                "EDT"
+            } else {
+                "EST"
+            }
+        }
+        "America/Chicago" | "US/Central" => {
+            if in_dst {
+                "CDT"
+            } else {
+                "CST"
+            }
+        }
+        "America/Denver" | "US/Mountain" => {
+            if in_dst {
+                "MDT"
+            } else {
+                "MST"
+            }
+        }
         "America/Phoenix" | "US/Arizona" => "MST", // Arizona doesn't observe DST
-        "America/Los_Angeles" | "US/Pacific" => if in_dst { "PDT" } else { "PST" },
-        "America/Anchorage" | "US/Alaska" => if in_dst { "AKDT" } else { "AKST" },
+        "America/Los_Angeles" | "US/Pacific" => {
+            if in_dst {
+                "PDT"
+            } else {
+                "PST"
+            }
+        }
+        "America/Anchorage" | "US/Alaska" => {
+            if in_dst {
+                "AKDT"
+            } else {
+                "AKST"
+            }
+        }
         "Pacific/Honolulu" | "US/Hawaii" => "HST", // Hawaii doesn't observe DST
-        "Europe/London" | "GB" => if in_dst { "BST" } else { "GMT" },
-        "Europe/Paris" | "Europe/Berlin" | "Europe/Amsterdam" => if in_dst { "CEST" } else { "CET" },
-        "Europe/Moscow" => "MSK", // Russia doesn't observe DST
+        "Europe/London" | "GB" => {
+            if in_dst {
+                "BST"
+            } else {
+                "GMT"
+            }
+        }
+        "Europe/Paris" | "Europe/Berlin" | "Europe/Amsterdam" => {
+            if in_dst {
+                "CEST"
+            } else {
+                "CET"
+            }
+        }
+        "Europe/Moscow" => "MSK",        // Russia doesn't observe DST
         "Asia/Tokyo" | "Japan" => "JST", // Japan doesn't observe DST
         "Asia/Shanghai" | "Asia/Hong_Kong" => "HKT", // China/HK don't observe DST
         "Asia/Kolkata" | "Asia/Calcutta" => "IST", // India doesn't observe DST
-        "Asia/Dubai" => "GST", // UAE doesn't observe DST
-        "Australia/Sydney" => if in_dst { "AEDT" } else { "AEST" },
+        "Asia/Dubai" => "GST",           // UAE doesn't observe DST
+        "Australia/Sydney" => {
+            if in_dst {
+                "AEDT"
+            } else {
+                "AEST"
+            }
+        }
         "Australia/Perth" => "AWST", // Western Australia doesn't observe DST
-        "Pacific/Auckland" | "NZ" => if in_dst { "NZDT" } else { "NZST" },
+        "Pacific/Auckland" | "NZ" => {
+            if in_dst {
+                "NZDT"
+            } else {
+                "NZST"
+            }
+        }
         "UTC" | "Etc/UTC" => "UTC",
         _ => {
             // Fallback: extract uppercase letters
-            let abbrev: String = tz.split('/').next_back().unwrap_or(tz)
+            let abbrev: String = tz
+                .split('/')
+                .next_back()
+                .unwrap_or(tz)
                 .chars()
                 .filter(|c| c.is_uppercase())
                 .take(3)
                 .collect();
             return abbrev;
         }
-    }.to_string()
+    }
+    .to_string()
 }
 
 pub struct ClockConfig {
@@ -154,16 +220,16 @@ struct ClockState {
 
 // Compact 3-line digits (same as pomodoro)
 const DIGITS: [[&str; 3]; 10] = [
-    ["█▀█", "█ █", "▀▀▀"],  // 0
-    [" ▀█", "  █", "  ▀"],  // 1
-    ["▀▀█", "█▀▀", "▀▀▀"],  // 2
-    ["▀▀█", " ▀█", "▀▀▀"],  // 3
-    ["█ █", "▀▀█", "  ▀"],  // 4
-    ["█▀▀", "▀▀█", "▀▀▀"],  // 5
-    ["█▀▀", "█▀█", "▀▀▀"],  // 6
-    ["▀▀█", "  █", "  ▀"],  // 7
-    ["█▀█", "█▀█", "▀▀▀"],  // 8
-    ["█▀█", "▀▀█", "▀▀▀"],  // 9
+    ["█▀█", "█ █", "▀▀▀"], // 0
+    [" ▀█", "  █", "  ▀"], // 1
+    ["▀▀█", "█▀▀", "▀▀▀"], // 2
+    ["▀▀█", " ▀█", "▀▀▀"], // 3
+    ["█ █", "▀▀█", "  ▀"], // 4
+    ["█▀▀", "▀▀█", "▀▀▀"], // 5
+    ["█▀▀", "█▀█", "▀▀▀"], // 6
+    ["▀▀█", "  █", "  ▀"], // 7
+    ["█▀█", "█▀█", "▀▀▀"], // 8
+    ["█▀█", "▀▀█", "▀▀▀"], // 9
 ];
 
 const COLON: [&str; 3] = [" ▄ ", " ▄ ", "   "];
@@ -191,8 +257,17 @@ C  Anti-burn cycle
 
 #[inline]
 #[allow(clippy::too_many_arguments)]
-fn draw_big_time(term: &mut Terminal, cx: usize, cy: usize, time_str: &str, color: Color,
-                 state: &ClockState, show_seconds: bool, cycling: bool, cycle_digit: usize) {
+fn draw_big_time(
+    term: &mut Terminal,
+    cx: usize,
+    cy: usize,
+    time_str: &str,
+    color: Color,
+    state: &ClockState,
+    show_seconds: bool,
+    cycling: bool,
+    cycle_digit: usize,
+) {
     // Calculate total width
     let mut total_width = 0;
     let mut first = true;
@@ -214,7 +289,11 @@ fn draw_big_time(term: &mut Terminal, cx: usize, cy: usize, time_str: &str, colo
     // Special case: show cycling digits during anti-poisoning
     if cycling {
         // Show all positions with the same digit
-        let digit_count = if show_seconds || state.showing_date { 8 } else { 6 };
+        let digit_count = if show_seconds || state.showing_date {
+            8
+        } else {
+            6
+        };
         x_pos = cx.saturating_sub((digit_count * (DIGIT_WIDTH + SPACING) - SPACING) / 2);
 
         for _ in 0..digit_count {
@@ -234,7 +313,11 @@ fn draw_big_time(term: &mut Terminal, cx: usize, cy: usize, time_str: &str, colo
     // Special case: show all 8s during date/time transition
     if state.transition_frame > 0 && state.showing_date != state.was_showing_date {
         // Show 8 8s in a row during transition
-        let eight_str = if show_seconds || state.showing_date { "88888888" } else { "888888" };
+        let eight_str = if show_seconds || state.showing_date {
+            "88888888"
+        } else {
+            "888888"
+        };
         x_pos = cx.saturating_sub((eight_str.len() * (DIGIT_WIDTH + SPACING) - SPACING) / 2);
 
         for _ in eight_str.chars() {
@@ -397,20 +480,34 @@ pub fn run(mut config: ClockConfig) -> io::Result<()> {
 
         if state.showing_date {
             // Show date instead of time (MM-DD-YY format)
-            let _ = write!(time_buf, "{:02}-{:02}-{:02}",
-                now.month(), now.day(), now.year() % 100);
+            let _ = write!(
+                time_buf,
+                "{:02}-{:02}-{:02}",
+                now.month(),
+                now.day(),
+                now.year() % 100
+            );
         } else {
             // Show time
             let hour = if config.twelve_hour {
                 let h = now.hour() % 12;
-                if h == 0 { 12 } else { h }
+                if h == 0 {
+                    12
+                } else {
+                    h
+                }
             } else {
                 now.hour()
             };
 
             if config.show_seconds {
-                let _ = write!(time_buf, "{:02}:{:02}:{:02}",
-                    hour, now.minute(), now.second());
+                let _ = write!(
+                    time_buf,
+                    "{:02}:{:02}:{:02}",
+                    hour,
+                    now.minute(),
+                    now.second()
+                );
             } else {
                 let _ = write!(time_buf, "{:02}:{:02}", hour, now.minute());
             }
@@ -421,8 +518,15 @@ pub fn run(mut config: ClockConfig) -> io::Result<()> {
 
         // Format date into reused buffer with unix timestamp (MM-DD-YY format for consistency)
         date_buf.clear();
-        let _ = write!(date_buf, "{:02}-{:02}-{:02} {} {}",
-            now.month(), now.day(), now.year() % 100, tz_abbrev, now.timestamp());
+        let _ = write!(
+            date_buf,
+            "{:02}-{:02}-{:02} {} {}",
+            now.month(),
+            now.day(),
+            now.year() % 100,
+            tz_abbrev,
+            now.timestamp()
+        );
 
         // Update transition state
         if state.last_time != time_buf && !state.last_time.is_empty() {
@@ -431,29 +535,61 @@ pub fn run(mut config: ClockConfig) -> io::Result<()> {
 
         // Render
         term.clear();
-        draw_big_time(&mut term, cx, start_y, &time_buf, time_color, &state,
-                      config.show_seconds, state.cycling, state.cycle_digit);
+        draw_big_time(
+            &mut term,
+            cx,
+            start_y,
+            &time_buf,
+            time_color,
+            &state,
+            config.show_seconds,
+            state.cycling,
+            state.cycle_digit,
+        );
 
         // Show inverse information below
         if state.showing_date {
             // When showing date, display time below (with timezone and unix timestamp)
             let hour = if config.twelve_hour {
                 let h = now.hour() % 12;
-                if h == 0 { 12 } else { h }
+                if h == 0 {
+                    12
+                } else {
+                    h
+                }
             } else {
                 now.hour()
             };
 
             let time_info = if config.twelve_hour {
-                format!("{:02}:{:02}:{:02} {} {} {}", hour, now.minute(), now.second(),
-                    if now.hour() >= 12 { "PM" } else { "AM" }, tz_abbrev, now.timestamp())
+                format!(
+                    "{:02}:{:02}:{:02} {} {} {}",
+                    hour,
+                    now.minute(),
+                    now.second(),
+                    if now.hour() >= 12 { "PM" } else { "AM" },
+                    tz_abbrev,
+                    now.timestamp()
+                )
             } else {
-                format!("{:02}:{:02}:{:02} {} {}", hour, now.minute(), now.second(),
-                    tz_abbrev, now.timestamp())
+                format!(
+                    "{:02}:{:02}:{:02} {} {}",
+                    hour,
+                    now.minute(),
+                    now.second(),
+                    tz_abbrev,
+                    now.timestamp()
+                )
             };
 
             let x = cx.saturating_sub(time_info.len() / 2);
-            term.set_str(x as i32, (start_y + 4) as i32, &time_info, Some(date_color), false);
+            term.set_str(
+                x as i32,
+                (start_y + 4) as i32,
+                &time_info,
+                Some(date_color),
+                false,
+            );
         } else {
             // When showing time, display date below
             draw_date(&mut term, cx, start_y + 4, &date_buf, date_color);
@@ -471,9 +607,21 @@ pub fn run(mut config: ClockConfig) -> io::Result<()> {
             // Top border
             term.set(help_x as i32, help_y as i32, '┌', Some(Color::White), false);
             for x_off in 1..box_width - 1 {
-                term.set((help_x + x_off) as i32, help_y as i32, '─', Some(Color::White), false);
+                term.set(
+                    (help_x + x_off) as i32,
+                    help_y as i32,
+                    '─',
+                    Some(Color::White),
+                    false,
+                );
             }
-            term.set((help_x + box_width - 1) as i32, help_y as i32, '┐', Some(Color::White), false);
+            term.set(
+                (help_x + box_width - 1) as i32,
+                help_y as i32,
+                '┐',
+                Some(Color::White),
+                false,
+            );
 
             // Content rows
             for (i, line) in lines.iter().enumerate() {
@@ -482,18 +630,48 @@ pub fn run(mut config: ClockConfig) -> io::Result<()> {
                 let padding = max_width.saturating_sub(line.chars().count());
                 let padded = format!(" {}{} ", line, " ".repeat(padding));
                 for (j, ch) in padded.chars().enumerate() {
-                    term.set((help_x + 1 + j) as i32, y_off as i32, ch, Some(Color::Grey), false);
+                    term.set(
+                        (help_x + 1 + j) as i32,
+                        y_off as i32,
+                        ch,
+                        Some(Color::Grey),
+                        false,
+                    );
                 }
-                term.set((help_x + box_width - 1) as i32, y_off as i32, '│', Some(Color::White), false);
+                term.set(
+                    (help_x + box_width - 1) as i32,
+                    y_off as i32,
+                    '│',
+                    Some(Color::White),
+                    false,
+                );
             }
 
             // Bottom border
             let bottom_y = help_y + box_height - 1;
-            term.set(help_x as i32, bottom_y as i32, '└', Some(Color::White), false);
+            term.set(
+                help_x as i32,
+                bottom_y as i32,
+                '└',
+                Some(Color::White),
+                false,
+            );
             for x_off in 1..box_width - 1 {
-                term.set((help_x + x_off) as i32, bottom_y as i32, '─', Some(Color::White), false);
+                term.set(
+                    (help_x + x_off) as i32,
+                    bottom_y as i32,
+                    '─',
+                    Some(Color::White),
+                    false,
+                );
             }
-            term.set((help_x + box_width - 1) as i32, bottom_y as i32, '┘', Some(Color::White), false);
+            term.set(
+                (help_x + box_width - 1) as i32,
+                bottom_y as i32,
+                '┘',
+                Some(Color::White),
+                false,
+            );
         }
 
         term.present()?;

@@ -77,7 +77,7 @@ pub enum Protocol {
 
 /// A network connection with geolocation data
 #[derive(Clone, Debug)]
-#[allow(dead_code)]  // Some fields reserved for future detailed connection views
+#[allow(dead_code)] // Some fields reserved for future detailed connection views
 pub struct GeoConnection {
     pub remote_ip: Ipv4Addr,
     pub remote_port: u16,
@@ -88,7 +88,7 @@ pub struct GeoConnection {
     pub first_seen: Instant,
     pub last_seen: Instant,
     pub protocol: Protocol,
-    pub is_outbound: bool,  // true = we initiated, false = they connected to us
+    pub is_outbound: bool, // true = we initiated, false = they connected to us
 }
 
 // ============================================================================
@@ -142,9 +142,8 @@ struct GeoIpLookup {
 
 impl GeoIpLookup {
     fn new(db_path: Option<&Path>) -> Self {
-        let reader = Self::find_database(db_path).and_then(|path| {
-            Reader::open_readfile(&path).ok()
-        });
+        let reader =
+            Self::find_database(db_path).and_then(|path| Reader::open_readfile(&path).ok());
 
         Self { reader }
     }
@@ -294,9 +293,9 @@ impl ConnectionTracker {
             seen.insert(key);
 
             // Lookup geolocation (cached)
-            let location = self.ip_cache.get_or_insert(remote_ip, |ip| {
-                self.geo_lookup.lookup(IpAddr::V4(ip))
-            });
+            let location = self
+                .ip_cache
+                .get_or_insert(remote_ip, |ip| self.geo_lookup.lookup(IpAddr::V4(ip)));
 
             let Some((lat, lon)) = location else {
                 continue;
@@ -408,7 +407,7 @@ pub struct AggregatedLocation {
     pub lon: f32,
     pub count: usize,
     pub max_state_priority: u8,
-    pub is_outbound: bool,  // majority direction in cluster
+    pub is_outbound: bool, // majority direction in cluster
 }
 
 // ============================================================================

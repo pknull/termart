@@ -5,8 +5,8 @@ use crate::settings::Settings;
 use crate::terminal::Terminal;
 use crate::tui::mpris_client::{format_duration, MprisClient};
 use crossterm::event::{self, Event, KeyCode, KeyModifiers, MouseButton, MouseEventKind};
-use crossterm::execute;
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
+use crossterm::execute;
 use std::borrow::Cow;
 use std::io;
 use std::time::{Duration, Instant};
@@ -37,10 +37,7 @@ struct Area {
 
 impl Area {
     fn contains(&self, col: u16, row: u16) -> bool {
-        col >= self.x
-            && col < self.x + self.width
-            && row >= self.y
-            && row < self.y + self.height
+        col >= self.x && col < self.x + self.width && row >= self.y && row < self.y + self.height
     }
 }
 
@@ -128,9 +125,8 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
                                 let rel = mouse.column.saturating_sub(progress.x) as f64;
                                 let ratio = (rel / progress.width as f64).clamp(0.0, 1.0);
                                 if state.length.as_secs() > 0 {
-                                    let new_pos = Duration::from_secs_f64(
-                                        state.length.as_secs_f64() * ratio,
-                                    );
+                                    let new_pos =
+                                        Duration::from_secs_f64(state.length.as_secs_f64() * ratio);
                                     mpris.set_position(new_pos).ok();
                                     state = mpris.get_state();
                                 }
@@ -196,7 +192,14 @@ fn render_ui(
 
     // Track metadata
     draw_centered_line(term, width, start_y, &state.title, primary, primary_bold);
-    draw_centered_line(term, width, start_y + 1, &state.artists, primary, primary_bold);
+    draw_centered_line(
+        term,
+        width,
+        start_y + 1,
+        &state.artists,
+        primary,
+        primary_bold,
+    );
     draw_centered_line(term, width, start_y + 2, &state.album, muted, muted_bold);
 
     let mut areas = UiAreas::default();
@@ -218,7 +221,11 @@ fn render_ui(
 
         for i in 0..bar_width {
             let ch = if i < filled { '█' } else { '░' };
-            let (color, bold) = if i < filled { (accent, accent_bold) } else { (muted, muted_bold) };
+            let (color, bold) = if i < filled {
+                (accent, accent_bold)
+            } else {
+                (muted, muted_bold)
+            };
             term.set((bar_x + i) as i32, progress_y as i32, ch, Some(color), bold);
         }
 
@@ -281,7 +288,14 @@ fn render_ui(
     areas
 }
 
-fn draw_centered_line(term: &mut Terminal, width: u16, y: usize, text: &str, color: crossterm::style::Color, bold: bool) {
+fn draw_centered_line(
+    term: &mut Terminal,
+    width: u16,
+    y: usize,
+    text: &str,
+    color: crossterm::style::Color,
+    bold: bool,
+) {
     if y >= term.size().1 as usize {
         return;
     }
@@ -351,10 +365,11 @@ fn key_to_string(code: KeyCode, modifiers: KeyModifiers) -> Cow<'static, str> {
 
     let has_ctrl = modifiers.contains(KeyModifiers::CONTROL);
     let has_alt = modifiers.contains(KeyModifiers::ALT);
-    let has_shift = modifiers.contains(KeyModifiers::SHIFT) && match code {
-        KeyCode::Char(c) => !c.is_alphabetic(),
-        _ => true,
-    };
+    let has_shift = modifiers.contains(KeyModifiers::SHIFT)
+        && match code {
+            KeyCode::Char(c) => !c.is_alphabetic(),
+            _ => true,
+        };
 
     if !has_ctrl && !has_alt && !has_shift {
         return key_name;

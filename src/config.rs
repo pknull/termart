@@ -18,7 +18,9 @@ pub struct BonsaiConfig {
 #[derive(Clone)]
 pub enum FractalKind {
     Matrix,
-    Life { draw_char: char },
+    Life {
+        draw_char: char,
+    },
     Plasma,
     Fire,
     Rain,
@@ -27,7 +29,10 @@ pub enum FractalKind {
     Hypercube,
     Pipes,
     Donut,
-    Globe { geoip_db: Option<std::path::PathBuf>, tilt: f32 },
+    Globe {
+        geoip_db: Option<std::path::PathBuf>,
+        tilt: f32,
+    },
     Hex,
     Keyboard,
     Invaders,

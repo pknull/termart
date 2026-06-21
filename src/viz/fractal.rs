@@ -1,10 +1,9 @@
-//! Fractal visualization with braille rendering
+//! Julia fractal visualization with braille rendering
 //!
-//! Multiple fractal types with manual zoom/pan and animated Julia morphing.
+//! Animated Julia set with smooth transitions between parameter paths.
 //!
 //! Controls:
-//! - F: Cycle fractal type
-//! - P: Cycle Julia paths (Julia mode only)
+//! - P: Cycle Julia paths (smooth transition)
 //! - +/-: Zoom in/out
 //! - Arrows: Pan view
 //! - R: Reset view
@@ -13,9 +12,9 @@
 //! - Space: Pause
 //! - Q/Esc: Quit
 
+use super::{scheme_color, VizState};
 use crate::config::FractalConfig;
 use crate::terminal::Terminal;
-use super::{scheme_color, VizState};
 use crossterm::event::KeyCode;
 use std::io;
 
@@ -27,38 +26,6 @@ const DOTS_Y: usize = 4;
 // Iteration limits
 const MAX_ITER: u32 = 80;
 
-/// Fractal type
-#[derive(Clone, Copy, PartialEq)]
-enum FractalType {
-    Julia,
-    Mandelbrot,
-    BurningShip,
-    Tricorn,
-    Phoenix,
-}
-
-impl FractalType {
-    fn next(self) -> Self {
-        match self {
-            Self::Julia => Self::Mandelbrot,
-            Self::Mandelbrot => Self::BurningShip,
-            Self::BurningShip => Self::Tricorn,
-            Self::Tricorn => Self::Phoenix,
-            Self::Phoenix => Self::Julia,
-        }
-    }
-
-    fn name(self) -> &'static str {
-        match self {
-            Self::Julia => "Julia",
-            Self::Mandelbrot => "Mandelbrot",
-            Self::BurningShip => "Burning Ship",
-            Self::Tricorn => "Tricorn",
-            Self::Phoenix => "Phoenix",
-        }
-    }
-}
-
 // Julia constant paths - (center_x, center_y, radius, name)
 // The constant animates in a circle around the center point
 const JULIA_PATHS: &[(f64, f64, f64, &str)] = &[
@@ -69,23 +36,37 @@ const JULIA_PATHS: &[(f64, f64, f64, &str)] = &[
     (-0.4, 0.6, 0.05, "Rabbit Ears"),
 ];
 
+// Transition duration as fraction of cycle time
+const TRANSITION_FRACTION: f64 = 0.1; // 10% of cycle
+
+// Auto-cycle: switch paths after this many orbits
+const AUTO_CYCLE_ORBITS: u32 = 2;
+
 struct FractalState {
-    // Fractal type
-    fractal_type: FractalType,
     // Julia constant (animated)
     cx: f64,
     cy: f64,
     // Animation angle
     angle: f64,
-    // Current path
+    // Current path index
     path_idx: usize,
+    // Current interpolated path parameters (blend during transition)
+    current_px: f64,
+    current_py: f64,
+    current_r: f64,
+    // Transition state
+    from_px: f64,
+    from_py: f64,
+    from_r: f64,
+    transition_progress: f64, // 0.0 = at from, 1.0 = at target
+    // Auto-cycle state
+    auto_cycle: bool,
+    orbits_completed: u32,
     // Zoom level (1.0 = default view, higher = zoomed in)
     zoom: f64,
     // Pan offset
     pan_x: f64,
     pan_y: f64,
-    // Phoenix fractal: previous z value per pixel (stored separately)
-    phoenix_p: f64,
     // Animation speed level (1-9), each level = 10 seconds per cycle
     speed_level: u8,
 }
@@ -94,16 +75,23 @@ impl FractalState {
     fn new() -> Self {
         let (px, py, r, _) = JULIA_PATHS[0];
         Self {
-            fractal_type: FractalType::Julia,
             cx: px + r,
             cy: py,
             angle: 0.0,
             path_idx: 0,
+            current_px: px,
+            current_py: py,
+            current_r: r,
+            from_px: px,
+            from_py: py,
+            from_r: r,
+            transition_progress: 1.0, // Start fully on first path
+            auto_cycle: false,
+            orbits_completed: 0,
             zoom: 1.0,
             pan_x: 0.0,
             pan_y: 0.0,
-            phoenix_p: -0.5,  // Phoenix parameter
-            speed_level: 5,   // Default: 50 seconds per cycle
+            speed_level: 5, // Default: 50 seconds per cycle
         }
     }
 
@@ -111,15 +99,23 @@ impl FractalState {
         self.speed_level = level.clamp(1, 9);
     }
 
-    fn cycle_type(&mut self) {
-        self.fractal_type = self.fractal_type.next();
-        // Reset view when changing type
-        self.reset_view();
+    fn toggle_auto_cycle(&mut self) {
+        self.auto_cycle = !self.auto_cycle;
+        self.orbits_completed = 0;
     }
 
     fn cycle_path(&mut self) {
+        // Store current interpolated state as "from"
+        self.from_px = self.current_px;
+        self.from_py = self.current_py;
+        self.from_r = self.current_r;
+
+        // Move to next path
         self.path_idx = (self.path_idx + 1) % JULIA_PATHS.len();
-        self.angle = 0.0;
+
+        // Start transition and reset orbit counter
+        self.transition_progress = 0.0;
+        self.orbits_completed = 0;
     }
 
     fn zoom_in(&mut self) {
@@ -143,21 +139,57 @@ impl FractalState {
         self.pan_y += dy * pan_speed;
     }
 
-    fn update(&mut self, dt: f64) {
-        // Only animate for Julia mode
-        if self.fractal_type != FractalType::Julia {
-            return;
+    fn update(&mut self, dt: f64, frame_time: f64) {
+        // Update transition blend
+        if self.transition_progress < 1.0 {
+            // Transition duration scales with animation speed
+            let cycle_secs = self.speed_level as f64 * 10.0;
+            let transition_secs = cycle_secs * TRANSITION_FRACTION;
+
+            // Advance transition based on real time
+            self.transition_progress += frame_time / transition_secs;
+            if self.transition_progress > 1.0 {
+                self.transition_progress = 1.0;
+            }
+
+            // Smooth easing (ease-in-out)
+            let t = self.transition_progress;
+            let eased = t * t * (3.0 - 2.0 * t);
+
+            // Interpolate path parameters
+            let (target_px, target_py, target_r, _) = JULIA_PATHS[self.path_idx];
+            self.current_px = self.from_px + (target_px - self.from_px) * eased;
+            self.current_py = self.from_py + (target_py - self.from_py) * eased;
+            self.current_r = self.from_r + (target_r - self.from_r) * eased;
+        } else {
+            // Fully on target path
+            let (px, py, r, _) = JULIA_PATHS[self.path_idx];
+            self.current_px = px;
+            self.current_py = py;
+            self.current_r = r;
         }
 
-        // Animate the Julia constant along a circular path
-        self.angle += dt;  // dt already scaled by caller
+        // Animate the Julia constant along the current (possibly blended) path
+        self.angle += dt;
+        let mut should_cycle = false;
         if self.angle > std::f64::consts::TAU {
             self.angle -= std::f64::consts::TAU;
+            // Completed an orbit
+            if self.auto_cycle && self.transition_progress >= 1.0 {
+                self.orbits_completed += 1;
+                if self.orbits_completed >= AUTO_CYCLE_ORBITS {
+                    should_cycle = true;
+                }
+            }
         }
 
-        let (px, py, r, _) = JULIA_PATHS[self.path_idx];
-        self.cx = px + r * self.angle.cos();
-        self.cy = py + r * self.angle.sin();
+        self.cx = self.current_px + self.current_r * self.angle.cos();
+        self.cy = self.current_py + self.current_r * self.angle.sin();
+
+        // Trigger auto-cycle after updating position
+        if should_cycle {
+            self.cycle_path();
+        }
     }
 
     fn path_name(&self) -> &str {
@@ -178,71 +210,6 @@ fn julia_iter(mut zx: f64, mut zy: f64, cx: f64, cy: f64) -> u32 {
     iter
 }
 
-/// Compute Mandelbrot iteration count: z = z² + c, where c is the pixel
-#[inline]
-fn mandelbrot_iter(cx: f64, cy: f64) -> u32 {
-    let mut zx = 0.0;
-    let mut zy = 0.0;
-    let mut iter = 0u32;
-    while zx * zx + zy * zy <= 4.0 && iter < MAX_ITER {
-        let xtemp = zx * zx - zy * zy + cx;
-        zy = 2.0 * zx * zy + cy;
-        zx = xtemp;
-        iter += 1;
-    }
-    iter
-}
-
-/// Compute Burning Ship iteration: z = (|Re(z)| + i|Im(z)|)² + c
-#[inline]
-fn burning_ship_iter(cx: f64, cy: f64) -> u32 {
-    let mut zx = 0.0;
-    let mut zy = 0.0;
-    let mut iter = 0u32;
-    while zx * zx + zy * zy <= 4.0 && iter < MAX_ITER {
-        let xtemp = zx * zx - zy * zy + cx;
-        zy = 2.0 * zx.abs() * zy.abs() + cy;
-        zx = xtemp;
-        iter += 1;
-    }
-    iter
-}
-
-/// Compute Tricorn (Mandelbar) iteration: z = conj(z)² + c
-#[inline]
-fn tricorn_iter(cx: f64, cy: f64) -> u32 {
-    let mut zx = 0.0;
-    let mut zy = 0.0;
-    let mut iter = 0u32;
-    while zx * zx + zy * zy <= 4.0 && iter < MAX_ITER {
-        let xtemp = zx * zx - zy * zy + cx;
-        zy = -2.0 * zx * zy + cy;  // Note the negative for conjugate
-        zx = xtemp;
-        iter += 1;
-    }
-    iter
-}
-
-/// Compute Phoenix iteration: z = z² + Re(c) + p*z_prev, Im(c) added to imaginary
-#[inline]
-fn phoenix_iter(cx: f64, cy: f64, p: f64) -> u32 {
-    let mut zx = 0.0;
-    let mut zy = 0.0;
-    let mut prev_zx = 0.0;
-    let mut prev_zy = 0.0;
-    let mut iter = 0u32;
-    while zx * zx + zy * zy <= 4.0 && iter < MAX_ITER {
-        let xtemp = zx * zx - zy * zy + cx + p * prev_zx;
-        let ytemp = 2.0 * zx * zy + cy + p * prev_zy;
-        prev_zx = zx;
-        prev_zy = zy;
-        zx = xtemp;
-        zy = ytemp;
-        iter += 1;
-    }
-    iter
-}
-
 /// Encode 2x4 dot pattern to braille character
 fn encode_braille(dots: &[[bool; DOTS_X]; DOTS_Y]) -> char {
     // Braille dot positions:
@@ -251,24 +218,40 @@ fn encode_braille(dots: &[[bool; DOTS_X]; DOTS_Y]) -> char {
     // 2 5
     // 6 7
     let mut code: u32 = 0;
-    if dots[0][0] { code |= 1 << 0; }
-    if dots[1][0] { code |= 1 << 1; }
-    if dots[2][0] { code |= 1 << 2; }
-    if dots[0][1] { code |= 1 << 3; }
-    if dots[1][1] { code |= 1 << 4; }
-    if dots[2][1] { code |= 1 << 5; }
-    if dots[3][0] { code |= 1 << 6; }
-    if dots[3][1] { code |= 1 << 7; }
+    if dots[0][0] {
+        code |= 1 << 0;
+    }
+    if dots[1][0] {
+        code |= 1 << 1;
+    }
+    if dots[2][0] {
+        code |= 1 << 2;
+    }
+    if dots[0][1] {
+        code |= 1 << 3;
+    }
+    if dots[1][1] {
+        code |= 1 << 4;
+    }
+    if dots[2][1] {
+        code |= 1 << 5;
+    }
+    if dots[3][0] {
+        code |= 1 << 6;
+    }
+    if dots[3][1] {
+        code |= 1 << 7;
+    }
 
     char::from_u32(BRAILLE_BASE + code).unwrap_or(' ')
 }
 
 /// Help text
 const HELP: &str = "\
-FRACTALS
+JULIA FRACTAL
 ─────────────────
-F      Cycle type
 P      Cycle path
+C      Auto-cycle
 +/-    Zoom in/out
 Arrows Pan view
 R      Reset view
@@ -308,8 +291,8 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
                 break;
             }
             match code {
-                KeyCode::Char('f') | KeyCode::Char('F') => fractal.cycle_type(),
                 KeyCode::Char('p') | KeyCode::Char('P') => fractal.cycle_path(),
+                KeyCode::Char('c') | KeyCode::Char('C') => fractal.toggle_auto_cycle(),
                 KeyCode::Char('+') | KeyCode::Char('=') => fractal.zoom_in(),
                 KeyCode::Char('-') | KeyCode::Char('_') => fractal.zoom_out(),
                 KeyCode::Char('r') | KeyCode::Char('R') => fractal.reset_view(),
@@ -319,7 +302,9 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
                 KeyCode::Right => fractal.pan(1.0, 0.0),
                 // Speed: 1-9 = 10-90 seconds per cycle
                 KeyCode::Char(c) if c.is_ascii_digit() && c != '0' => {
-                    fractal.set_speed(c.to_digit(10).unwrap() as u8);
+                    if let Some(d) = c.to_digit(10) {
+                        fractal.set_speed(d as u8);
+                    }
                 }
                 _ => {}
             }
@@ -338,8 +323,8 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
 
         // Compute fractal - viewport with zoom and pan
         let aspect = (grid_w as f64) / (grid_h as f64) * 2.0;
-        let base_scale = 3.5;  // Base scale showing full fractal
-        let scale = base_scale / fractal.zoom;  // Higher zoom = smaller scale
+        let base_scale = 3.5; // Base scale showing full fractal
+        let scale = base_scale / fractal.zoom; // Higher zoom = smaller scale
 
         for gy in 0..grid_h {
             for gx in 0..grid_w {
@@ -347,13 +332,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
                 let x = (gx as f64 / grid_w as f64 - 0.5) * scale * aspect + fractal.pan_x;
                 let y = (gy as f64 / grid_h as f64 - 0.5) * scale + fractal.pan_y;
 
-                iter_grid[gy][gx] = match fractal.fractal_type {
-                    FractalType::Julia => julia_iter(x, y, fractal.cx, fractal.cy),
-                    FractalType::Mandelbrot => mandelbrot_iter(x, y),
-                    FractalType::BurningShip => burning_ship_iter(x, y),
-                    FractalType::Tricorn => tricorn_iter(x, y),
-                    FractalType::Phoenix => phoenix_iter(x, y, fractal.phoenix_p),
-                };
+                iter_grid[gy][gx] = julia_iter(x, y, fractal.cx, fractal.cy);
             }
         }
 
@@ -383,7 +362,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
 
                 // Color based on iteration count
                 let intensity = if max_iter >= MAX_ITER {
-                    0  // Inside the set
+                    0 // Inside the set
                 } else {
                     ((max_iter as f32 / MAX_ITER as f32) * 3.0).min(3.0) as u8
                 };
@@ -393,12 +372,9 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
             }
         }
 
-        // Show fractal name (and path for Julia)
-        let name = if fractal.fractal_type == FractalType::Julia {
-            format!(" {} - {} ", fractal.fractal_type.name(), fractal.path_name())
-        } else {
-            format!(" {} ", fractal.fractal_type.name())
-        };
+        // Show path name (with auto-cycle indicator)
+        let auto_indicator = if fractal.auto_cycle { " ⟳" } else { "" };
+        let name = format!(" Julia - {}{} ", fractal.path_name(), auto_indicator);
         let name_x = (width as usize).saturating_sub(name.len()) / 2;
         for (i, c) in name.chars().enumerate() {
             let (color, _) = scheme_color(state.color_scheme(), 3, true);
@@ -410,12 +386,12 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
 
         // Fixed frame rate, speed level determines cycle time
         // Speed N = N * 10 seconds per full cycle
-        const FRAME_TIME: f32 = 0.033;  // ~30 FPS
+        const FRAME_TIME: f64 = 0.033; // ~30 FPS
         let cycle_seconds = fractal.speed_level as f64 * 10.0;
-        let anim_speed = std::f64::consts::TAU / (cycle_seconds * 30.0);  // radians per frame
-        fractal.update(anim_speed);
+        let anim_speed = std::f64::consts::TAU / (cycle_seconds * 30.0); // radians per frame
+        fractal.update(anim_speed, FRAME_TIME);
 
-        term.sleep(FRAME_TIME);
+        term.sleep(FRAME_TIME as f32);
     }
 
     Ok(())

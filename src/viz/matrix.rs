@@ -10,16 +10,13 @@ use std::io;
 // Half-width katakana (U+FF66-FF9D) is what the original Matrix used
 const CHARS: &[char] = &[
     // Half-width katakana
-    'ｦ', 'ｧ', 'ｨ', 'ｩ', 'ｪ', 'ｫ', 'ｬ', 'ｭ', 'ｮ', 'ｯ', 'ｰ', 'ｱ', 'ｲ', 'ｳ', 'ｴ', 'ｵ',
-    'ｶ', 'ｷ', 'ｸ', 'ｹ', 'ｺ', 'ｻ', 'ｼ', 'ｽ', 'ｾ', 'ｿ', 'ﾀ', 'ﾁ', 'ﾂ', 'ﾃ', 'ﾄ', 'ﾅ',
-    'ﾆ', 'ﾇ', 'ﾈ', 'ﾉ', 'ﾊ', 'ﾋ', 'ﾌ', 'ﾍ', 'ﾎ', 'ﾏ', 'ﾐ', 'ﾑ', 'ﾒ', 'ﾓ', 'ﾔ', 'ﾕ',
-    'ﾖ', 'ﾗ', 'ﾘ', 'ﾙ', 'ﾚ', 'ﾛ', 'ﾜ', 'ﾝ',
+    'ｦ', 'ｧ', 'ｨ', 'ｩ', 'ｪ', 'ｫ', 'ｬ', 'ｭ', 'ｮ', 'ｯ', 'ｰ', 'ｱ', 'ｲ', 'ｳ', 'ｴ', 'ｵ', 'ｶ', 'ｷ', 'ｸ',
+    'ｹ', 'ｺ', 'ｻ', 'ｼ', 'ｽ', 'ｾ', 'ｿ', 'ﾀ', 'ﾁ', 'ﾂ', 'ﾃ', 'ﾄ', 'ﾅ', 'ﾆ', 'ﾇ', 'ﾈ', 'ﾉ', 'ﾊ', 'ﾋ',
+    'ﾌ', 'ﾍ', 'ﾎ', 'ﾏ', 'ﾐ', 'ﾑ', 'ﾒ', 'ﾓ', 'ﾔ', 'ﾕ', 'ﾖ', 'ﾗ', 'ﾘ', 'ﾙ', 'ﾚ', 'ﾛ', 'ﾜ', 'ﾝ',
     // Digits
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-    // Latin
-    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
-    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-    // Symbols
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', // Latin
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+    'T', 'U', 'V', 'W', 'X', 'Y', 'Z', // Symbols
     '@', '#', '$', '%', '&', '*', '+', '-', '=', '<', '>', '?',
 ];
 const CHARS_LEN: usize = CHARS.len();
@@ -35,14 +32,14 @@ const UPDATE_RATE_MIN: u8 = 2;
 const UPDATE_RATE_MAX: u8 = 5;
 
 // Glitch effect: random character corruption
-const GLITCH_PROBABILITY: f64 = 0.02;  // Per-character per-frame chance to glitch
+const GLITCH_PROBABILITY: f64 = 0.02; // Per-character per-frame chance to glitch
 
 struct Drop {
     y: i32,
-    update_rate: u8,  // Frame-skip threshold (1=fastest, 4=slowest)
+    update_rate: u8, // Frame-skip threshold (1=fastest, 4=slowest)
     length: usize,
     chars: [char; 25],
-    glitch_char: Option<(usize, char)>,  // (position in trail, replacement char)
+    glitch_char: Option<(usize, char)>, // (position in trail, replacement char)
 }
 
 impl Drop {
@@ -97,9 +94,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
     let mut w = init_w as usize;
     let mut h = init_h as usize;
 
-    let mut drops: Vec<Drop> = (0..w)
-        .map(|_| Drop::new(rng, h))
-        .collect();
+    let mut drops: Vec<Drop> = (0..w).map(|_| Drop::new(rng, h)).collect();
 
     let mut frame: u8 = 0;
 
@@ -137,15 +132,28 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
                 if y >= 0 && y < h as i32 {
                     let char_idx = (y as usize + x) % drop.chars.len();
                     // Check for glitch override at this position
-                    let is_glitched = drop.glitch_char.map_or(false, |(pos, _)| i == pos);
+                    let is_glitched = drop.glitch_char.is_some_and(|(pos, _)| i == pos);
                     let ch = if let Some((glitch_pos, glitch_ch)) = drop.glitch_char {
-                        if i == glitch_pos { glitch_ch } else { drop.chars[char_idx] }
+                        if i == glitch_pos {
+                            glitch_ch
+                        } else {
+                            drop.chars[char_idx]
+                        }
                     } else {
                         drop.chars[char_idx]
                     };
                     // Glitched chars get lead color (intensity 3) to make them pop
-                    let intensity = if is_glitched || i == 0 { 3 } else if i < 3 { 2 } else if i < half_len { 1 } else { 0 };
-                    let (color, bold) = scheme_color(state.color_scheme(), intensity, is_glitched || i < 3);
+                    let intensity = if is_glitched || i == 0 {
+                        3
+                    } else if i < 3 {
+                        2
+                    } else if i < half_len {
+                        1
+                    } else {
+                        0
+                    };
+                    let (color, bold) =
+                        scheme_color(state.color_scheme(), intensity, is_glitched || i < 3);
                     term.set(x as i32, y, ch, Some(color), bold);
                 }
             }
@@ -161,7 +169,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
             drop.maybe_glitch(rng);
 
             // Column advances only when frame counter is divisible by its update_rate
-            if frame % drop.update_rate == 0 {
+            if frame.is_multiple_of(drop.update_rate) {
                 drop.y += 1;
                 if drop.y - drop.length as i32 >= h as i32 {
                     drop.reset(rng);

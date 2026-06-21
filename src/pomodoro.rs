@@ -1,4 +1,4 @@
-use crate::colors::{ColorState, scheme_color};
+use crate::colors::{scheme_color, ColorState};
 use crate::help::render_help_overlay;
 use crate::terminal::Terminal;
 use crossterm::event::KeyCode;
@@ -39,9 +39,9 @@ impl PomodoroPhase {
 
     fn intensity(&self) -> u8 {
         match self {
-            PomodoroPhase::Work => 3,        // Brightest - active work
-            PomodoroPhase::ShortBreak => 2,  // Medium - short rest
-            PomodoroPhase::LongBreak => 1,   // Dimmer - long rest
+            PomodoroPhase::Work => 3,       // Brightest - active work
+            PomodoroPhase::ShortBreak => 2, // Medium - short rest
+            PomodoroPhase::LongBreak => 1,  // Dimmer - long rest
         }
     }
 }
@@ -110,7 +110,10 @@ impl PomodoroState {
         match self.phase {
             PomodoroPhase::Work => {
                 self.pomodoros_completed += 1;
-                if self.pomodoros_completed % config.pomodoros_until_long == 0 {
+                if self
+                    .pomodoros_completed
+                    .is_multiple_of(config.pomodoros_until_long)
+                {
                     self.phase = PomodoroPhase::LongBreak;
                     self.total_secs = config.long_break_mins * 60;
                 } else {
@@ -142,16 +145,16 @@ impl PomodoroState {
 
 // Compact 3-line digits
 const DIGITS: [[&str; 3]; 10] = [
-    ["█▀█", "█ █", "▀▀▀"],  // 0
-    [" ▀█", "  █", "  ▀"],  // 1
-    ["▀▀█", "█▀▀", "▀▀▀"],  // 2
-    ["▀▀█", " ▀█", "▀▀▀"],  // 3
-    ["█ █", "▀▀█", "  ▀"],  // 4
-    ["█▀▀", "▀▀█", "▀▀▀"],  // 5
-    ["█▀▀", "█▀█", "▀▀▀"],  // 6
-    ["▀▀█", "  █", "  ▀"],  // 7
-    ["█▀█", "█▀█", "▀▀▀"],  // 8
-    ["█▀█", "▀▀█", "▀▀▀"],  // 9
+    ["█▀█", "█ █", "▀▀▀"], // 0
+    [" ▀█", "  █", "  ▀"], // 1
+    ["▀▀█", "█▀▀", "▀▀▀"], // 2
+    ["▀▀█", " ▀█", "▀▀▀"], // 3
+    ["█ █", "▀▀█", "  ▀"], // 4
+    ["█▀▀", "▀▀█", "▀▀▀"], // 5
+    ["█▀▀", "█▀█", "▀▀▀"], // 6
+    ["▀▀█", "  █", "  ▀"], // 7
+    ["█▀█", "█▀█", "▀▀▀"], // 8
+    ["█▀█", "▀▀█", "▀▀▀"], // 9
 ];
 
 const COLON: [&str; 3] = ["   ", " ● ", " ● "];
@@ -182,7 +185,9 @@ fn draw_tomato(term: &mut Terminal, cx: usize, cy: usize, progress: f32, color: 
         // Draw outline
         for (j, ch) in line.chars().enumerate() {
             let x = start_x + j;
-            if ch == ' ' { continue; }
+            if ch == ' ' {
+                continue;
+            }
 
             let c = if i == 0 { Color::Green } else { Color::DarkRed };
             term.set(x as i32, y as i32, ch, Some(c), false);
@@ -238,7 +243,14 @@ fn draw_big_time(term: &mut Terminal, cx: usize, cy: usize, mins: u32, secs: u32
     }
 }
 
-fn draw_progress_bar(term: &mut Terminal, x: usize, y: usize, width: usize, progress: f32, color: Color) {
+fn draw_progress_bar(
+    term: &mut Terminal,
+    x: usize,
+    y: usize,
+    width: usize,
+    progress: f32,
+    color: Color,
+) {
     const METER_CHAR: char = '■';
     let filled = (progress * width as f32) as usize;
 
@@ -248,7 +260,14 @@ fn draw_progress_bar(term: &mut Terminal, x: usize, y: usize, width: usize, prog
     }
 }
 
-fn draw_pomodoro_dots(term: &mut Terminal, cx: usize, y: usize, completed: u32, until_long: u32, colors: &ColorState) {
+fn draw_pomodoro_dots(
+    term: &mut Terminal,
+    cx: usize,
+    y: usize,
+    completed: u32,
+    until_long: u32,
+    colors: &ColorState,
+) {
     let total = until_long;
     let dot_spacing = 3;
     let total_width = (total as usize - 1) * dot_spacing + total as usize;
@@ -329,7 +348,7 @@ pub fn run(config: PomodoroConfig) -> io::Result<()> {
 
         // Determine display color: gray when paused, flash when done, otherwise phase color
         let done = state.remaining_secs == 0;
-        let flash_on = done && (state.flash_frame / 3) % 2 == 0;
+        let flash_on = done && (state.flash_frame / 3).is_multiple_of(2);
         let phase_color = if state.paused {
             Color::DarkGrey
         } else if flash_on {
@@ -358,11 +377,25 @@ pub fn run(config: PomodoroConfig) -> io::Result<()> {
         // Progress bar
         let bar_width = 30.min(w - 4);
         let bar_x = cx.saturating_sub(bar_width / 2);
-        draw_progress_bar(&mut term, bar_x, y, bar_width, state.progress(), phase_color);
+        draw_progress_bar(
+            &mut term,
+            bar_x,
+            y,
+            bar_width,
+            state.progress(),
+            phase_color,
+        );
         y += 1;
 
         // Pomodoro dots
-        draw_pomodoro_dots(&mut term, cx, y, state.pomodoros_completed, config.pomodoros_until_long, &colors);
+        draw_pomodoro_dots(
+            &mut term,
+            cx,
+            y,
+            state.pomodoros_completed,
+            config.pomodoros_until_long,
+            &colors,
+        );
 
         if show_help {
             let (w, h) = term.size();

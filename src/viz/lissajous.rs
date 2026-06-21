@@ -10,9 +10,9 @@
 //! - H: Cycle through harmonic presets
 //! - Q/Esc: Quit
 
+use super::{scheme_color, VizState};
 use crate::config::FractalConfig;
 use crate::terminal::Terminal;
-use super::{scheme_color, VizState};
 use crossterm::event::KeyCode;
 use crossterm::style::Color;
 use std::io;
@@ -47,9 +47,9 @@ struct TrailPoint {
 }
 
 struct LissajousCurve {
-    a: f32,           // x frequency
-    b: f32,           // y frequency
-    delta: f32,       // phase shift (animated)
+    a: f32,     // x frequency
+    b: f32,     // y frequency
+    delta: f32, // phase shift (animated)
     trail: Vec<TrailPoint>,
 }
 
@@ -105,14 +105,30 @@ fn encode_braille(dots: &[[bool; DOTS_X]; DOTS_Y]) -> char {
     // 2 5
     // 6 7
     let mut code: u32 = 0;
-    if dots[0][0] { code |= 1 << 0; }
-    if dots[1][0] { code |= 1 << 1; }
-    if dots[2][0] { code |= 1 << 2; }
-    if dots[0][1] { code |= 1 << 3; }
-    if dots[1][1] { code |= 1 << 4; }
-    if dots[2][1] { code |= 1 << 5; }
-    if dots[3][0] { code |= 1 << 6; }
-    if dots[3][1] { code |= 1 << 7; }
+    if dots[0][0] {
+        code |= 1 << 0;
+    }
+    if dots[1][0] {
+        code |= 1 << 1;
+    }
+    if dots[2][0] {
+        code |= 1 << 2;
+    }
+    if dots[0][1] {
+        code |= 1 << 3;
+    }
+    if dots[1][1] {
+        code |= 1 << 4;
+    }
+    if dots[2][1] {
+        code |= 1 << 5;
+    }
+    if dots[3][0] {
+        code |= 1 << 6;
+    }
+    if dots[3][1] {
+        code |= 1 << 7;
+    }
 
     char::from_u32(BRAILLE_BASE + code).unwrap_or(' ')
 }
@@ -235,7 +251,8 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
                 if max_intensity > 0.1 {
                     let ch = encode_braille(&dots);
                     let level = ((max_intensity * 4.0) as u8).min(3);
-                    let (color, bold) = scheme_color(state.color_scheme(), level, max_intensity > 0.7);
+                    let (color, bold) =
+                        scheme_color(state.color_scheme(), level, max_intensity > 0.7);
                     term.set(char_x as i32, char_y as i32, ch, Some(color), bold);
                 }
             }

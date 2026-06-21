@@ -1,8 +1,8 @@
 //! Hexagon grid with wave/pulse animations (eDEX-UI style)
 
+use super::{scheme_color, VizState};
 use crate::config::FractalConfig;
 use crate::terminal::Terminal;
-use super::{scheme_color, VizState};
 use crossterm::style::Color;
 use rand::prelude::*;
 use std::io;
@@ -36,7 +36,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
     // Using flat-top hexagons:  / \
     //                          |   |
     //                           \ /
-    let hex_width: usize = 6;  // Width of one hex cell
+    let hex_width: usize = 6; // Width of one hex cell
     let hex_height: usize = 3; // Height of one hex cell
 
     let mut pulses: Vec<Pulse> = Vec::new();
@@ -102,17 +102,22 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
         let rows = (h / hex_height) + 3;
 
         // Helper to safely set a character (clips to screen bounds)
-        let set_if_visible = |term: &mut Terminal, x: i32, y: i32, ch: char, color: Color, bold: bool| {
-            if x >= 0 && x < w as i32 && y >= 0 && y < h as i32 {
-                term.set(x, y, ch, Some(color), bold);
-            }
-        };
+        let set_if_visible =
+            |term: &mut Terminal, x: i32, y: i32, ch: char, color: Color, bold: bool| {
+                if x >= 0 && x < w as i32 && y >= 0 && y < h as i32 {
+                    term.set(x, y, ch, Some(color), bold);
+                }
+            };
 
         // Draw hexagon grid - start before screen to catch partial hexes
         for row in 0..rows {
             for col in 0..cols {
                 // Offset every other row for honeycomb pattern
-                let x_offset: i32 = if row % 2 == 1 { (hex_width / 2) as i32 } else { 0 };
+                let x_offset: i32 = if row % 2 == 1 {
+                    (hex_width / 2) as i32
+                } else {
+                    0
+                };
                 let cx = (col as i32 * hex_width as i32) + x_offset - (hex_width as i32);
                 let cy = (row as i32 * hex_height as i32) - (hex_height as i32);
 
@@ -140,7 +145,8 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
                     // Ring wave effect
                     let ring_dist = (dist - ring_pos).abs();
                     if ring_dist < 5.0 && dist < pulse.max_radius {
-                        let ring_intensity = (1.0 - ring_dist / 5.0) * (1.0 - dist / pulse.max_radius);
+                        let ring_intensity =
+                            (1.0 - ring_dist / 5.0) * (1.0 - dist / pulse.max_radius);
                         intensity += ring_intensity * 1.5;
                     }
                 }

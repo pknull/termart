@@ -1,8 +1,8 @@
 use crate::terminal::Terminal;
 use crossterm::cursor::MoveTo;
 use crossterm::event::KeyCode;
-use crossterm::style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor};
 use crossterm::queue;
+use crossterm::style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor};
 use std::io::{self, stdout, Write};
 
 /// Render a centered help overlay box with the provided text.
@@ -24,11 +24,29 @@ pub fn render_help_overlay(term: &mut Terminal, width: u16, height: u16, help_te
     let text_color = Color::Grey;
 
     // Draw top border: ┌─────┐
-    term.set(start_x as i32, start_y as i32, '┌', Some(border_color), false);
+    term.set(
+        start_x as i32,
+        start_y as i32,
+        '┌',
+        Some(border_color),
+        false,
+    );
     for x in 1..box_width - 1 {
-        term.set((start_x + x) as i32, start_y as i32, '─', Some(border_color), false);
+        term.set(
+            (start_x + x) as i32,
+            start_y as i32,
+            '─',
+            Some(border_color),
+            false,
+        );
     }
-    term.set((start_x + box_width - 1) as i32, start_y as i32, '┐', Some(border_color), false);
+    term.set(
+        (start_x + box_width - 1) as i32,
+        start_y as i32,
+        '┐',
+        Some(border_color),
+        false,
+    );
 
     // Draw content rows with side borders
     for (i, line) in lines.iter().enumerate() {
@@ -38,19 +56,49 @@ pub fn render_help_overlay(term: &mut Terminal, width: u16, height: u16, help_te
         let padding = max_width.saturating_sub(line.chars().count());
         let padded = format!(" {}{} ", line, " ".repeat(padding));
         for (j, ch) in padded.chars().enumerate() {
-            term.set((start_x + 1 + j) as i32, y as i32, ch, Some(text_color), false);
+            term.set(
+                (start_x + 1 + j) as i32,
+                y as i32,
+                ch,
+                Some(text_color),
+                false,
+            );
         }
 
-        term.set((start_x + box_width - 1) as i32, y as i32, '│', Some(border_color), false);
+        term.set(
+            (start_x + box_width - 1) as i32,
+            y as i32,
+            '│',
+            Some(border_color),
+            false,
+        );
     }
 
     // Draw bottom border: └─────┘
     let bottom_y = start_y + box_height - 1;
-    term.set(start_x as i32, bottom_y as i32, '└', Some(border_color), false);
+    term.set(
+        start_x as i32,
+        bottom_y as i32,
+        '└',
+        Some(border_color),
+        false,
+    );
     for x in 1..box_width - 1 {
-        term.set((start_x + x) as i32, bottom_y as i32, '─', Some(border_color), false);
+        term.set(
+            (start_x + x) as i32,
+            bottom_y as i32,
+            '─',
+            Some(border_color),
+            false,
+        );
     }
-    term.set((start_x + box_width - 1) as i32, bottom_y as i32, '┘', Some(border_color), false);
+    term.set(
+        (start_x + box_width - 1) as i32,
+        bottom_y as i32,
+        '┘',
+        Some(border_color),
+        false,
+    );
 }
 
 /// Show a modal help overlay without modifying the back buffer.
@@ -93,16 +141,34 @@ fn render_help_overlay_direct(width: u16, height: u16, help_text: &str) -> io::R
     let mut out = stdout();
 
     // Top border
-    queue!(out, MoveTo(start_x as u16, start_y as u16), SetForegroundColor(border_color), Print('┌'))?;
+    queue!(
+        out,
+        MoveTo(start_x as u16, start_y as u16),
+        SetForegroundColor(border_color),
+        Print('┌')
+    )?;
     for x in 1..box_width - 1 {
-        queue!(out, MoveTo((start_x + x) as u16, start_y as u16), Print('─'))?;
+        queue!(
+            out,
+            MoveTo((start_x + x) as u16, start_y as u16),
+            Print('─')
+        )?;
     }
-    queue!(out, MoveTo((start_x + box_width - 1) as u16, start_y as u16), Print('┐'))?;
+    queue!(
+        out,
+        MoveTo((start_x + box_width - 1) as u16, start_y as u16),
+        Print('┐')
+    )?;
 
     // Content rows
     for (i, line) in lines.iter().enumerate() {
         let y = start_y + 1 + i;
-        queue!(out, MoveTo(start_x as u16, y as u16), SetForegroundColor(border_color), Print('│'))?;
+        queue!(
+            out,
+            MoveTo(start_x as u16, y as u16),
+            SetForegroundColor(border_color),
+            Print('│')
+        )?;
 
         let padding = max_width.saturating_sub(line.chars().count());
         let padded = format!(" {}{} ", line, " ".repeat(padding));
@@ -110,16 +176,33 @@ fn render_help_overlay_direct(width: u16, height: u16, help_text: &str) -> io::R
         queue!(out, MoveTo((start_x + 1) as u16, y as u16), Print(padded))?;
 
         queue!(out, SetForegroundColor(border_color))?;
-        queue!(out, MoveTo((start_x + box_width - 1) as u16, y as u16), Print('│'))?;
+        queue!(
+            out,
+            MoveTo((start_x + box_width - 1) as u16, y as u16),
+            Print('│')
+        )?;
     }
 
     // Bottom border
     let bottom_y = start_y + box_height - 1;
-    queue!(out, MoveTo(start_x as u16, bottom_y as u16), SetForegroundColor(border_color), Print('└'))?;
+    queue!(
+        out,
+        MoveTo(start_x as u16, bottom_y as u16),
+        SetForegroundColor(border_color),
+        Print('└')
+    )?;
     for x in 1..box_width - 1 {
-        queue!(out, MoveTo((start_x + x) as u16, bottom_y as u16), Print('─'))?;
+        queue!(
+            out,
+            MoveTo((start_x + x) as u16, bottom_y as u16),
+            Print('─')
+        )?;
     }
-    queue!(out, MoveTo((start_x + box_width - 1) as u16, bottom_y as u16), Print('┘'))?;
+    queue!(
+        out,
+        MoveTo((start_x + box_width - 1) as u16, bottom_y as u16),
+        Print('┘')
+    )?;
 
     queue!(out, SetAttribute(Attribute::Reset), ResetColor)?;
     out.flush()?;

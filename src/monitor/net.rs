@@ -1,11 +1,11 @@
 use crate::colors::ColorState;
 use crate::help::render_help_overlay;
-use crate::terminal::Terminal;
-use crate::monitor::{build_help, MonitorConfig, MonitorState};
 use crate::monitor::layout::{
-    Rect, draw_meter_btop_scheme, format_rate, format_bytes,
-    cpu_gradient_color_scheme, text_color_scheme, muted_color_scheme, header_color_scheme,
+    cpu_gradient_color_scheme, draw_meter_btop_scheme, format_bytes, format_rate,
+    header_color_scheme, muted_color_scheme, text_color_scheme, Rect,
 };
+use crate::monitor::{build_help, MonitorConfig, MonitorState};
+use crate::terminal::Terminal;
 use crossterm::style::Color;
 use crossterm::terminal::size;
 use std::fs;
@@ -65,21 +65,20 @@ impl NetMonitor {
             }
 
             // Find existing interface or create new
-            let mut interface = if let Some(existing) = self.interfaces.iter()
-                .find(|i| i.name == name)
-                .cloned() {
-                existing
-            } else {
-                InterfaceStats {
-                    name: name.to_string(),
-                    rx_bytes: 0,
-                    tx_bytes: 0,
-                    rx_rate: 0.0,
-                    tx_rate: 0.0,
-                    prev_rx_bytes: rx_bytes, // Start with current for new interfaces
-                    prev_tx_bytes: tx_bytes,
-                }
-            };
+            let mut interface =
+                if let Some(existing) = self.interfaces.iter().find(|i| i.name == name).cloned() {
+                    existing
+                } else {
+                    InterfaceStats {
+                        name: name.to_string(),
+                        rx_bytes: 0,
+                        tx_bytes: 0,
+                        rx_rate: 0.0,
+                        tx_rate: 0.0,
+                        prev_rx_bytes: rx_bytes, // Start with current for new interfaces
+                        prev_tx_bytes: tx_bytes,
+                    }
+                };
 
             // Calculate rates
             let rx_diff = rx_bytes.saturating_sub(interface.prev_rx_bytes);
@@ -134,13 +133,27 @@ impl NetMonitor {
         self.render_at(term, 0, 0, w, h, colors);
     }
 
-    fn render_at(&self, term: &mut Terminal, x: i32, y: i32, w: usize, h: usize, colors: &ColorState) {
-        if h < 4 || w < 30 { return; }
+    fn render_at(
+        &self,
+        term: &mut Terminal,
+        x: i32,
+        y: i32,
+        w: usize,
+        h: usize,
+        colors: &ColorState,
+    ) {
+        if h < 4 || w < 30 {
+            return;
+        }
 
         // Calculate panel height: Title(1) + Download(1) + Upload(1) + blank + per-interface lines
         let num_ifaces = self.interfaces.len().min(4); // Show max 4 interfaces
-        // Each interface: name(1) + download(1) + upload(1) = 3 lines
-        let panel_height = 3 + if num_ifaces > 1 { 1 + num_ifaces * 3 } else { 0 };
+                                                       // Each interface: name(1) + download(1) + upload(1) = 3 lines
+        let panel_height = 3 + if num_ifaces > 1 {
+            1 + num_ifaces * 3
+        } else {
+            0
+        };
 
         // Content width: cap at 80 chars for readability
         let content_w = w.min(80);
@@ -155,19 +168,51 @@ impl NetMonitor {
         // Title with total transferred
         let total_rx: u64 = self.interfaces.iter().map(|i| i.rx_bytes).sum();
         let total_tx: u64 = self.interfaces.iter().map(|i| i.tx_bytes).sum();
-        term.set_str(start_x, cy, "Network", Some(text_color_scheme(colors)), true);
+        term.set_str(
+            start_x,
+            cy,
+            "Network",
+            Some(text_color_scheme(colors)),
+            true,
+        );
         let totals_str = format!("↓{} ↑{}", format_bytes(total_rx), format_bytes(total_tx));
-        term.set_str(start_x + content_w as i32 - totals_str.len() as i32, cy, &totals_str, Some(muted_color_scheme(colors)), false);
+        term.set_str(
+            start_x + content_w as i32 - totals_str.len() as i32,
+            cy,
+            &totals_str,
+            Some(muted_color_scheme(colors)),
+            false,
+        );
         cy += 1;
 
         // Download rate
         let rx_pct = ((self.total_rx_rate / self.peak_rx_rate) * 100.0).min(100.0) as f32;
-        self.draw_net_row(term, start_x, cy, content_w, "Download", rx_pct, self.total_rx_rate, colors, true);
+        self.draw_net_row(
+            term,
+            start_x,
+            cy,
+            content_w,
+            "Download",
+            rx_pct,
+            self.total_rx_rate,
+            colors,
+            true,
+        );
         cy += 1;
 
         // Upload rate
         let tx_pct = ((self.total_tx_rate / self.peak_tx_rate) * 100.0).min(100.0) as f32;
-        self.draw_net_row(term, start_x, cy, content_w, "Upload", tx_pct, self.total_tx_rate, colors, false);
+        self.draw_net_row(
+            term,
+            start_x,
+            cy,
+            content_w,
+            "Upload",
+            tx_pct,
+            self.total_tx_rate,
+            colors,
+            false,
+        );
         cy += 1;
 
         // Per-interface breakdown (if multiple interfaces)
@@ -176,24 +221,61 @@ impl NetMonitor {
 
             for iface in self.interfaces.iter().take(4) {
                 // Interface name as label
-                term.set_str(start_x, cy, &iface.name, Some(header_color_scheme(colors)), false);
+                term.set_str(
+                    start_x,
+                    cy,
+                    &iface.name,
+                    Some(header_color_scheme(colors)),
+                    false,
+                );
                 cy += 1;
 
                 // Download for this interface
                 let iface_rx_pct = ((iface.rx_rate / self.peak_rx_rate) * 100.0).min(100.0) as f32;
-                self.draw_net_row(term, start_x, cy, content_w, "  ↓", iface_rx_pct, iface.rx_rate, colors, true);
+                self.draw_net_row(
+                    term,
+                    start_x,
+                    cy,
+                    content_w,
+                    "  ↓",
+                    iface_rx_pct,
+                    iface.rx_rate,
+                    colors,
+                    true,
+                );
                 cy += 1;
 
                 // Upload for this interface
                 let iface_tx_pct = ((iface.tx_rate / self.peak_tx_rate) * 100.0).min(100.0) as f32;
-                self.draw_net_row(term, start_x, cy, content_w, "  ↑", iface_tx_pct, iface.tx_rate, colors, false);
+                self.draw_net_row(
+                    term,
+                    start_x,
+                    cy,
+                    content_w,
+                    "  ↑",
+                    iface_tx_pct,
+                    iface.tx_rate,
+                    colors,
+                    false,
+                );
                 cy += 1;
             }
         }
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn draw_net_row(&self, term: &mut Terminal, x: i32, y: i32, width: usize, label: &str, percent: f32, rate: f64, colors: &ColorState, is_download: bool) {
+    fn draw_net_row(
+        &self,
+        term: &mut Terminal,
+        x: i32,
+        y: i32,
+        width: usize,
+        label: &str,
+        percent: f32,
+        rate: f64,
+        colors: &ColorState,
+        is_download: bool,
+    ) {
         // Layout: Label(10) + Meter(dynamic) + Pct(6) + Rate(12)
         let label_w = 10;
         let pct_w = 6;
@@ -209,7 +291,11 @@ impl NetMonitor {
 
         // Color based on scheme
         let color = if colors.is_mono() {
-            if is_download { Color::Green } else { Color::Magenta }
+            if is_download {
+                Color::Green
+            } else {
+                Color::Magenta
+            }
         } else {
             cpu_gradient_color_scheme(percent, colors)
         };
@@ -228,7 +314,13 @@ impl NetMonitor {
         // Rate right-aligned
         let rate_str = format_rate(rate);
         let rate_pad = rate_w.saturating_sub(rate_str.len());
-        term.set_str(pos + rate_pad as i32, y, &rate_str, Some(muted_color_scheme(colors)), false);
+        term.set_str(
+            pos + rate_pad as i32,
+            y,
+            &rate_str,
+            Some(muted_color_scheme(colors)),
+            false,
+        );
     }
 }
 

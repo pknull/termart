@@ -1,4 +1,4 @@
-use crate::colors::{ColorState, scheme_color};
+use crate::colors::{scheme_color, ColorState};
 use crate::terminal::Terminal;
 use crossterm::style::Color;
 
@@ -12,10 +12,18 @@ pub struct Rect {
 
 impl Rect {
     /// Inner content area (excluding borders)
-    pub fn inner_x(&self) -> i32 { self.x + 1 }
-    pub fn inner_y(&self) -> i32 { self.y + 1 }
-    pub fn inner_width(&self) -> u16 { self.width.saturating_sub(2) }
-    pub fn inner_height(&self) -> u16 { self.height.saturating_sub(2) }
+    pub fn inner_x(&self) -> i32 {
+        self.x + 1
+    }
+    pub fn inner_y(&self) -> i32 {
+        self.y + 1
+    }
+    pub fn inner_width(&self) -> u16 {
+        self.width.saturating_sub(2)
+    }
+    pub fn inner_height(&self) -> u16 {
+        self.height.saturating_sub(2)
+    }
 }
 
 /// Draw a btop-style meter with color scheme support
@@ -27,7 +35,9 @@ pub fn draw_meter_btop_scheme(
     percent: f32,
     colors: &ColorState,
 ) {
-    if width == 0 { return; }
+    if width == 0 {
+        return;
+    }
 
     const METER_CHAR: char = '■';
     let filled = ((percent / 100.0) * width as f32) as usize;
@@ -38,7 +48,13 @@ pub fn draw_meter_btop_scheme(
             let grad = cpu_gradient_color_scheme(pos_pct.min(percent), colors);
             term.set(x + i as i32, y, METER_CHAR, Some(grad), false);
         } else {
-            term.set(x + i as i32, y, METER_CHAR, Some(muted_color_scheme(colors)), false);
+            term.set(
+                x + i as i32,
+                y,
+                METER_CHAR,
+                Some(muted_color_scheme(colors)),
+                false,
+            );
         }
     }
 }
@@ -55,7 +71,9 @@ pub fn draw_core_graphs_scheme(
     temps: &[Option<u32>],
     colors: &ColorState,
 ) {
-    if usage.is_empty() || height == 0 { return; }
+    if usage.is_empty() || height == 0 {
+        return;
+    }
 
     let cores = usage.len();
     let has_temps = !temps.is_empty();
@@ -76,10 +94,18 @@ pub fn draw_core_graphs_scheme(
     for row in 0..actual_rows {
         for col in 0..cols {
             let idx = col * rows_per_col + row;
-            if idx >= cores { continue; }
+            if idx >= cores {
+                continue;
+            }
 
             if col > 0 {
-                term.set(x + col_width as i32, y + row as i32, '│', Some(muted_color_scheme(colors)), false);
+                term.set(
+                    x + col_width as i32,
+                    y + row as i32,
+                    '│',
+                    Some(muted_color_scheme(colors)),
+                    false,
+                );
             }
 
             let cx = x + (col * (col_width + 1)) as i32;
@@ -97,7 +123,13 @@ pub fn draw_core_graphs_scheme(
             }
 
             let pct_str = format!("{:4.0}%", pct);
-            term.set_str(pos, cy, &pct_str, Some(cpu_gradient_color_scheme(pct, colors)), false);
+            term.set_str(
+                pos,
+                cy,
+                &pct_str,
+                Some(cpu_gradient_color_scheme(pct, colors)),
+                false,
+            );
             pos += 5;
 
             if temp_meter_w > 0 {
@@ -112,7 +144,13 @@ pub fn draw_core_graphs_scheme(
             if let Some(Some(temp)) = temps.get(idx) {
                 let temp_str = format!("  {:2}°C", temp);
                 let temp_pct = ((*temp as f32 - 20.0) / 80.0 * 100.0).clamp(0.0, 100.0);
-                term.set_str(pos, cy, &temp_str, Some(temp_gradient_color_scheme(temp_pct, colors)), false);
+                term.set_str(
+                    pos,
+                    cy,
+                    &temp_str,
+                    Some(temp_gradient_color_scheme(temp_pct, colors)),
+                    false,
+                );
             }
         }
     }
@@ -159,11 +197,11 @@ pub fn format_rate(bytes_per_sec: f64) -> String {
 /// Maps percentage 0-100 to ANSI bright green (10) → bright yellow (11) → bright red (9)
 pub fn cpu_gradient_color(percent: f32) -> Color {
     if percent >= 80.0 {
-        Color::AnsiValue(9)   // Bright red (ANSI 91)
+        Color::AnsiValue(9) // Bright red (ANSI 91)
     } else if percent >= 50.0 {
-        Color::AnsiValue(11)  // Bright yellow (ANSI 93)
+        Color::AnsiValue(11) // Bright yellow (ANSI 93)
     } else {
-        Color::AnsiValue(10)  // Bright green (ANSI 92)
+        Color::AnsiValue(10) // Bright green (ANSI 92)
     }
 }
 
@@ -171,11 +209,11 @@ pub fn cpu_gradient_color(percent: f32) -> Color {
 /// Maps temperature percentage to ANSI bright blue (12) → bright magenta (13)
 pub fn temp_gradient_color(percent: f32) -> Color {
     if percent >= 70.0 {
-        Color::AnsiValue(13)  // Bright magenta (ANSI 95)
+        Color::AnsiValue(13) // Bright magenta (ANSI 95)
     } else if percent >= 40.0 {
-        Color::AnsiValue(14)  // Bright cyan (ANSI 96) - mid point
+        Color::AnsiValue(14) // Bright cyan (ANSI 96) - mid point
     } else {
-        Color::AnsiValue(12)  // Bright blue (ANSI 94)
+        Color::AnsiValue(12) // Bright blue (ANSI 94)
     }
 }
 
@@ -186,7 +224,13 @@ pub fn cpu_gradient_color_scheme(percent: f32, colors: &ColorState) -> Color {
     if colors.is_mono() {
         cpu_gradient_color(percent)
     } else {
-        let intensity = if percent >= 80.0 { 3 } else if percent >= 50.0 { 2 } else { 1 };
+        let intensity = if percent >= 80.0 {
+            3
+        } else if percent >= 50.0 {
+            2
+        } else {
+            1
+        };
         scheme_color(colors.scheme, intensity, percent >= 80.0).0
     }
 }
@@ -196,7 +240,13 @@ pub fn temp_gradient_color_scheme(percent: f32, colors: &ColorState) -> Color {
     if colors.is_mono() {
         temp_gradient_color(percent)
     } else {
-        let intensity = if percent >= 70.0 { 3 } else if percent >= 40.0 { 2 } else { 1 };
+        let intensity = if percent >= 70.0 {
+            3
+        } else if percent >= 40.0 {
+            2
+        } else {
+            1
+        };
         scheme_color(colors.scheme, intensity, percent >= 70.0).0
     }
 }
@@ -227,5 +277,3 @@ pub fn header_color_scheme(colors: &ColorState) -> Color {
         scheme_color(colors.scheme, 3, true).0
     }
 }
-
-

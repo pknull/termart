@@ -1,8 +1,8 @@
 //! Rotating 3D donut (torus) effect visualization
 
+use super::{scheme_color, VizState};
 use crate::config::FractalConfig;
 use crate::terminal::Terminal;
-use super::{scheme_color, VizState};
 use std::io;
 
 // Torus geometry constants
@@ -103,8 +103,10 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
             let circle_y_sin_a = circle_y * sin_a;
 
             for (cos_phi, sin_phi) in &phi_trig {
-                let x = circle_x * (cos_b * cos_phi + sin_a_sin_b * sin_phi) - circle_y * cos_a_sin_b;
-                let y = circle_x * (sin_b * cos_phi - sin_a_cos_b * sin_phi) + circle_y_cos_a * cos_b;
+                let x =
+                    circle_x * (cos_b * cos_phi + sin_a_sin_b * sin_phi) - circle_y * cos_a_sin_b;
+                let y =
+                    circle_x * (sin_b * cos_phi - sin_a_cos_b * sin_phi) + circle_y_cos_a * cos_b;
                 let z = k2 + cos_a * circle_x * sin_phi + circle_y_sin_a;
                 let ooz = 1.0 / z.max(MIN_Z_DIVISOR);
 
@@ -118,8 +120,10 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
                     if ooz > z_buffer[py][px] {
                         z_buffer[py][px] = ooz;
 
-                        let l = cos_phi * cos_theta * sin_b - cos_a * cos_theta * sin_phi
-                            - sin_a * sin_theta + cos_b * (cos_a * sin_theta - cos_theta * sin_a * sin_phi);
+                        let l = cos_phi * cos_theta * sin_b
+                            - cos_a * cos_theta * sin_phi
+                            - sin_a * sin_theta
+                            + cos_b * (cos_a * sin_theta - cos_theta * sin_a * sin_phi);
                         lum_buffer[py][px] = l;
 
                         let lum_idx = if l > 0.0 {

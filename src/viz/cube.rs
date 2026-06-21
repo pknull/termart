@@ -1,8 +1,8 @@
 //! 3D rotating cube effect using braille characters
 
+use super::{scheme_color, VizState};
 use crate::config::FractalConfig;
 use crate::terminal::Terminal;
-use super::{scheme_color, VizState};
 use std::io;
 
 // Cube rendering constants
@@ -20,14 +20,29 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     let mut time: f32 = 0.0;
 
     let vertices: [(f32, f32, f32); 8] = [
-        (-1.0, -1.0, -1.0), ( 1.0, -1.0, -1.0), ( 1.0,  1.0, -1.0), (-1.0,  1.0, -1.0),
-        (-1.0, -1.0,  1.0), ( 1.0, -1.0,  1.0), ( 1.0,  1.0,  1.0), (-1.0,  1.0,  1.0),
+        (-1.0, -1.0, -1.0),
+        (1.0, -1.0, -1.0),
+        (1.0, 1.0, -1.0),
+        (-1.0, 1.0, -1.0),
+        (-1.0, -1.0, 1.0),
+        (1.0, -1.0, 1.0),
+        (1.0, 1.0, 1.0),
+        (-1.0, 1.0, 1.0),
     ];
 
     let edges: [(usize, usize); 12] = [
-        (0, 1), (1, 2), (2, 3), (3, 0),
-        (4, 5), (5, 6), (6, 7), (7, 4),
-        (0, 4), (1, 5), (2, 6), (3, 7),
+        (0, 1),
+        (1, 2),
+        (2, 3),
+        (3, 0),
+        (4, 5),
+        (5, 6),
+        (6, 7),
+        (7, 4),
+        (0, 4),
+        (1, 5),
+        (2, 6),
+        (3, 7),
     ];
 
     let (init_w, init_h) = term.size();
@@ -147,14 +162,30 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
                 let bx = cx * 2;
 
                 let mut dots: u8 = 0;
-                if braille_dots[by][bx] { dots |= 0x01; }
-                if braille_dots[by + 1][bx] { dots |= 0x02; }
-                if braille_dots[by + 2][bx] { dots |= 0x04; }
-                if braille_dots[by][bx + 1] { dots |= 0x08; }
-                if braille_dots[by + 1][bx + 1] { dots |= 0x10; }
-                if braille_dots[by + 2][bx + 1] { dots |= 0x20; }
-                if braille_dots[by + 3][bx] { dots |= 0x40; }
-                if braille_dots[by + 3][bx + 1] { dots |= 0x80; }
+                if braille_dots[by][bx] {
+                    dots |= 0x01;
+                }
+                if braille_dots[by + 1][bx] {
+                    dots |= 0x02;
+                }
+                if braille_dots[by + 2][bx] {
+                    dots |= 0x04;
+                }
+                if braille_dots[by][bx + 1] {
+                    dots |= 0x08;
+                }
+                if braille_dots[by + 1][bx + 1] {
+                    dots |= 0x10;
+                }
+                if braille_dots[by + 2][bx + 1] {
+                    dots |= 0x20;
+                }
+                if braille_dots[by + 3][bx] {
+                    dots |= 0x40;
+                }
+                if braille_dots[by + 3][bx + 1] {
+                    dots |= 0x80;
+                }
 
                 if dots > 0 {
                     let ch = char::from_u32(0x2800 + dots as u32).unwrap_or(' ');

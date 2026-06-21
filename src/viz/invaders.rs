@@ -11,25 +11,25 @@ use std::io;
 // Game constants
 const ALIEN_GRID_ROWS: usize = 5;
 const ALIEN_SPACING: usize = 3;
-const BASE_ALIEN_COUNT: usize = 55;          // Reference count for speed scaling
-const ALIEN_SPEED_SCALE: f32 = 0.02;         // Speed increase per alien killed
-const ALIEN_FIRE_PROBABILITY: f64 = 0.4;     // Probability alien fires each interval
-const INITIAL_ALIEN_SPEED: f32 = 0.5;        // Starting alien movement interval
-const MIN_ALIEN_SPEED: f32 = 0.2;            // Fastest alien movement interval
-const WAVE_SPEED_MULTIPLIER: f32 = 0.9;      // Speed multiplier per wave
-const INITIAL_PLAYER_LIVES: u8 = 3;          // Starting lives
+const BASE_ALIEN_COUNT: usize = 55; // Reference count for speed scaling
+const ALIEN_SPEED_SCALE: f32 = 0.02; // Speed increase per alien killed
+const ALIEN_FIRE_PROBABILITY: f64 = 0.4; // Probability alien fires each interval
+const INITIAL_ALIEN_SPEED: f32 = 0.5; // Starting alien movement interval
+const MIN_ALIEN_SPEED: f32 = 0.2; // Fastest alien movement interval
+const WAVE_SPEED_MULTIPLIER: f32 = 0.9; // Speed multiplier per wave
+const INITIAL_PLAYER_LIVES: u8 = 3; // Starting lives
 
 // Animated alien characters (frame 0, frame 1) for each type
 const ALIEN_CHARS: [[char; 2]; 3] = [
-    ['◆', '◇'],  // Type 0 (top row) - diamond
-    ['▼', '▽'],  // Type 1 (middle rows) - triangle
-    ['●', '○'],  // Type 2 (bottom rows) - circle
+    ['◆', '◇'], // Type 0 (top row) - diamond
+    ['▼', '▽'], // Type 1 (middle rows) - triangle
+    ['●', '○'], // Type 2 (bottom rows) - circle
 ];
 
 const PLAYER_CHAR: char = '▲';
 const BULLET_CHAR: char = '│';
 const ALIEN_BULLET_CHAR: char = '╪';
-const SHIELD_CHARS: [char; 3] = ['█', '▓', '░'];  // Health 3, 2, 1
+const SHIELD_CHARS: [char; 3] = ['█', '▓', '░']; // Health 3, 2, 1
 
 // Speeds (units per frame)
 const PLAYER_MOVE: f32 = 1.5;
@@ -131,7 +131,13 @@ fn create_aliens(w: usize, _h: usize) -> Vec<Alien> {
 
     let mut aliens = Vec::with_capacity(ALIEN_GRID_ROWS * cols);
     for row in 0..ALIEN_GRID_ROWS {
-        let alien_type = if row == 0 { 0 } else if row < 3 { 1 } else { 2 };
+        let alien_type = if row == 0 {
+            0
+        } else if row < 3 {
+            1
+        } else {
+            2
+        };
         for col in 0..cols {
             aliens.push(Alien {
                 x: start_x + col as f32 * ALIEN_SPACING as f32,
@@ -163,8 +169,16 @@ fn create_shields(w: usize, h: usize) -> Vec<Shield> {
             });
         }
         // Bottom row with gap
-        shields.push(Shield { x: base_x, y: shield_y + 1, health: 3 });
-        shields.push(Shield { x: base_x + 3, y: shield_y + 1, health: 3 });
+        shields.push(Shield {
+            x: base_x,
+            y: shield_y + 1,
+            health: 3,
+        });
+        shields.push(Shield {
+            x: base_x + 3,
+            y: shield_y + 1,
+            health: 3,
+        });
     }
     shields
 }
@@ -200,7 +214,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
     };
 
     let mut player_fire_cooldown = 0.0f32;
-    let mut auto_play = true;  // Start with AI on
+    let mut auto_play = true; // Start with AI on
     let mut game_over_timer = 0.0f32;
 
     // Reusable string buffers
@@ -225,7 +239,6 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
             alien_cols = calc_alien_cols(w);
             player_y_i32 = (h - 2) as i32;
         }
-
 
         // Handle input
         if let Some((code, mods)) = term.check_key()? {
@@ -275,7 +288,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
 
             // Predict where each bullet will land when it reaches player's row
             // Track both impact position AND urgency (how soon)
-            let mut danger_zones: Vec<(f32, f32)> = Vec::new();  // (x, urgency)
+            let mut danger_zones: Vec<(f32, f32)> = Vec::new(); // (x, urgency)
 
             for bullet in &game.bullets {
                 if bullet.active && !bullet.is_player && bullet.y < player_y {
@@ -327,7 +340,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
                     // alien_dir > 0 means moving right, < 0 means moving left
                     let alien_coming_toward = (dx > 0.0 && game.alien_dir < 0.0)  // alien is right, moving left (toward us)
                                            || (dx < 0.0 && game.alien_dir > 0.0)  // alien is left, moving right (toward us)
-                                           || dx.abs() < 3.0;  // already above us
+                                           || dx.abs() < 3.0; // already above us
 
                     // Only target aliens coming toward us (or very close)
                     if alien_coming_toward {
@@ -357,7 +370,11 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
                 // Aliens moving right (dir > 0) → go right to meet them at the edge
                 // Aliens moving left (dir < 0) → go left to meet them
                 // Find the leading edge of the alien formation
-                let mut leading_x = if game.alien_dir > 0.0 { 0.0f32 } else { w as f32 };
+                let mut leading_x = if game.alien_dir > 0.0 {
+                    0.0f32
+                } else {
+                    w as f32
+                };
                 for alien in &game.aliens {
                     if alien.alive
                         && ((game.alien_dir > 0.0 && alien.x > leading_x)
@@ -445,7 +462,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
 
             if game.alien_move_timer >= move_interval {
                 game.alien_move_timer = 0.0;
-                game.alien_frame = 1 - game.alien_frame;  // Toggle animation
+                game.alien_frame = 1 - game.alien_frame; // Toggle animation
 
                 // Check edges
                 let mut hit_edge = false;
@@ -510,7 +527,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
                     for alien in &mut game.aliens {
                         if alien.alive {
                             let hit = (bullet.x - alien.x).abs() < 1.5
-                                   && (bullet.y - alien.y).abs() < 1.0;
+                                && (bullet.y - alien.y).abs() < 1.0;
                             if hit {
                                 alien.alive = false;
                                 bullet.active = false;
@@ -549,8 +566,8 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
             let player_y = (h - 2) as f32;
             for bullet in &mut game.bullets {
                 if bullet.active && !bullet.is_player {
-                    let hit = (bullet.x - game.player_x).abs() < 1.0
-                           && (bullet.y - player_y).abs() < 1.0;
+                    let hit =
+                        (bullet.x - game.player_x).abs() < 1.0 && (bullet.y - player_y).abs() < 1.0;
                     if hit {
                         bullet.active = false;
                         game.player_lives -= 1;
@@ -586,15 +603,27 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
         score_buf.clear();
         use std::fmt::Write;
         if auto_play {
-            let _ = write!(score_buf, "SCORE:{:05} HI:{:05} WAVE:{} [AI] LIVES:",
-                game.score, game.high_score, game.wave);
+            let _ = write!(
+                score_buf,
+                "SCORE:{:05} HI:{:05} WAVE:{} [AI] LIVES:",
+                game.score, game.high_score, game.wave
+            );
         } else {
-            let _ = write!(score_buf, "SCORE:{:05} HI:{:05} WAVE:{} LIVES:",
-                game.score, game.high_score, game.wave);
+            let _ = write!(
+                score_buf,
+                "SCORE:{:05} HI:{:05} WAVE:{} LIVES:",
+                game.score, game.high_score, game.wave
+            );
         }
         term.set_str(0, 0, &score_buf, Some(Color::White), false);
         for i in 0..game.player_lives {
-            term.set((score_buf.len() + i as usize) as i32, 0, '♥', Some(Color::Red), true);
+            term.set(
+                (score_buf.len() + i as usize) as i32,
+                0,
+                '♥',
+                Some(Color::Red),
+                true,
+            );
         }
 
         // Draw aliens with animation (alternating rows)
@@ -640,7 +669,13 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
         }
 
         // Draw player
-        term.set(game.player_x as i32, player_y_i32, PLAYER_CHAR, Some(Color::Green), true);
+        term.set(
+            game.player_x as i32,
+            player_y_i32,
+            PLAYER_CHAR,
+            Some(Color::Green),
+            true,
+        );
 
         // Draw game over or controls
         if game.game_state == GameState::GameOver {
@@ -648,9 +683,19 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
             term.set_str(x, h as i32 / 2, MSG_GAME_OVER, Some(Color::Red), true);
             if auto_play {
                 restart_buf.clear();
-                let _ = write!(restart_buf, "Restarting in {:.0}s...", AUTO_RESTART_DELAY - game_over_timer);
+                let _ = write!(
+                    restart_buf,
+                    "Restarting in {:.0}s...",
+                    AUTO_RESTART_DELAY - game_over_timer
+                );
                 let x2 = (w as i32 - restart_buf.len() as i32) / 2;
-                term.set_str(x2, h as i32 / 2 + 1, &restart_buf, Some(Color::DarkGrey), false);
+                term.set_str(
+                    x2,
+                    h as i32 / 2 + 1,
+                    &restart_buf,
+                    Some(Color::DarkGrey),
+                    false,
+                );
             }
         } else {
             term.set_str(0, (h - 1) as i32, HINT, Some(Color::DarkGrey), false);

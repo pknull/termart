@@ -174,7 +174,9 @@ impl MprisClient {
             title: extract_title(&metadata),
             artists: extract_artists(&metadata),
             album: extract_album(&metadata),
-            art_url: metadata.as_ref().and_then(|m| m.art_url().map(String::from)),
+            art_url: metadata
+                .as_ref()
+                .and_then(|m| m.art_url().map(String::from)),
             status,
             position,
             length,

@@ -3,7 +3,10 @@ use crate::config::FractalConfig;
 use crate::help::render_help_overlay;
 use crate::settings::Settings;
 use crate::terminal::Terminal;
-use crate::tui::cover::{calc_cover_dimensions, render_cover_halfblock, render_cover_halfblock_palette, resized_rgba, CoverArtLoader, CoverRenderCache};
+use crate::tui::cover::{
+    calc_cover_dimensions, render_cover_halfblock, render_cover_halfblock_palette, resized_rgba,
+    CoverArtLoader, CoverRenderCache,
+};
 use crate::tui::mpris_client::MprisClient;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use std::io;
@@ -75,7 +78,12 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
 
         let (width, height) = term.size();
         if !state.connected {
-            render_centered_text(term, width, height, "No MPRIS-compatible player found.\nPress 'r' to reconnect.");
+            render_centered_text(
+                term,
+                width,
+                height,
+                "No MPRIS-compatible player found.\nPress 'r' to reconnect.",
+            );
         } else if let Some(ref url) = state.art_url {
             cover_loader.request(url);
             if let Some(img) = cover_loader.get(url) {
@@ -86,7 +94,15 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
                     if colors.scheme == 7 {
                         render_cover_halfblock(term, rgba, x_off, 0, art_w, art_h_cells);
                     } else {
-                        render_cover_halfblock_palette(term, rgba, x_off, 0, art_w, art_h_cells, colors.scheme);
+                        render_cover_halfblock_palette(
+                            term,
+                            rgba,
+                            x_off,
+                            0,
+                            art_w,
+                            art_h_cells,
+                            colors.scheme,
+                        );
                     }
                 }
             } else {
