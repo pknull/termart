@@ -1,6 +1,8 @@
 use crate::colors::ColorState;
 use crate::help::render_help_overlay;
-use crate::monitor::layout::{draw_meter_btop_scheme, text_color_scheme, muted_color_scheme, header_color_scheme};
+use crate::monitor::layout::{
+    draw_meter_btop_scheme, header_color_scheme, muted_color_scheme, text_color_scheme,
+};
 use crate::terminal::Terminal;
 use aes::Aes256;
 use std::io::Write;
@@ -14,7 +16,7 @@ macro_rules! debug_log {
         }
     }};
 }
-use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit, block_padding::Pkcs7};
+use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 use base64::Engine;
 use crossterm::event::KeyCode;
 use crossterm::terminal::size;
@@ -30,20 +32,36 @@ r      Refresh/reconnect
  q/Esc  Quit
  ?      Close help
 ───────────────────────";
-use rsa::{RsaPrivateKey, RsaPublicKey, Oaep, pkcs8::DecodePrivateKey, pkcs8::DecodePublicKey, pkcs8::EncodePublicKey, traits::PublicKeyParts};
 use rsa::pkcs1v15::SigningKey;
-use rsa::signature::{Signer, SignatureEncoding};
+use rsa::signature::{SignatureEncoding, Signer};
+use rsa::{
+    pkcs8::DecodePrivateKey, pkcs8::DecodePublicKey, pkcs8::EncodePublicKey,
+    traits::PublicKeyParts, Oaep, RsaPrivateKey, RsaPublicKey,
+};
 use serde::Deserialize;
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::net::TcpStream;
 use std::time::{Duration, Instant};
-use tungstenite::{connect, Message, WebSocket, stream::MaybeTlsStream};
+use tungstenite::{connect, stream::MaybeTlsStream, Message, WebSocket};
 
 type Aes256CbcDec = cbc::Decryptor<Aes256>;
 type Aes256CbcEnc = cbc::Encryptor<Aes256>;
+
+/// Result of a SID-authenticated machine fetch. Lets callers fall back to
+/// email/password auth only on a genuine SID rejection (HTTP 401/403) — not on
+/// transient network/parse errors or an account that simply has no machines,
+/// which would otherwise leak the password via the login URL on every refresh.
+enum SidFetch {
+    /// SID accepted (machine list fetched, possibly empty).
+    Ok,
+    /// SID rejected by the server (401/403); falling back to creds is valid.
+    AuthRejected,
+    /// Transient failure (network/parse); keep using the SID, do not fall back.
+    Transient,
+}
 
 fn derive_fah_password(email: &str, passphrase: &str) -> String {
     // Step 1: salt = SHA256(email.lower())
@@ -70,7 +88,9 @@ fn base64url_encode(data: &[u8]) -> String {
 }
 
 fn base64url_decode(s: &str) -> Option<Vec<u8>> {
-    base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(s).ok()
+    base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(s)
+        .ok()
 }
 
 // Standard base64 encoding (FAH uses standard base64 for pubkey)
@@ -79,19 +99,21 @@ fn base64_std_encode(data: &[u8]) -> String {
 }
 
 fn chrono_now_iso() -> String {
-    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
+    chrono::Utc::now()
+        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+        .to_string()
 }
 
 // Remote WebSocket message types
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]  // Serde struct - fields needed for deserialization
+#[allow(dead_code)] // Serde struct - fields needed for deserialization
 struct WsLoginPayload {
     time: String,
     session: String,
 }
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]  // Serde struct - fields needed for deserialization
+#[allow(dead_code)] // Serde struct - fields needed for deserialization
 struct WsConnectMessage {
     #[serde(rename = "type")]
     msg_type: String,
@@ -100,7 +122,7 @@ struct WsConnectMessage {
 }
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]  // Serde struct - fields needed for deserialization
+#[allow(dead_code)] // Serde struct - fields needed for deserialization
 struct WsEncryptedMessage {
     #[serde(rename = "type")]
     msg_type: String,
@@ -125,7 +147,7 @@ struct RemoteWsUnit {
 }
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]  // Serde struct - fields needed for deserialization
+#[allow(dead_code)] // Serde struct - fields needed for deserialization
 struct RemoteWsInfo {
     version: Option<String>,
     os: Option<String>,
@@ -133,7 +155,7 @@ struct RemoteWsInfo {
 }
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]  // Serde struct - fields needed for deserialization
+#[allow(dead_code)] // Serde struct - fields needed for deserialization
 struct RemoteWsContent {
     info: Option<RemoteWsInfo>,
     units: Option<Vec<RemoteWsUnit>>,
@@ -142,11 +164,11 @@ struct RemoteWsContent {
 #[derive(Debug, Deserialize)]
 struct RemoteWsState {
     session: Option<String>,
-    content: serde_json::Value,  // Can be object (full state) or array (delta update)
+    content: serde_json::Value, // Can be object (full state) or array (delta update)
 }
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]  // Serde struct - fields needed for deserialization
+#[allow(dead_code)] // Serde struct - fields needed for deserialization
 struct FahTeam {
     team: u64,
     name: String,
@@ -154,7 +176,7 @@ struct FahTeam {
 }
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]  // Serde struct - fields needed for deserialization
+#[allow(dead_code)] // Serde struct - fields needed for deserialization
 struct FahUser {
     name: String,
     id: u64,
@@ -166,9 +188,9 @@ struct FahUser {
 }
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]  // Serde struct - fields needed for deserialization
+#[allow(dead_code)] // Serde struct - fields needed for deserialization
 struct FahMachine {
-    id: String,  // API returns string ID like "KxgiNjSY..."
+    id: String, // API returns string ID like "KxgiNjSY..."
     name: Option<String>,
     #[serde(default)]
     cpus: u32,
@@ -178,13 +200,13 @@ struct FahMachine {
 
 #[derive(Debug, Deserialize)]
 struct FahAccount {
-    id: Option<String>,  // Account ID
+    id: Option<String>, // Account ID
     machines: Option<Vec<FahMachine>>,
 }
 
 // WebSocket JSON structures for local FAH client
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]  // Serde struct - fields needed for deserialization
+#[allow(dead_code)] // Serde struct - fields needed for deserialization
 struct WsInfo {
     mach_name: Option<String>,
     cpu_brand: Option<String>,
@@ -228,7 +250,7 @@ pub struct FahData {
 }
 
 #[derive(Default)]
-#[allow(dead_code)]  // Some fields reserved for future detailed views
+#[allow(dead_code)] // Some fields reserved for future detailed views
 pub struct LocalWorkUnit {
     pub project: u32,
     pub run: u32,
@@ -263,12 +285,12 @@ pub struct FahDisplay {
     local_hostname: String,
     local_ws: Option<WebSocket<MaybeTlsStream<TcpStream>>>,
     remote_ws: Option<WebSocket<MaybeTlsStream<TcpStream>>>,
-    remote_ws_keys: HashMap<String, Vec<u8>>,  // machine_id -> AES key
-    remote_ws_session: Option<String>,  // WebSocket session ID for encrypted messages
+    remote_ws_keys: HashMap<String, Vec<u8>>, // machine_id -> AES key
+    remote_ws_session: Option<String>,        // WebSocket session ID for encrypted messages
     private_key: Option<RsaPrivateKey>,
-    remote_machine_ids: Vec<String>,  // Machine IDs from account API
+    remote_machine_ids: Vec<String>, // Machine IDs from account API
     session_cookie: Option<String>,  // REST API session cookie for WebSocket auth
-    fah_sid: Option<String>,  // Persistent session ID from browser localStorage
+    fah_sid: Option<String>,         // Persistent session ID from browser localStorage
     error: Option<String>,
 }
 
@@ -330,7 +352,11 @@ impl FahDisplay {
 
         // Connect to WebSocket with Authorization header (fah_sid)
         let ws_url = "wss://node1.foldingathome.org/ws/account";
-        debug_log!("[WS] Connecting to {} with fah_sid: {:?}", ws_url, self.fah_sid.as_ref().map(|s| &s[..s.len().min(20)]));
+        debug_log!(
+            "[WS] Connecting to {} with fah_sid: {:?}",
+            ws_url,
+            self.fah_sid.as_ref().map(|s| &s[..s.len().min(20)])
+        );
 
         // Build request with Authorization header (browser sends fah-sid here too)
         // Include Origin header like the browser does
@@ -341,7 +367,10 @@ impl FahDisplay {
             .header("Connection", "Upgrade")
             .header("Upgrade", "websocket")
             .header("Sec-WebSocket-Version", "13")
-            .header("Sec-WebSocket-Key", tungstenite::handshake::client::generate_key());
+            .header(
+                "Sec-WebSocket-Key",
+                tungstenite::handshake::client::generate_key(),
+            );
 
         // Note: Don't add Authorization header to WebSocket - the login message provides authentication
         // The browser doesn't send Authorization header on WebSocket, only on REST API calls
@@ -396,14 +425,21 @@ impl FahDisplay {
         hasher.update(&modulus_bytes);
         let account_id = base64url_encode(&hasher.finalize());
         debug_log!("[WS] Our computed account ID: {}", account_id);
-        debug_log!("[WS] Our pubkey (first 100 chars): {}", &pubkey_b64[..pubkey_b64.len().min(100)]);
+        debug_log!(
+            "[WS] Our pubkey (first 100 chars): {}",
+            &pubkey_b64[..pubkey_b64.len().min(100)]
+        );
 
         // Send login message
         let login_msg = format!(
             r#"{{"type":"login","payload":{},"pubkey":"{}","signature":"{}"}}"#,
             payload, pubkey_b64, signature
         );
-        debug_log!("[WS] Sending login: payload={}, sig_len={}", payload, signature.len());
+        debug_log!(
+            "[WS] Sending login: payload={}, sig_len={}",
+            payload,
+            signature.len()
+        );
 
         if ws.send(Message::Text(login_msg)).is_err() {
             // eprintln!("[DEBUG] Failed to send login message");
@@ -413,7 +449,9 @@ impl FahDisplay {
 
         // Set read timeout to receive initial messages (30 seconds to wait for machine connects)
         if let MaybeTlsStream::NativeTls(ref stream) = ws.get_ref() {
-            let _ = stream.get_ref().set_read_timeout(Some(std::time::Duration::from_secs(30)));
+            let _ = stream
+                .get_ref()
+                .set_read_timeout(Some(std::time::Duration::from_secs(30)));
         }
 
         // Read initial messages (broadcasts, session connects, machine connects)
@@ -423,14 +461,22 @@ impl FahDisplay {
         loop {
             match ws.read() {
                 Ok(Message::Text(text)) => {
-                    debug_log!("[WS INIT] msg {}: {} bytes", initial_msgs.len() + 1, text.len());
+                    debug_log!(
+                        "[WS INIT] msg {}: {} bytes",
+                        initial_msgs.len() + 1,
+                        text.len()
+                    );
                     // Log first 500 chars to see structure
                     debug_log!("[WS INIT] content: {}", &text[..text.len().min(500)]);
                     initial_msgs.push(text);
                 }
                 Ok(_) => continue,
                 Err(e) => {
-                    debug_log!("[WS INIT] read done after {} msgs: {:?}", initial_msgs.len(), e);
+                    debug_log!(
+                        "[WS INIT] read done after {} msgs: {:?}",
+                        initial_msgs.len(),
+                        e
+                    );
                     break;
                 }
             }
@@ -452,7 +498,10 @@ impl FahDisplay {
                 let _ = stream.get_ref().set_nonblocking(true);
             }
         }
-        debug_log!("[WS] Remote WebSocket setup complete, {} keys", self.remote_ws_keys.len());
+        debug_log!(
+            "[WS] Remote WebSocket setup complete, {} keys",
+            self.remote_ws_keys.len()
+        );
     }
 
     /// Send encrypted session-open message to a machine
@@ -493,7 +542,8 @@ impl FahDisplay {
         let plaintext_bytes = plaintext.as_bytes();
         let mut buf = vec![0u8; plaintext_bytes.len() + 16];
         buf[..plaintext_bytes.len()].copy_from_slice(plaintext_bytes);
-        let ciphertext = cipher.encrypt_padded_mut::<Pkcs7>(&mut buf, plaintext_bytes.len())
+        let ciphertext = cipher
+            .encrypt_padded_mut::<Pkcs7>(&mut buf, plaintext_bytes.len())
             .expect("encryption buffer too small");
 
         // Base64url encode IV and ciphertext
@@ -506,8 +556,12 @@ impl FahDisplay {
             machine_id, iv_b64, payload_b64
         );
 
-        debug_log!("[WS] Sending encrypted message to {}: iv={}, payload_len={}",
-            machine_id, iv_b64, payload_b64.len());
+        debug_log!(
+            "[WS] Sending encrypted message to {}: iv={}, payload_len={}",
+            machine_id,
+            iv_b64,
+            payload_b64.len()
+        );
 
         if let Some(ref mut ws) = self.remote_ws {
             if let Err(e) = ws.send(Message::Text(outer_msg)) {
@@ -520,7 +574,9 @@ impl FahDisplay {
 
     /// Update from remote WebSocket (non-blocking)
     pub fn update_from_remote_ws(&mut self) {
-        let Some(ref private_key) = self.private_key.clone() else { return };
+        let Some(ref private_key) = self.private_key.clone() else {
+            return;
+        };
 
         let mut messages = Vec::new();
         let mut disconnected = false;
@@ -533,7 +589,11 @@ impl FahDisplay {
                         messages.push(text);
                     }
                     Ok(_) => continue,
-                    Err(tungstenite::Error::Io(ref e)) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                    Err(tungstenite::Error::Io(ref e))
+                        if e.kind() == std::io::ErrorKind::WouldBlock =>
+                    {
+                        break
+                    }
                     Err(e) => {
                         debug_log!("[WS UPDATE] Read error: {:?}", e);
                         disconnected = true;
@@ -560,8 +620,13 @@ impl FahDisplay {
 
         // Parse the outer message type first
         #[derive(Deserialize)]
-        struct MsgType { #[serde(rename = "type")] msg_type: String }
-        let msg_type = serde_json::from_str::<MsgType>(text).map(|m| m.msg_type).unwrap_or_default();
+        struct MsgType {
+            #[serde(rename = "type")]
+            msg_type: String,
+        }
+        let msg_type = serde_json::from_str::<MsgType>(text)
+            .map(|m| m.msg_type)
+            .unwrap_or_default();
 
         // Log based on type
         match msg_type.as_str() {
@@ -582,25 +647,25 @@ impl FahDisplay {
                 debug_log!("[WS] encrypted message: {} bytes", text.len());
                 debug_log!("[WS] message content: {}", &text[..text.len().min(300)]);
             }
-            _ => debug_log!("[WS] unknown type '{}': {} bytes", msg_type, text.len())
+            _ => debug_log!("[WS] unknown type '{}': {} bytes", msg_type, text.len()),
         }
 
         // Parse connect message - machine connections have client object with pubkey/signature/payload
         // Structure: {"type":"connect","client":{"pubkey":"...","signature":"...","payload":{"account":"...","key":"..."}}}
         #[derive(Deserialize, Debug)]
-        #[allow(dead_code)]  // Serde struct - fields needed for deserialization
+        #[allow(dead_code)] // Serde struct - fields needed for deserialization
         struct MachineConnectPayload {
             account: Option<String>,
             key: Option<String>,
         }
         #[derive(Deserialize, Debug)]
-        #[allow(dead_code)]  // Serde struct - fields needed for deserialization
+        #[allow(dead_code)] // Serde struct - fields needed for deserialization
         struct MachineConnectClient {
             pubkey: Option<String>,
             signature: Option<String>,
             payload: Option<MachineConnectPayload>,
             #[serde(rename = "type")]
-            client_type: Option<String>,  // "login" for session notifications
+            client_type: Option<String>, // "login" for session notifications
         }
         #[derive(Deserialize, Debug)]
         struct ConnectMessage {
@@ -613,13 +678,22 @@ impl FahDisplay {
             if msg.msg_type == "connect" {
                 debug_log!("[WS] Parsing connect, client value: {}", msg.client);
                 // Try to parse client as machine connection object
-                if let Ok(client) = serde_json::from_value::<MachineConnectClient>(msg.client.clone()) {
-                    debug_log!("[WS] Parsed client: type={:?}, has_pubkey={}, has_payload={}",
-                        client.client_type, client.pubkey.is_some(), client.payload.is_some());
+                if let Ok(client) =
+                    serde_json::from_value::<MachineConnectClient>(msg.client.clone())
+                {
+                    debug_log!(
+                        "[WS] Parsed client: type={:?}, has_pubkey={}, has_payload={}",
+                        client.client_type,
+                        client.pubkey.is_some(),
+                        client.payload.is_some()
+                    );
                     // Process ALL connect messages (browser doesn't filter by type)
                     // Login sessions will have pubkeys that don't match known machine IDs
                     // Machine connects will have pubkeys that DO match known machine IDs
-                    debug_log!("[WS] Processing connect message (type={:?})", client.client_type);
+                    debug_log!(
+                        "[WS] Processing connect message (type={:?})",
+                        client.client_type
+                    );
 
                     // Machine connection - extract key from payload
                     if let Some(payload) = client.payload {
@@ -628,8 +702,12 @@ impl FahDisplay {
                             // Same as account ID: FAH uses SHA256(modulus_bytes), not SHA256(spki_der)
                             let machine_id = if let Some(ref pubkey_b64) = client.pubkey {
                                 // Try standard base64 first (FAH uses standard for pubkeys)
-                                let pubkey_bytes = base64::engine::general_purpose::STANDARD.decode(pubkey_b64)
-                                    .or_else(|_| base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(pubkey_b64));
+                                let pubkey_bytes = base64::engine::general_purpose::STANDARD
+                                    .decode(pubkey_b64)
+                                    .or_else(|_| {
+                                        base64::engine::general_purpose::URL_SAFE_NO_PAD
+                                            .decode(pubkey_b64)
+                                    });
                                 if let Ok(pubkey_bytes) = pubkey_bytes {
                                     // Parse the SPKI DER to extract RSA public key
                                     match RsaPublicKey::from_public_key_der(&pubkey_bytes) {
@@ -656,35 +734,49 @@ impl FahDisplay {
                             debug_log!("[WS] Computed connect ID: {}", &machine_id);
 
                             // Check if this machine ID is one of our known machines
-                            let is_known_machine = self.remote_machine_ids.iter().any(|id| id == &machine_id);
+                            let is_known_machine =
+                                self.remote_machine_ids.iter().any(|id| id == &machine_id);
                             if !is_known_machine {
                                 debug_log!("[WS] Ignoring connect from unknown ID (probably login session)");
                                 return;
                             }
 
-                            debug_log!("[WS] *** MACHINE CONNECT from known machine: {} ***", &machine_id);
+                            debug_log!(
+                                "[WS] *** MACHINE CONNECT from known machine: {} ***",
+                                &machine_id
+                            );
 
                             // Try URL-safe base64 first, then standard for the encrypted key
-                            let encrypted_key = base64url_decode(&key_b64)
-                                .or_else(|| base64::engine::general_purpose::STANDARD.decode(&key_b64).ok());
+                            let encrypted_key = base64url_decode(&key_b64).or_else(|| {
+                                base64::engine::general_purpose::STANDARD
+                                    .decode(&key_b64)
+                                    .ok()
+                            });
 
                             if let Some(encrypted_key) = encrypted_key {
-                                debug_log!("[WS] Attempting RSA-OAEP decryption of {} byte key", encrypted_key.len());
+                                debug_log!(
+                                    "[WS] Attempting RSA-OAEP decryption of {} byte key",
+                                    encrypted_key.len()
+                                );
                                 let padding = Oaep::new::<Sha256>();
                                 match private_key.decrypt(padding, &encrypted_key) {
                                     Ok(aes_key) => {
-                                        debug_log!("[WS] AES key decrypted: {} bytes for {}", aes_key.len(), &machine_id);
+                                        debug_log!(
+                                            "[WS] AES key decrypted: {} bytes for {}",
+                                            aes_key.len(),
+                                            &machine_id
+                                        );
                                         self.remote_ws_keys.insert(machine_id.clone(), aes_key);
                                         // Send session-open to the machine
                                         self.send_session_open(&machine_id);
                                     }
-                                    Err(e) => debug_log!("[WS] RSA-OAEP decrypt failed: {:?}", e)
+                                    Err(e) => debug_log!("[WS] RSA-OAEP decrypt failed: {:?}", e),
                                 }
                             }
                         }
                     }
                 }
-                return;  // Only return after processing connect messages
+                return; // Only return after processing connect messages
             }
         }
 
@@ -693,17 +785,29 @@ impl FahDisplay {
             if msg.msg_type == "message" {
                 debug_log!("[WS] Encrypted message for client: {}", msg.client);
                 if let Some(aes_key) = self.remote_ws_keys.get(&msg.client) {
-                    if let (Some(iv), Some(ciphertext)) = (base64url_decode(&msg.iv), base64url_decode(&msg.payload)) {
+                    if let (Some(iv), Some(ciphertext)) =
+                        (base64url_decode(&msg.iv), base64url_decode(&msg.payload))
+                    {
                         // Decrypt with AES-256-CBC
                         if aes_key.len() == 32 && iv.len() == 16 {
-                            let cipher = Aes256CbcDec::new(aes_key.as_slice().into(), iv.as_slice().into());
+                            let cipher =
+                                Aes256CbcDec::new(aes_key.as_slice().into(), iv.as_slice().into());
                             let mut buf = ciphertext;
                             match cipher.decrypt_padded_mut::<Pkcs7>(&mut buf) {
                                 Ok(plaintext) => {
-                                    debug_log!("[WS] Decrypted {} bytes: {}...", plaintext.len(), String::from_utf8_lossy(&plaintext[..plaintext.len().min(500)]));
+                                    debug_log!(
+                                        "[WS] Decrypted {} bytes: {}...",
+                                        plaintext.len(),
+                                        String::from_utf8_lossy(
+                                            &plaintext[..plaintext.len().min(500)]
+                                        )
+                                    );
                                     match serde_json::from_slice::<RemoteWsState>(plaintext) {
                                         Ok(state) => {
-                                            debug_log!("[WS] Parsed state, session: {:?}", state.session);
+                                            debug_log!(
+                                                "[WS] Parsed state, session: {:?}",
+                                                state.session
+                                            );
                                             self.update_remote_machine(&msg.client, state);
                                         }
                                         Err(e) => {
@@ -711,10 +815,14 @@ impl FahDisplay {
                                         }
                                     }
                                 }
-                                Err(e) => debug_log!("[WS] AES-CBC decrypt failed: {:?}", e)
+                                Err(e) => debug_log!("[WS] AES-CBC decrypt failed: {:?}", e),
                             }
                         } else {
-                            debug_log!("[WS] Invalid key/IV length: key={}, iv={}", aes_key.len(), iv.len());
+                            debug_log!(
+                                "[WS] Invalid key/IV length: key={}, iv={}",
+                                aes_key.len(),
+                                iv.len()
+                            );
                         }
                     }
                 } else {
@@ -759,7 +867,10 @@ impl FahDisplay {
                 if let Some(state_map) = msg.payload.state {
                     // eprintln!("[DEBUG] Broadcast has {} machines", state_map.len());
                     for (machine_id, machine_state) in state_map {
-                        let machine_name = machine_state.name.clone().unwrap_or_else(|| machine_id[..8.min(machine_id.len())].to_string());
+                        let machine_name = machine_state
+                            .name
+                            .clone()
+                            .unwrap_or_else(|| machine_id[..8.min(machine_id.len())].to_string());
                         // eprintln!("[DEBUG] Machine {} ({})", machine_name, machine_id);
 
                         // Skip local machine (we get that directly)
@@ -768,7 +879,8 @@ impl FahDisplay {
                             continue;
                         }
 
-                        let units: Vec<RemoteWorkUnit> = machine_state.data
+                        let units: Vec<RemoteWorkUnit> = machine_state
+                            .data
                             .and_then(|d| d.units)
                             .unwrap_or_default()
                             .iter()
@@ -785,7 +897,11 @@ impl FahDisplay {
                         // eprintln!("[DEBUG] Machine {} has {} active units", machine_name, units.len());
 
                         // Update or add machine
-                        if let Some(m) = self.remote_machines.iter_mut().find(|m| m.name == machine_name) {
+                        if let Some(m) = self
+                            .remote_machines
+                            .iter_mut()
+                            .find(|m| m.name == machine_name)
+                        {
                             m.units = units;
                         } else {
                             self.remote_machines.push(RemoteMachine {
@@ -802,22 +918,26 @@ impl FahDisplay {
 
     fn update_remote_machine(&mut self, machine_id: &str, state: RemoteWsState) {
         // Find machine index by ID in our mapping
-        let machine_idx = self.remote_machine_ids.iter().position(|id| id == machine_id);
+        let machine_idx = self
+            .remote_machine_ids
+            .iter()
+            .position(|id| id == machine_id);
 
         // Check if content is a full state object or a delta update array
         if let Some(content_obj) = state.content.as_object() {
             // Full state: {"info":{...},"units":[{...}]}
             if let Some(units_val) = content_obj.get("units") {
                 if let Ok(units) = serde_json::from_value::<Vec<RemoteWsUnit>>(units_val.clone()) {
-                    let new_units: Vec<RemoteWorkUnit> = units.iter().map(|u| {
-                        RemoteWorkUnit {
+                    let new_units: Vec<RemoteWorkUnit> = units
+                        .iter()
+                        .map(|u| RemoteWorkUnit {
                             project: u.assignment.as_ref().map(|a| a.project).unwrap_or(0),
                             progress: (u.wu_progress.unwrap_or(0.0) * 100.0) as f32,
                             ppd: u.ppd.unwrap_or(0),
                             state: u.state.clone().unwrap_or_default(),
                             is_gpu: !u.gpus.is_empty(),
-                        }
-                    }).collect();
+                        })
+                        .collect();
 
                     // Find or create machine
                     if let Some(idx) = machine_idx {
@@ -826,7 +946,8 @@ impl FahDisplay {
                         }
                     } else {
                         // Get machine name from info or use machine_id
-                        let name = content_obj.get("info")
+                        let name = content_obj
+                            .get("info")
                             .and_then(|i| i.get("mach_name"))
                             .and_then(|n| n.as_str())
                             .unwrap_or(machine_id)
@@ -837,7 +958,11 @@ impl FahDisplay {
                         });
                         self.remote_machine_ids.push(machine_id.to_string());
                     }
-                    debug_log!("[WS] Updated machine {} with {} units", machine_id, units.len());
+                    debug_log!(
+                        "[WS] Updated machine {} with {} units",
+                        machine_id,
+                        units.len()
+                    );
                 }
             }
         } else if let Some(content_arr) = state.content.as_array() {
@@ -845,7 +970,10 @@ impl FahDisplay {
             if content_arr.len() >= 4 {
                 if let (Some("units"), Some(unit_idx), Some(field), Some(value)) = (
                     content_arr.first().and_then(|v| v.as_str()),
-                    content_arr.get(1).and_then(|v| v.as_u64()).map(|v| v as usize),
+                    content_arr
+                        .get(1)
+                        .and_then(|v| v.as_u64())
+                        .map(|v| v as usize),
                     content_arr.get(2).and_then(|v| v.as_str()),
                     content_arr.get(3),
                 ) {
@@ -857,8 +985,14 @@ impl FahDisplay {
                                 match field {
                                     "wu_progress" => {
                                         if let Some(progress) = value.as_f64() {
-                                            machine.units[unit_idx].progress = (progress * 100.0) as f32;
-                                            debug_log!("[WS] Delta: {} unit {} progress = {:.1}%", machine_id, unit_idx, machine.units[unit_idx].progress);
+                                            machine.units[unit_idx].progress =
+                                                (progress * 100.0) as f32;
+                                            debug_log!(
+                                                "[WS] Delta: {} unit {} progress = {:.1}%",
+                                                machine_id,
+                                                unit_idx,
+                                                machine.units[unit_idx].progress
+                                            );
                                         }
                                     }
                                     "ppd" => {
@@ -911,7 +1045,11 @@ impl FahDisplay {
                         messages.push(text);
                     }
                     Ok(_) => continue,
-                    Err(tungstenite::Error::Io(ref e)) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                    Err(tungstenite::Error::Io(ref e))
+                        if e.kind() == std::io::ErrorKind::WouldBlock =>
+                    {
+                        break
+                    }
                     Err(_) => {
                         disconnected = true;
                         break;
@@ -935,11 +1073,14 @@ impl FahDisplay {
         if let Ok(data) = serde_json::from_str::<WsClientData>(text) {
             if let Some(units) = data.units {
                 self.local_units.clear();
-                let cpu_brand = data.info.as_ref()
+                let cpu_brand = data
+                    .info
+                    .as_ref()
                     .and_then(|i| i.cpu_brand.as_ref())
                     .map(|s| {
                         // Shorten CPU name
-                        let s = s.replace("Intel(R) Core(TM) ", "")
+                        let s = s
+                            .replace("Intel(R) Core(TM) ", "")
                             .replace(" CPU", "")
                             .replace(" @ ", " ");
                         if s.len() > 20 {
@@ -1012,21 +1153,19 @@ impl FahDisplay {
         let url = format!("https://api.foldingathome.org/user/{}", username);
 
         match ureq::get(&url).call() {
-            Ok(response) => {
-                match response.into_json::<FahUser>() {
-                    Ok(user) => {
-                        self.data = Some(FahData {
-                            score: user.score,
-                            wus: user.wus,
-                            rank: user.rank,
-                        });
-                        self.error = None;
-                    }
-                    Err(e) => {
-                        self.error = Some(format!("Parse error: {}", e));
-                    }
+            Ok(response) => match response.into_json::<FahUser>() {
+                Ok(user) => {
+                    self.data = Some(FahData {
+                        score: user.score,
+                        wus: user.wus,
+                        rank: user.rank,
+                    });
+                    self.error = None;
                 }
-            }
+                Err(e) => {
+                    self.error = Some(format!("Parse error: {}", e));
+                }
+            },
             Err(e) => {
                 self.error = Some(format!("Network error: {}", e));
             }
@@ -1037,13 +1176,18 @@ impl FahDisplay {
 
     /// Fetch remote machines using fah_sid as Authorization header (browser's approach)
     /// Preserves existing unit data on refresh
-    pub fn fetch_remote_machines_with_sid(&mut self) {
+    /// Returns SidFetch so the caller only falls back to email/password auth on a
+    /// genuine rejection (AuthRejected), not on transient errors or empty accounts
+    fn fetch_remote_machines_with_sid(&mut self) -> SidFetch {
         let Some(ref fah_sid) = self.fah_sid else {
             debug_log!("[API] No fah_sid available for Authorization");
-            return;
+            return SidFetch::Transient;
         };
 
-        debug_log!("[API] Fetching account with Authorization: {}...", &fah_sid[..fah_sid.len().min(20)]);
+        debug_log!(
+            "[API] Fetching account with Authorization: {}...",
+            &fah_sid[..fah_sid.len().min(20)]
+        );
 
         // Use fah_sid as Authorization header (browser's approach)
         let account_resp = match ureq::get("https://api.foldingathome.org/account")
@@ -1051,9 +1195,17 @@ impl FahDisplay {
             .call()
         {
             Ok(r) => r,
+            // Only a genuine auth rejection should trigger the password fallback.
+            Err(ureq::Error::Status(code, _)) if code == 401 || code == 403 => {
+                debug_log!("[API] fah_sid rejected by server (HTTP {})", code);
+                return SidFetch::AuthRejected;
+            }
             Err(e) => {
-                debug_log!("[API] Failed to fetch account with Authorization: {:?}", e);
-                return;
+                debug_log!(
+                    "[API] Transient error fetching account with Authorization: {:?}",
+                    e
+                );
+                return SidFetch::Transient;
             }
         };
 
@@ -1061,28 +1213,39 @@ impl FahDisplay {
             Ok(a) => a,
             Err(e) => {
                 debug_log!("[API] Failed to parse account JSON: {:?}", e);
-                return;
+                return SidFetch::Transient;
             }
         };
 
         debug_log!("[API] Account ID from REST API: {:?}", account.id);
 
         let Some(machines) = account.machines else {
-            debug_log!("[API] No machines in account");
-            return;
+            // SID authenticated fine; the account simply has no machines.
+            debug_log!("[API] fah_sid OK but account has no machines");
+            return SidFetch::Ok;
         };
 
         // Only update machine IDs list, preserve existing machine data
         self.remote_machine_ids.clear();
         for machine in &machines {
             self.remote_machine_ids.push(machine.id.clone());
-            debug_log!("[API] Machine: {} ({})", machine.name.as_deref().unwrap_or("unnamed"), &machine.id);
+            debug_log!(
+                "[API] Machine: {} ({})",
+                machine.name.as_deref().unwrap_or("unnamed"),
+                &machine.id
+            );
         }
 
         // Only add NEW machines (don't clear existing ones with their units)
         for machine in machines {
-            let short_id = if machine.id.len() > 8 { &machine.id[..8] } else { &machine.id };
-            let name = machine.name.unwrap_or_else(|| format!("Machine {}", short_id));
+            let short_id = if machine.id.len() > 8 {
+                &machine.id[..8]
+            } else {
+                &machine.id
+            };
+            let name = machine
+                .name
+                .unwrap_or_else(|| format!("Machine {}", short_id));
 
             // Check if machine already exists
             let exists = self.remote_machines.iter().any(|m| m.name == name);
@@ -1094,6 +1257,7 @@ impl FahDisplay {
             }
         }
         debug_log!("[API] Fetched {} machines", self.remote_machine_ids.len());
+        SidFetch::Ok
     }
 
     pub fn fetch_remote_machines(&mut self, email: &str, passphrase: &str) {
@@ -1142,7 +1306,9 @@ impl FahDisplay {
 
         debug_log!("[API] Account ID from REST API: {:?}", account.id);
 
-        let Some(machines) = account.machines else { return };
+        let Some(machines) = account.machines else {
+            return;
+        };
 
         // Store machine IDs for WebSocket subscription
         self.remote_machine_ids.clear();
@@ -1150,8 +1316,14 @@ impl FahDisplay {
         // Add NEW machines only (preserve existing ones with their units)
         for machine in machines {
             self.remote_machine_ids.push(machine.id.clone());
-            let short_id = if machine.id.len() > 8 { &machine.id[..8] } else { &machine.id };
-            let name = machine.name.unwrap_or_else(|| format!("Machine {}", short_id));
+            let short_id = if machine.id.len() > 8 {
+                &machine.id[..8]
+            } else {
+                &machine.id
+            };
+            let name = machine
+                .name
+                .unwrap_or_else(|| format!("Machine {}", short_id));
 
             let exists = self.remote_machines.iter().any(|m| m.name == name);
             if !exists {
@@ -1175,10 +1347,13 @@ impl FahDisplay {
         let has_stats = self.data.is_some();
         let has_local = !self.local_units.is_empty();
         // Filter out local machine from remote list (avoid duplicates)
-        let remote_machines: Vec<_> = self.remote_machines.iter()
+        let remote_machines: Vec<_> = self
+            .remote_machines
+            .iter()
             .filter(|m| !has_local || m.name.to_lowercase() != self.local_hostname)
             .collect();
-        let has_remote = !remote_machines.is_empty() && remote_machines.iter().any(|m| !m.units.is_empty());
+        let has_remote =
+            !remote_machines.is_empty() && remote_machines.iter().any(|m| !m.units.is_empty());
 
         // Loading state
         if !has_stats && !has_local && !has_remote {
@@ -1186,11 +1361,23 @@ impl FahDisplay {
             if let Some(ref err) = self.error {
                 let msg = format!("Error: {}", err);
                 let cx = w.saturating_sub(msg.len()) / 2;
-                term.set_str(cx as i32, cy as i32, &msg, Some(header_color_scheme(colors)), false);
+                term.set_str(
+                    cx as i32,
+                    cy as i32,
+                    &msg,
+                    Some(header_color_scheme(colors)),
+                    false,
+                );
             } else {
                 let msg = "Connecting to FAH...";
                 let cx = w.saturating_sub(msg.len()) / 2;
-                term.set_str(cx as i32, cy as i32, msg, Some(text_color_scheme(colors)), false);
+                term.set_str(
+                    cx as i32,
+                    cy as i32,
+                    msg,
+                    Some(text_color_scheme(colors)),
+                    false,
+                );
             }
             return;
         }
@@ -1206,7 +1393,11 @@ impl FahDisplay {
 
         // Calculate content height
         let units_height = total_units;
-        let headers_height = if has_local { 1 } else { 0 } + remote_machines.iter().filter(|m| !m.units.is_empty()).count();
+        let headers_height = if has_local { 1 } else { 0 }
+            + remote_machines
+                .iter()
+                .filter(|m| !m.units.is_empty())
+                .count();
         let stats_height = if has_stats { 2 } else { 0 }; // separator + stats
         let content_height = units_height + headers_height + stats_height;
 
@@ -1229,7 +1420,9 @@ impl FahDisplay {
 
         // Remote sections
         for machine in &remote_machines {
-            if machine.units.is_empty() { continue; }
+            if machine.units.is_empty() {
+                continue;
+            }
 
             // Section header
             let header = format!(" {} ", machine.name);
@@ -1246,11 +1439,18 @@ impl FahDisplay {
         if let Some(ref data) = self.data {
             // Separator
             for i in 0..inner_w {
-                term.set(inner_x + i as i32, y, '─', Some(muted_color_scheme(colors)), false);
+                term.set(
+                    inner_x + i as i32,
+                    y,
+                    '─',
+                    Some(muted_color_scheme(colors)),
+                    false,
+                );
             }
             y += 1;
 
-            let stats = format!("{} pts · {} WUs · Rank #{}",
+            let stats = format!(
+                "{} pts · {} WUs · Rank #{}",
                 format_number(data.score),
                 format_number(data.wus),
                 format_number(data.rank)
@@ -1262,7 +1462,15 @@ impl FahDisplay {
 
     /// Draw a single work unit on one line (used for both local and remote)
     /// Format: G P12345 ■■■■■■■■■■■■■■■░░░░░  45.2%  1.2M PPD
-    fn draw_unit_line(&self, term: &mut Terminal, x: i32, y: i32, width: usize, wu: &LocalWorkUnit, colors: &ColorState) {
+    fn draw_unit_line(
+        &self,
+        term: &mut Terminal,
+        x: i32,
+        y: i32,
+        width: usize,
+        wu: &LocalWorkUnit,
+        colors: &ColorState,
+    ) {
         let mut pos = x;
 
         // C/G indicator for CPU/GPU
@@ -1293,7 +1501,15 @@ impl FahDisplay {
     }
 
     /// Draw a single remote work unit on one line
-    fn draw_remote_unit_line(&self, term: &mut Terminal, x: i32, y: i32, width: usize, unit: &RemoteWorkUnit, colors: &ColorState) {
+    fn draw_remote_unit_line(
+        &self,
+        term: &mut Terminal,
+        x: i32,
+        y: i32,
+        width: usize,
+        unit: &RemoteWorkUnit,
+        colors: &ColorState,
+    ) {
         let mut pos = x;
 
         // C/G indicator for CPU/GPU
@@ -1322,7 +1538,6 @@ impl FahDisplay {
         let ppd = format!("  {:>6} PPD", format_ppd(unit.ppd));
         term.set_str(pos, y, &ppd, Some(muted_color_scheme(colors)), false);
     }
-
 }
 
 fn format_ppd(ppd: u64) -> String {
@@ -1351,8 +1566,8 @@ pub struct FahConfig {
     pub username: String,
     pub email: Option<String>,
     pub password: Option<String>,
-    pub fah_secret: Option<String>,  // Base64-encoded PKCS#8 RSA private key from browser localStorage
-    pub fah_sid: Option<String>,     // Session ID from browser localStorage (fah-sid)
+    pub fah_secret: Option<String>, // Base64-encoded PKCS#8 RSA private key from browser localStorage
+    pub fah_sid: Option<String>,    // Session ID from browser localStorage (fah-sid)
     pub time_step: f32,
 }
 
@@ -1366,7 +1581,12 @@ pub fn run(config: FahConfig) -> io::Result<()> {
     let has_creds = config.email.is_some() && config.password.is_some();
     let has_secret = config.fah_secret.is_some();
     let has_sid = config.fah_sid.is_some();
-    debug_log!("[INIT] has_creds={}, has_secret={}, has_sid={}", has_creds, has_secret, has_sid);
+    debug_log!(
+        "[INIT] has_creds={}, has_secret={}, has_sid={}",
+        has_creds,
+        has_secret,
+        has_sid
+    );
 
     // Load RSA private key for encrypted WebSocket if provided
     if let Some(ref secret) = config.fah_secret {
@@ -1384,12 +1604,26 @@ pub fn run(config: FahConfig) -> io::Result<()> {
     // Connect to local FAH client WebSocket for real-time updates
     display.connect_local_ws();
 
-    // Fetch remote machines - prefer fah_sid (browser's approach), fall back to email/password
+    // Fetch remote machines - prefer fah_sid (browser's approach), fall back to
+    // email/password ONLY if the SID is genuinely rejected (not on transient errors).
+    let mut need_creds = !has_sid;
     if has_sid {
         debug_log!("[INIT] Using fah_sid for API authentication (browser approach)");
-        display.fetch_remote_machines_with_sid();
-    } else if has_creds {
-        debug_log!("[INIT] Using email/password for API authentication (legacy)");
+        match display.fetch_remote_machines_with_sid() {
+            SidFetch::Ok => {}
+            SidFetch::AuthRejected => {
+                debug_log!("[INIT] fah_sid rejected, will try email/password fallback");
+                need_creds = true;
+            }
+            SidFetch::Transient => {
+                debug_log!(
+                    "[INIT] fah_sid fetch hit a transient error; keeping SID, not falling back"
+                );
+            }
+        }
+    }
+    if need_creds && has_creds {
+        debug_log!("[INIT] Using email/password for API authentication");
         display.fetch_remote_machines(
             config.email.as_ref().unwrap(),
             config.password.as_ref().unwrap(),
@@ -1421,9 +1655,14 @@ pub fn run(config: FahConfig) -> io::Result<()> {
                     KeyCode::Char('r') => {
                         display.fetch_stats(&config.username)?;
                         display.connect_local_ws();
+                        let mut r_need_creds = !has_sid;
                         if has_sid {
-                            display.fetch_remote_machines_with_sid();
-                        } else if has_creds {
+                            match display.fetch_remote_machines_with_sid() {
+                                SidFetch::AuthRejected => r_need_creds = true,
+                                SidFetch::Ok | SidFetch::Transient => {}
+                            }
+                        }
+                        if r_need_creds && has_creds {
                             display.fetch_remote_machines(
                                 config.email.as_ref().unwrap(),
                                 config.password.as_ref().unwrap(),
@@ -1456,7 +1695,10 @@ pub fn run(config: FahConfig) -> io::Result<()> {
         }
 
         // Try to reconnect remote WebSocket if disconnected
-        if has_secret && display.remote_ws.is_none() && last_remote_ws_check.elapsed() >= remote_ws_reconnect {
+        if has_secret
+            && display.remote_ws.is_none()
+            && last_remote_ws_check.elapsed() >= remote_ws_reconnect
+        {
             display.connect_remote_ws();
             display.subscribe_to_machines();
             last_remote_ws_check = Instant::now();
@@ -1470,9 +1712,14 @@ pub fn run(config: FahConfig) -> io::Result<()> {
 
         // Machine refresh every 60 seconds
         if (has_sid || has_creds) && last_machine.elapsed() >= machine_refresh {
+            let mut m_need_creds = !has_sid;
             if has_sid {
-                display.fetch_remote_machines_with_sid();
-            } else if has_creds {
+                match display.fetch_remote_machines_with_sid() {
+                    SidFetch::AuthRejected => m_need_creds = true,
+                    SidFetch::Ok | SidFetch::Transient => {}
+                }
+            }
+            if m_need_creds && has_creds {
                 display.fetch_remote_machines(
                     config.email.as_ref().unwrap(),
                     config.password.as_ref().unwrap(),
