@@ -18,7 +18,6 @@ Thumbs.db
 
 # AI assistant files
 asha/
-.claude/commands/save-react.md
 .opencode/command/save-react.md
 
 # Asha runtime
@@ -26,3 +25,8 @@ asha/
 Memory/sessions/
 Memory/vector_db/
 Memory/reasoning_bank/
+
+# Local tooling / scratch (not part of the project)
+.claude/
+.codex
+Work/
