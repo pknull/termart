@@ -1,0 +1,10 @@
+{"ts": "2026-06-21T08:11:52Z", "mode": "guard", "session_id": "07f06b2e-0342-469d-b3c5-67c8c098c156", "gate": "memory_substrate", "status": "pass", "hard": true, "detail": "Memory/ + events.jsonl present"}
+{"ts": "2026-06-21T08:11:52Z", "mode": "guard", "session_id": "07f06b2e-0342-469d-b3c5-67c8c098c156", "gate": "session_integrity", "status": "pass", "hard": true, "detail": "all 44 events stamped current session 07f06b2e-0342-469d-b3c5-67c8c098c156"}
+{"ts": "2026-06-21T08:11:52Z", "mode": "guard", "session_id": "07f06b2e-0342-469d-b3c5-67c8c098c156", "gate": "ac_clobber", "status": "pass", "hard": true, "detail": "no auto-fallback stub added this save"}
+{"ts": "2026-06-21T08:11:52Z", "mode": "guard", "session_id": "07f06b2e-0342-469d-b3c5-67c8c098c156", "gate": "ac_fresh", "status": "pass", "hard": false, "detail": "activeContext.md updated this save"}
+{"ts": "2026-06-21T08:11:52Z", "mode": "guard", "session_id": "07f06b2e-0342-469d-b3c5-67c8c098c156", "gate": "ac_handoff", "status": "pass", "hard": false, "detail": "Next Steps section absent (stripped)"}
+{"ts": "2026-06-21T08:13:30Z", "mode": "guard", "session_id": "07f06b2e-0342-469d-b3c5-67c8c098c156", "gate": "memory_substrate", "status": "pass", "hard": true, "detail": "Memory/ + events.jsonl present"}
+{"ts": "2026-06-21T08:13:30Z", "mode": "guard", "session_id": "07f06b2e-0342-469d-b3c5-67c8c098c156", "gate": "session_integrity", "status": "pass", "hard": true, "detail": "all 44 events stamped current session 07f06b2e-0342-469d-b3c5-67c8c098c156"}
+{"ts": "2026-06-21T08:13:30Z", "mode": "guard", "session_id": "07f06b2e-0342-469d-b3c5-67c8c098c156", "gate": "ac_clobber", "status": "pass", "hard": true, "detail": "no auto-fallback stub added this save"}
+{"ts": "2026-06-21T08:13:30Z", "mode": "guard", "session_id": "07f06b2e-0342-469d-b3c5-67c8c098c156", "gate": "ac_fresh", "status": "pass", "hard": false, "detail": "activeContext.md updated this save"}
+{"ts": "2026-06-21T08:13:30Z", "mode": "guard", "session_id": "07f06b2e-0342-469d-b3c5-67c8c098c156", "gate": "ac_handoff", "status": "pass", "hard": false, "detail": "Next Steps is actionable"}
