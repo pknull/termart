@@ -1,16 +1,12 @@
 use crate::config::{BonsaiConfig, BranchType, Counters};
-use crate::help::show_help_modal;
+use crate::help::{show_help_spec_modal, HelpSpec};
 use crate::terminal::{colors, Terminal};
 use crossterm::event::KeyCode;
 use crossterm::style::Color;
 use rand::prelude::*;
 use std::io;
 
-const HELP: &str = "\
-BONSAI
-─────────────────
-q/Esc  Quit
-?      Close help";
+const HELP: HelpSpec = HelpSpec::basic("BONSAI", &[]);
 
 /// A branch segment to be processed
 struct BranchTask {
@@ -136,7 +132,7 @@ fn run_interactive(config: &BonsaiConfig, initial_seed: u64) -> io::Result<()> {
                 if let Some(code) = term.wait_key(100)? {
                     match code {
                         KeyCode::Char('?') => {
-                            if show_help_modal(&mut term, HELP)? {
+                            if show_help_spec_modal(&mut term, &HELP)? {
                                 break;
                             }
                         }
@@ -153,7 +149,7 @@ fn run_interactive(config: &BonsaiConfig, initial_seed: u64) -> io::Result<()> {
         if let Some(code) = term.wait_key(wait_ms)? {
             match code {
                 KeyCode::Char('?') => {
-                    if show_help_modal(&mut term, HELP)? {
+                    if show_help_spec_modal(&mut term, &HELP)? {
                         break;
                     }
                 }
@@ -346,7 +342,7 @@ fn grow_tree(
                 if let Some((code, _)) = term.check_key()? {
                     match code {
                         KeyCode::Char('?') => {
-                            if show_help_modal(term, HELP)? {
+                            if show_help_spec_modal(term, &HELP)? {
                                 return Ok(true);
                             }
                         }

@@ -1,10 +1,10 @@
 use crate::colors::ColorState;
-use crate::help::render_help_overlay;
+use crate::help::{render_help_spec, HelpSpec};
 use crate::monitor::layout::{
     cpu_gradient_color_scheme, draw_core_graphs_scheme, draw_meter_btop_scheme, muted_color_scheme,
     temp_gradient_color_scheme, text_color_scheme, Rect,
 };
-use crate::monitor::{build_help, MonitorConfig, MonitorState};
+use crate::monitor::{MonitorConfig, MonitorState};
 use crate::terminal::Terminal;
 use crossterm::terminal::size;
 use std::fs;
@@ -375,8 +375,9 @@ impl CpuMonitor {
         let info_x = x;
 
         // Calculate info panel height: header(1) + CPU meter(1) + cores + load(1)
-        let num_cores = self.usage_per_core.len();
-        let cores_rows = num_cores.div_ceil(2); // 2 columns
+        let available_core_rows = h.saturating_sub(3); // header + total + footer
+        let visible_cores = self.usage_per_core.len().min(available_core_rows * 2);
+        let cores_rows = visible_cores.div_ceil(2); // 2 columns
         let info_height = 2 + cores_rows + 1; // header + CPU + cores + load
 
         // Position info panel vertically centered
@@ -485,18 +486,16 @@ impl CpuMonitor {
         cy += 1;
 
         // Per-core meters with temps (linear meter style)
-        if !self.usage_per_core.is_empty() {
-            let core_temps = get_core_temps_from_path(
-                self.thermal_zone_path.as_ref(),
-                self.usage_per_core.len(),
-            );
+        if visible_cores > 0 {
+            let core_temps =
+                get_core_temps_from_path(self.thermal_zone_path.as_ref(), visible_cores);
             draw_core_graphs_scheme(
                 term,
                 info_x,
                 cy,
                 info_w,
                 cores_rows,
-                &self.usage_per_core,
+                &self.usage_per_core[..visible_cores],
                 &core_temps,
                 colors,
             );
@@ -534,9 +533,9 @@ impl CpuMonitor {
 
 pub fn run(config: MonitorConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
-    let mut state = MonitorState::new(config.time_step.max(0.5));
+    let mut state = MonitorState::new(config.time_step, 0.5);
     let mut monitor = CpuMonitor::new();
-    let help_text = build_help("CPU MONITOR", "");
+    const HELP: HelpSpec = HelpSpec::animated("CPU MONITOR", &[]);
     let mut show_help = false;
 
     monitor.update()?;
@@ -571,7 +570,7 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
 
         if show_help {
             let (w, h) = term.size();
-            render_help_overlay(&mut term, w, h, &help_text);
+            render_help_spec(&mut term, w, h, &HELP);
         }
 
         term.present()?;

@@ -16,7 +16,10 @@ const MIN_Z_DIVISOR: f32 = 0.1;
 
 /// Run the 3D rotating cube visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
-    let mut state = VizState::new(config.time_step, "");
+    let mut state = VizState::new(
+        config.time_step,
+        crate::help::HelpSpec::animated("CUBE", &[]),
+    );
     let mut time: f32 = 0.0;
 
     let vertices: [(f32, f32, f32); 8] = [

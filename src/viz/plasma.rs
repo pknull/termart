@@ -8,7 +8,10 @@ use std::io;
 
 /// Run the plasma effect visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
-    let mut state = VizState::new(config.time_step, "");
+    let mut state = VizState::new(
+        config.time_step,
+        crate::help::HelpSpec::animated("PLASMA", &[]),
+    );
     let mut time: f64 = 0.0;
     let chars = [' ', '.', ':', ';', 'o', 'O', '0', '@', '#'];
 

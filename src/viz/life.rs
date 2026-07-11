@@ -20,7 +20,10 @@ pub fn run(
     rng: &mut StdRng,
     draw_char: char,
 ) -> io::Result<()> {
-    let mut state = VizState::new(config.time_step, "");
+    let mut state = VizState::new(
+        config.time_step,
+        crate::help::HelpSpec::animated("GAME OF LIFE", &[]),
+    );
 
     let (init_w, init_h) = term.size();
     let mut w = init_w as usize;

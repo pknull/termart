@@ -446,6 +446,17 @@ enum Commands {
         #[arg(short, long)]
         auth: bool,
     },
+
+    /// OpenAI Codex usage monitor
+    CodexTokens {
+        /// UI refresh interval (seconds)
+        #[arg(short, long, default_value = "0.1")]
+        time: f32,
+
+        /// API refresh interval (seconds)
+        #[arg(short, long, default_value = "60")]
+        refresh: u64,
+    },
 }
 
 fn run_viz(kind: FractalKind, opts: VizOptions) -> io::Result<()> {
@@ -684,6 +695,13 @@ fn main() -> io::Result<()> {
                 auth_mode: auth,
             };
             viz::tokeneater::run(config)?;
+        }
+        Commands::CodexTokens { time, refresh } => {
+            let config = viz::codex_tokens::CodexTokenConfig {
+                time_step: time,
+                refresh_interval: refresh,
+            };
+            viz::codex_tokens::run(config)?;
         }
     }
 

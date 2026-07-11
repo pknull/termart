@@ -24,7 +24,10 @@ struct Pulse {
 
 /// Run the hex grid visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
-    let mut state = VizState::new(config.time_step, "");
+    let mut state = VizState::new(
+        config.time_step,
+        crate::help::HelpSpec::animated("HEX GRID", &[]),
+    );
 
     let mut time: f32 = 0.0;
 

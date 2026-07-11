@@ -17,7 +17,10 @@ const HOT_THRESHOLD: u8 = 200;
 
 /// Run the fire effect visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
-    let mut state = VizState::new(config.time_step, "");
+    let mut state = VizState::new(
+        config.time_step,
+        crate::help::HelpSpec::animated("FIRE", &[]),
+    );
 
     let (init_w, init_h) = term.size();
     let mut w = init_w as usize;

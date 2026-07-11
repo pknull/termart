@@ -247,15 +247,17 @@ fn encode_braille(dots: &[[bool; DOTS_X]; DOTS_Y]) -> char {
 }
 
 /// Help text
-const HELP: &str = "\
-JULIA FRACTAL
-─────────────────
-P      Cycle path
-C      Auto-cycle
-+/-    Zoom in/out
-Arrows Pan view
-R      Reset view
-1-9    Speed (N×10s)";
+const HELP: crate::help::HelpSpec = crate::help::HelpSpec::pausable(
+    "JULIA FRACTAL",
+    &[
+        crate::help::HelpEntry::new("P", "Cycle path"),
+        crate::help::HelpEntry::new("C", "Auto-cycle"),
+        crate::help::HelpEntry::new("+/-", "Zoom in/out"),
+        crate::help::HelpEntry::new("Arrows", "Pan view"),
+        crate::help::HelpEntry::new("R", "Reset view"),
+        crate::help::HelpEntry::new("1-9", "Path cycle (10-90s)"),
+    ],
+);
 
 /// Run the fractal visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
@@ -287,9 +289,6 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         }
 
         if let Some((code, mods)) = term.check_key()? {
-            if state.handle_key(code, mods) {
-                break;
-            }
             match code {
                 KeyCode::Char('p') | KeyCode::Char('P') => fractal.cycle_path(),
                 KeyCode::Char('c') | KeyCode::Char('C') => fractal.toggle_auto_cycle(),
@@ -306,7 +305,11 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
                         fractal.set_speed(d as u8);
                     }
                 }
-                _ => {}
+                _ => {
+                    if state.handle_key(code, mods) {
+                        break;
+                    }
+                }
             }
         }
 

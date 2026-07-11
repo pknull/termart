@@ -7,7 +7,10 @@ use std::io;
 
 /// Run the waves effect visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
-    let mut state = VizState::new(config.time_step, "");
+    let mut state = VizState::new(
+        config.time_step,
+        crate::help::HelpSpec::animated("WAVES", &[]),
+    );
 
     let mut time: f64 = 0.0;
     let wave_chars = ['_', '.', '-', '~', '^', '"', '*'];

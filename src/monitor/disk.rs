@@ -1,10 +1,10 @@
 use crate::colors::ColorState;
-use crate::help::render_help_overlay;
+use crate::help::{render_help_spec, HelpSpec};
 use crate::monitor::layout::{
     cpu_gradient_color_scheme, draw_meter_btop_scheme, format_bytes, header_color_scheme,
     muted_color_scheme, text_color_scheme, Rect,
 };
-use crate::monitor::{build_help, MonitorConfig, MonitorState};
+use crate::monitor::{MonitorConfig, MonitorState};
 use crate::terminal::Terminal;
 use crossterm::style::Color;
 use crossterm::terminal::size;
@@ -15,12 +15,14 @@ pub struct DiskInfo {
     pub mount_point: String,
     pub total: u64,
     pub used: u64,
+    pub available: u64,
 }
 
 impl DiskInfo {
     fn percent(&self) -> f32 {
-        if self.total > 0 {
-            (self.used as f32 / self.total as f32) * 100.0
+        let usable = self.used.saturating_add(self.available);
+        if usable > 0 {
+            (self.used as f32 / usable as f32) * 100.0
         } else {
             0.0
         }
@@ -60,6 +62,7 @@ impl DiskMonitor {
             if let Ok(statvfs) = Self::statvfs(mount_point) {
                 let total = statvfs.blocks * statvfs.frsize;
                 let free = statvfs.bfree * statvfs.frsize;
+                let available = statvfs.bavail * statvfs.frsize;
                 let used = total.saturating_sub(free);
 
                 if total > 0 {
@@ -67,6 +70,7 @@ impl DiskMonitor {
                         mount_point: mount_point.to_string(),
                         total,
                         used,
+                        available,
                     });
                 }
             }
@@ -92,6 +96,7 @@ impl DiskMonitor {
                 frsize: stat.f_frsize,
                 blocks: stat.f_blocks,
                 bfree: stat.f_bfree,
+                bavail: stat.f_bavail,
             })
         } else {
             Err(io::Error::last_os_error())
@@ -120,7 +125,7 @@ impl DiskMonitor {
         h: usize,
         colors: &ColorState,
     ) {
-        if h < 4 || w < 30 {
+        if h < 2 || w < 30 {
             return;
         }
 
@@ -250,13 +255,14 @@ struct StatVfs {
     frsize: u64,
     blocks: u64,
     bfree: u64,
+    bavail: u64,
 }
 
 pub fn run(config: MonitorConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
-    let mut state = MonitorState::new(config.time_step.max(2.0));
+    let mut state = MonitorState::new(config.time_step, 2.0);
     let mut monitor = DiskMonitor::new();
-    let help_text = build_help("DISK MONITOR", "");
+    const HELP: HelpSpec = HelpSpec::animated("DISK MONITOR", &[]);
     let mut show_help = false;
 
     loop {
@@ -287,7 +293,7 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
 
         if show_help {
             let (w, h) = term.size();
-            render_help_overlay(&mut term, w, h, &help_text);
+            render_help_spec(&mut term, w, h, &HELP);
         }
 
         term.present()?;
@@ -295,4 +301,21 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DiskInfo;
+
+    #[test]
+    fn capacity_percentage_uses_user_available_space() {
+        let disk = DiskInfo {
+            mount_point: "/".to_string(),
+            total: 1000,
+            used: 800,
+            available: 100,
+        };
+
+        assert!((disk.percent() - 88.888_89).abs() < 0.001);
+    }
 }

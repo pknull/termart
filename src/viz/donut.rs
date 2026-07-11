@@ -15,7 +15,10 @@ const MIN_Z_DIVISOR: f32 = 0.01;
 
 /// Run the rotating donut visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
-    let mut state = VizState::new(config.time_step, "");
+    let mut state = VizState::new(
+        config.time_step,
+        crate::help::HelpSpec::animated("DONUT", &[]),
+    );
     let mut a: f32 = 0.0;
     let mut b: f32 = 0.0;
 

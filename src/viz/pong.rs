@@ -8,6 +8,7 @@
 //! - Q/Esc: quit
 
 use crate::colors::{scheme_color, ColorState};
+use crate::help::render_help_spec;
 use crate::terminal::Terminal;
 use crossterm::event::KeyCode;
 use crossterm::style::Color;
@@ -39,21 +40,17 @@ const MSG_P2_WINS: &str = "PLAYER 2 WINS!";
 const MSG_RESTART: &str = "Press SPACE to restart";
 
 // Help text
-const HELP_TEXT: &str = "\
-PONG
-─────────────────
-W/S      P1 up/down
-↑/↓/I/K  P2 up/down
-1        Toggle P1 AI
-2        Toggle P2 AI
-R        Reset game
-───────────────────────
- GLOBAL CONTROLS
- Space   Pause/resume
- !-()    Color scheme
- q/Esc   Quit
- ?       Close help
-───────────────────────";
+const HELP: crate::help::HelpSpec = crate::help::HelpSpec::colored(
+    "PONG",
+    &[
+        crate::help::HelpEntry::new("W/S", "P1 up/down"),
+        crate::help::HelpEntry::new("↑/↓/I/K", "P2 up/down"),
+        crate::help::HelpEntry::new("1", "Toggle P1 AI"),
+        crate::help::HelpEntry::new("2", "Toggle P2 AI"),
+        crate::help::HelpEntry::new("R", "Reset game"),
+        crate::help::HelpEntry::new("Space", "Pause/resume"),
+    ],
+);
 
 #[derive(Clone, Copy, PartialEq)]
 enum Winner {
@@ -427,87 +424,7 @@ pub fn run(time_step: f32) -> io::Result<()> {
 
         // Help overlay
         if show_help {
-            let lines: Vec<&str> = HELP_TEXT.lines().collect();
-            let max_width = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0);
-            let box_width = max_width + 4;
-            let box_height = lines.len() + 2;
-            let start_x = (w as usize).saturating_sub(box_width) / 2;
-            let start_y = (h as usize).saturating_sub(box_height) / 2;
-
-            // Top border
-            term.set(
-                start_x as i32,
-                start_y as i32,
-                '┌',
-                Some(Color::White),
-                false,
-            );
-            for x in 1..box_width - 1 {
-                term.set(
-                    (start_x + x) as i32,
-                    start_y as i32,
-                    '─',
-                    Some(Color::White),
-                    false,
-                );
-            }
-            term.set(
-                (start_x + box_width - 1) as i32,
-                start_y as i32,
-                '┐',
-                Some(Color::White),
-                false,
-            );
-
-            // Content rows
-            for (i, line) in lines.iter().enumerate() {
-                let y = start_y + 1 + i;
-                term.set(start_x as i32, y as i32, '│', Some(Color::White), false);
-                let padding = max_width.saturating_sub(line.chars().count());
-                let padded = format!(" {}{} ", line, " ".repeat(padding));
-                for (j, ch) in padded.chars().enumerate() {
-                    term.set(
-                        (start_x + 1 + j) as i32,
-                        y as i32,
-                        ch,
-                        Some(Color::Grey),
-                        false,
-                    );
-                }
-                term.set(
-                    (start_x + box_width - 1) as i32,
-                    y as i32,
-                    '│',
-                    Some(Color::White),
-                    false,
-                );
-            }
-
-            // Bottom border
-            let bottom_y = start_y + box_height - 1;
-            term.set(
-                start_x as i32,
-                bottom_y as i32,
-                '└',
-                Some(Color::White),
-                false,
-            );
-            for x in 1..box_width - 1 {
-                term.set(
-                    (start_x + x) as i32,
-                    bottom_y as i32,
-                    '─',
-                    Some(Color::White),
-                    false,
-                );
-            }
-            term.set(
-                (start_x + box_width - 1) as i32,
-                bottom_y as i32,
-                '┘',
-                Some(Color::White),
-                false,
-            );
+            render_help_spec(&mut term, w, h, &HELP);
         }
 
         term.present()?;

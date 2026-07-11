@@ -1,5 +1,5 @@
 use crate::colors::{scheme_color, ColorState};
-use crate::help::render_help_overlay;
+use crate::help::{render_help_spec, HelpEntry, HelpSpec};
 use crate::terminal::Terminal;
 use crossterm::event::KeyCode;
 use crossterm::style::Color;
@@ -7,19 +7,15 @@ use crossterm::terminal::size;
 use std::io;
 use std::time::{Duration, Instant};
 
-const HELP: &str = "\
-POMODORO
-─────────────────
-Space  Pause/resume
-s      Skip phase
-r      Reset timer
-Enter  Advance (when done)
-───────────────────────
- GLOBAL CONTROLS
- !-()   Color scheme
- q/Esc  Quit
- ?      Close help
-───────────────────────";
+const HELP: HelpSpec = HelpSpec::colored(
+    "POMODORO",
+    &[
+        HelpEntry::new("Space", "Pause/resume"),
+        HelpEntry::new("s", "Skip phase"),
+        HelpEntry::new("r", "Reset timer"),
+        HelpEntry::new("Enter", "Advance (when done)"),
+    ],
+);
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum PomodoroPhase {
@@ -307,11 +303,7 @@ pub fn run(config: PomodoroConfig) -> io::Result<()> {
                     KeyCode::Char(' ') => state.paused = !state.paused,
                     KeyCode::Char('s') => state.next_phase(&config),
                     KeyCode::Char('r') => state.reset(&config),
-                    KeyCode::Enter => {
-                        if state.remaining_secs == 0 {
-                            state.next_phase(&config);
-                        }
-                    }
+                    KeyCode::Enter if state.remaining_secs == 0 => state.next_phase(&config),
                     _ => {}
                 }
             }
@@ -399,7 +391,7 @@ pub fn run(config: PomodoroConfig) -> io::Result<()> {
 
         if show_help {
             let (w, h) = term.size();
-            render_help_overlay(&mut term, w, h, HELP);
+            render_help_spec(&mut term, w, h, &HELP);
         }
 
         term.present()?;

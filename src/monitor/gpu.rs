@@ -1,10 +1,10 @@
 use crate::colors::ColorState;
-use crate::help::render_help_overlay;
+use crate::help::{render_help_spec, HelpSpec};
 use crate::monitor::layout::{
     cpu_gradient_color_scheme, draw_meter_btop_scheme, format_bytes, header_color_scheme,
     muted_color_scheme, temp_gradient_color_scheme, Rect,
 };
-use crate::monitor::{build_help, MonitorConfig, MonitorState};
+use crate::monitor::{MonitorConfig, MonitorState};
 use crate::terminal::Terminal;
 use crossterm::style::Color;
 use crossterm::terminal::size;
@@ -22,6 +22,7 @@ struct GpuInfo {
     power_limit: Option<f32>,
     fan_speed: Option<u32>,
     fan_max: Option<u32>,
+    fan_is_rpm: bool,
 }
 
 impl GpuInfo {
@@ -34,10 +35,13 @@ impl GpuInfo {
     }
 
     fn fan_percent(&self) -> Option<f32> {
-        match (self.fan_speed, self.fan_max) {
-            (Some(speed), Some(max)) if max > 0 => Some((speed as f32 / max as f32) * 100.0),
-            (Some(speed), None) => Some(speed as f32), // Assume it's already a percentage
-            _ => None,
+        if self.fan_is_rpm {
+            match (self.fan_speed, self.fan_max) {
+                (Some(speed), Some(max)) if max > 0 => Some((speed as f32 / max as f32) * 100.0),
+                _ => None,
+            }
+        } else {
+            self.fan_speed.map(|speed| speed as f32)
         }
     }
 }
@@ -51,9 +55,10 @@ enum GpuBackend {
 
 pub struct GpuMonitor {
     gpus: Vec<GpuInfo>,
-    pub history_util: Vec<Vec<f32>>,
     backend: GpuBackend,
     amd_card_path: Option<String>,
+    amd_hwmon_path: Option<String>,
+    amd_name: Option<String>,
     error_msg: Option<String>,
 }
 
@@ -61,7 +66,7 @@ impl GpuMonitor {
     pub fn new() -> Self {
         // Check for NVIDIA first
         let has_nvidia = Command::new("nvidia-smi")
-            .arg("--query")
+            .arg("--list-gpus")
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false);
@@ -69,30 +74,33 @@ impl GpuMonitor {
         if has_nvidia {
             return Self {
                 gpus: Vec::new(),
-                history_util: Vec::new(),
                 backend: GpuBackend::Nvidia,
                 amd_card_path: None,
+                amd_hwmon_path: None,
+                amd_name: None,
                 error_msg: None,
             };
         }
 
         // Check for AMD GPU
         let amd_card_path = Self::find_amd_gpu();
-        if amd_card_path.is_some() {
+        if let Some(card_path) = amd_card_path {
             return Self {
                 gpus: Vec::new(),
-                history_util: Vec::new(),
                 backend: GpuBackend::Amd,
-                amd_card_path,
+                amd_hwmon_path: Self::find_hwmon_path(&card_path),
+                amd_name: Some(Self::get_amd_gpu_name()),
+                amd_card_path: Some(card_path),
                 error_msg: None,
             };
         }
 
         Self {
             gpus: Vec::new(),
-            history_util: Vec::new(),
             backend: GpuBackend::None,
             amd_card_path: None,
+            amd_hwmon_path: None,
+            amd_name: None,
             error_msg: Some("No GPU detected".to_string()),
         }
     }
@@ -123,6 +131,14 @@ impl GpuMonitor {
 
     fn read_sysfs_u32(path: &str) -> Option<u32> {
         Self::read_sysfs(path)?.parse().ok()
+    }
+
+    fn find_hwmon_path(card_path: &str) -> Option<String> {
+        fs::read_dir(format!("{}/hwmon", card_path))
+            .ok()?
+            .flatten()
+            .next()
+            .map(|entry| entry.path().to_string_lossy().into_owned())
     }
 
     fn get_amd_gpu_name() -> String {
@@ -169,7 +185,7 @@ impl GpuMonitor {
                 let stdout = String::from_utf8_lossy(&out.stdout);
                 self.gpus.clear();
 
-                for (i, line) in stdout.lines().enumerate() {
+                for line in stdout.lines() {
                     let parts: Vec<&str> = line.split(", ").collect();
                     if parts.len() >= 4 {
                         let gpu = GpuInfo {
@@ -186,15 +202,8 @@ impl GpuMonitor {
                             power_limit: parts.get(6).and_then(|s| s.trim().parse().ok()),
                             fan_speed: parts.get(7).and_then(|s| s.trim().parse().ok()),
                             fan_max: Some(100), // NVIDIA reports percentage directly
+                            fan_is_rpm: false,
                         };
-
-                        if i >= self.history_util.len() {
-                            self.history_util.push(Vec::new());
-                        }
-                        self.history_util[i].push(gpu.utilization);
-                        if self.history_util[i].len() > 500 {
-                            self.history_util[i].remove(0);
-                        }
 
                         self.gpus.push(gpu);
                     }
@@ -215,13 +224,6 @@ impl GpuMonitor {
             return Ok(());
         };
 
-        // Find hwmon path
-        let hwmon_path = fs::read_dir(format!("{}/hwmon", card_path))
-            .ok()
-            .and_then(|mut entries| entries.next())
-            .and_then(|e| e.ok())
-            .map(|e| e.path().to_string_lossy().to_string());
-
         let utilization =
             Self::read_sysfs_u32(&format!("{}/gpu_busy_percent", card_path)).unwrap_or(0) as f32;
 
@@ -231,7 +233,7 @@ impl GpuMonitor {
             Self::read_sysfs_u64(&format!("{}/mem_info_vram_total", card_path)).unwrap_or(0);
 
         let (temperature, power_draw, power_limit, fan_speed, fan_max) = if let Some(ref hwmon) =
-            hwmon_path
+            self.amd_hwmon_path
         {
             let temp = Self::read_sysfs_u32(&format!("{}/temp1_input", hwmon)).map(|t| t / 1000); // millicelsius to celsius
             let power = Self::read_sysfs_u64(&format!("{}/power1_average", hwmon))
@@ -246,7 +248,10 @@ impl GpuMonitor {
         };
 
         let gpu = GpuInfo {
-            name: Self::get_amd_gpu_name(),
+            name: self
+                .amd_name
+                .clone()
+                .unwrap_or_else(|| "AMD GPU".to_string()),
             utilization,
             memory_used,
             memory_total,
@@ -255,15 +260,8 @@ impl GpuMonitor {
             power_limit,
             fan_speed,
             fan_max,
+            fan_is_rpm: true,
         };
-
-        if self.history_util.is_empty() {
-            self.history_util.push(Vec::new());
-        }
-        self.history_util[0].push(gpu.utilization);
-        if self.history_util[0].len() > 500 {
-            self.history_util[0].remove(0);
-        }
 
         self.gpus.clear();
         self.gpus.push(gpu);
@@ -294,7 +292,7 @@ impl GpuMonitor {
         h: usize,
         colors: &ColorState,
     ) {
-        if h < 4 || w < 30 {
+        if h < 5 || w < 30 {
             return;
         }
 
@@ -310,17 +308,16 @@ impl GpuMonitor {
             return;
         }
 
-        // Calculate panel height per GPU
-        // Each GPU: Name(1) + GPU util(1) + VRAM(1) + Temp(1) + Power(1) + Fan(1) + blank(1) = 7 lines
-        let lines_per_gpu = 7;
-        let total_height = self.gpus.len() * lines_per_gpu - 1; // -1 for no trailing blank
+        // Each GPU uses five data rows plus one separator row between GPUs.
+        let visible_gpus = self.gpus.len().min((h + 1) / 6).max(1);
+        let total_height = visible_gpus * 6 - 1;
 
         // Vertically center
         let start_y = y + ((h as i32 - total_height as i32) / 2).max(0);
 
         let mut cy = start_y;
 
-        for (i, gpu) in self.gpus.iter().enumerate() {
+        for (i, gpu) in self.gpus.iter().take(visible_gpus).enumerate() {
             // GPU name with temp aligned right
             let temp_str = gpu.temperature.map(|t| format!("{:4}°C", t));
             let temp_len = temp_str.as_ref().map(|s| s.len()).unwrap_or(0);
@@ -410,7 +407,11 @@ impl GpuMonitor {
 
             // Fan
             if let Some(fan_pct) = gpu.fan_percent() {
-                let fan_str = gpu.fan_speed.map(|rpm| format!("{}RPM", rpm));
+                let fan_str = if gpu.fan_is_rpm {
+                    gpu.fan_speed.map(|rpm| format!("{}RPM", rpm))
+                } else {
+                    None
+                };
                 self.draw_gpu_row(
                     term,
                     x,
@@ -434,7 +435,7 @@ impl GpuMonitor {
             cy += 1;
 
             // Blank line between GPUs (except last)
-            if i < self.gpus.len() - 1 {
+            if i < visible_gpus - 1 {
                 cy += 1;
             }
         }
@@ -502,13 +503,10 @@ impl GpuMonitor {
 
 pub fn run(config: MonitorConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
-    let mut state = MonitorState::new(config.time_step.max(0.5));
+    let mut state = MonitorState::new(config.time_step, 0.5);
     let mut monitor = GpuMonitor::new();
-    let help_text = build_help("GPU MONITOR", "");
+    const HELP: HelpSpec = HelpSpec::animated("GPU MONITOR", &[]);
     let mut show_help = false;
-
-    monitor.update()?;
-    std::thread::sleep(std::time::Duration::from_millis(100));
 
     loop {
         if let Ok(Some((code, mods))) = term.check_key() {
@@ -538,7 +536,7 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
 
         if show_help {
             let (w, h) = term.size();
-            render_help_overlay(&mut term, w, h, &help_text);
+            render_help_spec(&mut term, w, h, &HELP);
         }
 
         term.present()?;

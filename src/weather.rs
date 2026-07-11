@@ -1,5 +1,5 @@
 use crate::colors::{scheme_color, ColorState};
-use crate::help::render_help_overlay;
+use crate::help::{render_help_spec, HelpEntry, HelpSpec};
 use crate::terminal::Terminal;
 use crossterm::event::KeyCode;
 use crossterm::style::Color;
@@ -9,19 +9,15 @@ use serde::Deserialize;
 use std::io;
 use std::time::{Duration, Instant};
 
-const HELP: &str = "\
-WEATHER
-─────────────────
-f      Toggle °F/°C
-r      Refresh (non-demo)
-←/→    Next/prev condition (demo)
-n/p    Next/prev condition (demo)
-───────────────────────
- GLOBAL CONTROLS
- !-()   Color scheme
- q/Esc  Quit
- ?      Close help
-───────────────────────";
+const HELP: HelpSpec = HelpSpec::colored(
+    "WEATHER",
+    &[
+        HelpEntry::new("f", "Toggle °F/°C"),
+        HelpEntry::new("r", "Refresh (non-demo)"),
+        HelpEntry::new("←/→", "Next/prev condition (demo)"),
+        HelpEntry::new("n/p", "Next/prev condition (demo)"),
+    ],
+);
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum WeatherCondition {
@@ -1047,7 +1043,7 @@ pub fn run(config: WeatherConfig) -> io::Result<()> {
 
         if show_help {
             let (w, h) = term.size();
-            render_help_overlay(&mut term, w, h, HELP);
+            render_help_spec(&mut term, w, h, &HELP);
         }
 
         term.present()?;

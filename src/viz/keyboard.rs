@@ -181,7 +181,10 @@ fn evdev_key_to_label(key: evdev::Key) -> Option<&'static str> {
 
 /// Run the keyboard visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
-    let mut state = VizState::new(config.time_step, "");
+    let mut state = VizState::new(
+        config.time_step,
+        crate::help::HelpSpec::animated("KEYBOARD", &[]),
+    );
 
     let (init_w, init_h) = term.size();
     let mut prev_w = init_w;

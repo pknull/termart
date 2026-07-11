@@ -1,6 +1,7 @@
 //! Clock widget - 24-hour time in block letters with date
 
 use crate::colors::ColorState;
+use crate::help::render_help_spec;
 use crate::terminal::Terminal;
 use chrono::{Datelike, Local, Timelike};
 use crossterm::event::KeyCode;
@@ -240,20 +241,16 @@ const DASH_WIDTH: usize = 3;
 const SPACING: usize = 1;
 
 // Help text
-const HELP_TEXT: &str = "\
-CLOCK
-─────────────────
-D  Toggle date/time
-T  Toggle 12/24 hour
-S  Toggle seconds
-A  Auto-cycle on/off
-C  Anti-burn cycle
-───────────────────────
- GLOBAL CONTROLS
- !-()    Color scheme
- q/Esc   Quit
- ?       Close help
-───────────────────────";
+const HELP: crate::help::HelpSpec = crate::help::HelpSpec::colored(
+    "CLOCK",
+    &[
+        crate::help::HelpEntry::new("D", "Toggle date/time"),
+        crate::help::HelpEntry::new("T", "Toggle 12/24 hour"),
+        crate::help::HelpEntry::new("S", "Toggle seconds"),
+        crate::help::HelpEntry::new("A", "Auto-cycle on/off"),
+        crate::help::HelpEntry::new("C", "Anti-burn cycle"),
+    ],
+);
 
 #[inline]
 #[allow(clippy::too_many_arguments)]
@@ -597,81 +594,7 @@ pub fn run(mut config: ClockConfig) -> io::Result<()> {
 
         // Help overlay
         if show_help {
-            let lines: Vec<&str> = HELP_TEXT.lines().collect();
-            let max_width = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0);
-            let box_width = max_width + 4;
-            let box_height = lines.len() + 2;
-            let help_x = (w as usize).saturating_sub(box_width) / 2;
-            let help_y = (h as usize).saturating_sub(box_height) / 2;
-
-            // Top border
-            term.set(help_x as i32, help_y as i32, '┌', Some(Color::White), false);
-            for x_off in 1..box_width - 1 {
-                term.set(
-                    (help_x + x_off) as i32,
-                    help_y as i32,
-                    '─',
-                    Some(Color::White),
-                    false,
-                );
-            }
-            term.set(
-                (help_x + box_width - 1) as i32,
-                help_y as i32,
-                '┐',
-                Some(Color::White),
-                false,
-            );
-
-            // Content rows
-            for (i, line) in lines.iter().enumerate() {
-                let y_off = help_y + 1 + i;
-                term.set(help_x as i32, y_off as i32, '│', Some(Color::White), false);
-                let padding = max_width.saturating_sub(line.chars().count());
-                let padded = format!(" {}{} ", line, " ".repeat(padding));
-                for (j, ch) in padded.chars().enumerate() {
-                    term.set(
-                        (help_x + 1 + j) as i32,
-                        y_off as i32,
-                        ch,
-                        Some(Color::Grey),
-                        false,
-                    );
-                }
-                term.set(
-                    (help_x + box_width - 1) as i32,
-                    y_off as i32,
-                    '│',
-                    Some(Color::White),
-                    false,
-                );
-            }
-
-            // Bottom border
-            let bottom_y = help_y + box_height - 1;
-            term.set(
-                help_x as i32,
-                bottom_y as i32,
-                '└',
-                Some(Color::White),
-                false,
-            );
-            for x_off in 1..box_width - 1 {
-                term.set(
-                    (help_x + x_off) as i32,
-                    bottom_y as i32,
-                    '─',
-                    Some(Color::White),
-                    false,
-                );
-            }
-            term.set(
-                (help_x + box_width - 1) as i32,
-                bottom_y as i32,
-                '┘',
-                Some(Color::White),
-                false,
-            );
+            render_help_spec(&mut term, w, h, &HELP);
         }
 
         term.present()?;

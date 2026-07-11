@@ -33,34 +33,16 @@ pub struct MonitorState {
     pub speed: f32,
     pub paused: bool,
     pub colors: ColorState,
-}
-
-/// Global help section appended to all monitor help text
-pub const MONITOR_GLOBAL_HELP: &str = "\
-───────────────────────
- GLOBAL CONTROLS
- Space   Pause/resume
- 1-9     Speed (1=fast)
- !-()    Color scheme
- q/Esc   Quit
- ?       Close help
-───────────────────────";
-
-/// Build monitor help text from a title and optional extra lines
-pub fn build_help(title: &str, extra: &str) -> String {
-    if extra.is_empty() {
-        format!("{title}\n─────────────────\n{MONITOR_GLOBAL_HELP}")
-    } else {
-        format!("{title}\n─────────────────\n{extra}\n{MONITOR_GLOBAL_HELP}")
-    }
+    min_speed: f32,
 }
 
 impl MonitorState {
-    pub fn new(initial_speed: f32) -> Self {
+    pub fn new(initial_speed: f32, min_speed: f32) -> Self {
         Self {
-            speed: initial_speed,
+            speed: initial_speed.max(min_speed),
             paused: false,
             colors: ColorState::new(7), // Default to mono (semantic colors)
+            min_speed,
         }
     }
 
@@ -75,19 +57,20 @@ impl MonitorState {
             KeyCode::Char(' ') => self.paused = !self.paused,
             KeyCode::Char(c) if c.is_ascii_digit() => {
                 let n = c.to_digit(10).unwrap() as u8;
-                self.speed = match n {
-                    0 => 2.0,
-                    1 => 0.1,
-                    2 => 0.2,
-                    3 => 0.3,
-                    4 => 0.5,
-                    5 => 0.7,
-                    6 => 1.0,
-                    7 => 1.5,
-                    8 => 2.0,
-                    9 => 3.0,
-                    _ => self.speed,
+                let multiplier = match n {
+                    0 => 10.0,
+                    1 => 1.0,
+                    2 => 1.25,
+                    3 => 1.5,
+                    4 => 1.75,
+                    5 => 2.0,
+                    6 => 2.5,
+                    7 => 3.0,
+                    8 => 4.0,
+                    9 => 6.0,
+                    _ => 1.0,
                 };
+                self.speed = self.min_speed * multiplier;
             }
             _ => {}
         }
@@ -108,30 +91,23 @@ pub fn run(config: MonitorConfig) -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_help, MonitorState, MONITOR_GLOBAL_HELP};
+    use super::MonitorState;
     use crossterm::event::{KeyCode, KeyModifiers};
 
     #[test]
-    fn build_help_without_extra() {
-        let text = build_help("CPU MONITOR", "");
-        assert!(text.starts_with("CPU MONITOR"));
-        assert!(text.contains(MONITOR_GLOBAL_HELP));
-    }
-
-    #[test]
-    fn build_help_with_extra() {
-        let text = build_help("PROCESS LIST", "m  Cycle sort");
-        assert!(text.contains("PROCESS LIST"));
-        assert!(text.contains("m  Cycle sort"));
-        assert!(text.contains(MONITOR_GLOBAL_HELP));
-    }
-
-    #[test]
     fn monitor_state_speed_presets() {
-        let mut state = MonitorState::new(1.0);
+        let mut state = MonitorState::new(1.0, 0.5);
         state.handle_key(KeyCode::Char('1'), KeyModifiers::NONE);
-        assert!((state.speed - 0.1).abs() < f32::EPSILON);
+        assert!((state.speed - 0.5).abs() < f32::EPSILON);
         state.handle_key(KeyCode::Char('9'), KeyModifiers::NONE);
         assert!((state.speed - 3.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn monitor_state_enforces_sampling_floor() {
+        let mut state = MonitorState::new(0.1, 1.0);
+        assert!((state.speed - 1.0).abs() < f32::EPSILON);
+        state.handle_key(KeyCode::Char('1'), KeyModifiers::NONE);
+        assert!((state.speed - 1.0).abs() < f32::EPSILON);
     }
 }

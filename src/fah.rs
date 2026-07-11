@@ -1,5 +1,5 @@
 use crate::colors::ColorState;
-use crate::help::render_help_overlay;
+use crate::help::{render_help_spec, HelpEntry, HelpSpec};
 use crate::monitor::layout::{
     draw_meter_btop_scheme, header_color_scheme, muted_color_scheme, text_color_scheme,
 };
@@ -22,16 +22,8 @@ use crossterm::event::KeyCode;
 use crossterm::terminal::size;
 use pbkdf2::pbkdf2_hmac;
 
-const HELP: &str = "\
-FOLDING@HOME
-─────────────────
-r      Refresh/reconnect
-───────────────────────
- GLOBAL CONTROLS
- !-()   Color scheme
- q/Esc  Quit
- ?      Close help
-───────────────────────";
+const HELP: HelpSpec =
+    HelpSpec::colored("FOLDING@HOME", &[HelpEntry::new("r", "Refresh/reconnect")]);
 use rsa::pkcs1v15::SigningKey;
 use rsa::signature::{SignatureEncoding, Signer};
 use rsa::{
@@ -1740,7 +1732,7 @@ pub fn run(config: FahConfig) -> io::Result<()> {
         let (w, h) = term.size();
         display.render(&mut term, w as usize, h as usize, &colors);
         if show_help {
-            render_help_overlay(&mut term, w, h, HELP);
+            render_help_spec(&mut term, w, h, &HELP);
         }
         term.present()?;
 

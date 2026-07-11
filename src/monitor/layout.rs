@@ -193,6 +193,30 @@ pub fn format_rate(bytes_per_sec: f64) -> String {
     }
 }
 
+/// Map a byte rate onto a logarithmic activity scale.
+///
+/// Rate meters do not represent hardware utilization because link and device
+/// capacities are generally unknown. A logarithmic scale keeps background
+/// activity visible whilst the adjacent rate remains the precise measurement.
+pub fn activity_percent(rate: f64, scale: f64) -> f32 {
+    if !rate.is_finite() || !scale.is_finite() || rate <= 0.0 || scale <= 0.0 {
+        return 0.0;
+    }
+
+    let rate_kib = rate / 1024.0;
+    let scale_kib = scale.max(rate) / 1024.0;
+    (rate_kib.ln_1p() / scale_kib.ln_1p() * 100.0).clamp(0.0, 100.0) as f32
+}
+
+/// Update an adaptive activity scale using elapsed-time-based decay.
+pub fn update_activity_scale(previous: f64, current: f64, elapsed_secs: f32, floor: f64) -> f64 {
+    const HALF_LIFE_SECS: f64 = 30.0;
+
+    let elapsed = elapsed_secs.max(0.0) as f64;
+    let decay = 0.5_f64.powf(elapsed / HALF_LIFE_SECS);
+    current.max((previous * decay).max(floor))
+}
+
 /// CPU mini graph gradient (btop TTY: bright green -> bright red based on VALUE)
 /// Maps percentage 0-100 to ANSI bright green (10) → bright yellow (11) → bright red (9)
 pub fn cpu_gradient_color(percent: f32) -> Color {
@@ -275,5 +299,25 @@ pub fn header_color_scheme(colors: &ColorState) -> Color {
         Color::Cyan
     } else {
         scheme_color(colors.scheme, 3, true).0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{activity_percent, update_activity_scale};
+
+    #[test]
+    fn activity_scale_keeps_low_rates_visible() {
+        let pct = activity_percent(53.0 * 1024.0, 1024.0 * 1024.0);
+        assert!(pct > 50.0 && pct < 60.0);
+        assert_eq!(activity_percent(0.0, 1024.0), 0.0);
+    }
+
+    #[test]
+    fn activity_scale_decay_is_time_based_and_floored() {
+        let mib = 1024.0 * 1024.0;
+        let decayed = update_activity_scale(8.0 * mib, 0.0, 30.0, mib);
+        assert!((decayed - 4.0 * mib).abs() < 1.0);
+        assert_eq!(update_activity_scale(mib, 0.0, 300.0, mib), mib);
     }
 }

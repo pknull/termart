@@ -134,10 +134,10 @@ fn encode_braille(dots: &[[bool; DOTS_X]; DOTS_Y]) -> char {
 }
 
 /// Help text for Lissajous visualization
-const HELP: &str = "\
-LISSAJOUS
-─────────────────
-H  Cycle harmonics";
+const HELP: crate::help::HelpSpec = crate::help::HelpSpec::animated(
+    "LISSAJOUS",
+    &[crate::help::HelpEntry::new("H", "Cycle harmonics")],
+);
 
 /// Run the Lissajous visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {

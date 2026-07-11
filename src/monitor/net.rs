@@ -1,10 +1,10 @@
 use crate::colors::ColorState;
-use crate::help::render_help_overlay;
+use crate::help::{render_help_spec, HelpSpec};
 use crate::monitor::layout::{
-    cpu_gradient_color_scheme, draw_meter_btop_scheme, format_bytes, format_rate,
-    header_color_scheme, muted_color_scheme, text_color_scheme, Rect,
+    activity_percent, cpu_gradient_color_scheme, draw_meter_btop_scheme, format_bytes, format_rate,
+    header_color_scheme, muted_color_scheme, text_color_scheme, update_activity_scale, Rect,
 };
-use crate::monitor::{build_help, MonitorConfig, MonitorState};
+use crate::monitor::{MonitorConfig, MonitorState};
 use crate::terminal::Terminal;
 use crossterm::style::Color;
 use crossterm::terminal::size;
@@ -42,6 +42,7 @@ impl NetMonitor {
     }
 
     pub fn update(&mut self, interval: f32) -> io::Result<()> {
+        let interval = interval.max(f32::EPSILON);
         let content = fs::read_to_string("/proc/net/dev")?;
         let mut new_interfaces = Vec::new();
 
@@ -107,17 +108,11 @@ impl NetMonitor {
 
         self.interfaces = new_interfaces;
 
-        // Update peak rates for auto-scaling (with decay)
-        if self.total_rx_rate > self.peak_rx_rate {
-            self.peak_rx_rate = self.total_rx_rate;
-        } else {
-            self.peak_rx_rate = (self.peak_rx_rate * 0.999).max(1024.0 * 1024.0);
-        }
-        if self.total_tx_rate > self.peak_tx_rate {
-            self.peak_tx_rate = self.total_tx_rate;
-        } else {
-            self.peak_tx_rate = (self.peak_tx_rate * 0.999).max(1024.0 * 1024.0);
-        }
+        const SCALE_FLOOR: f64 = 1024.0 * 1024.0;
+        self.peak_rx_rate =
+            update_activity_scale(self.peak_rx_rate, self.total_rx_rate, interval, SCALE_FLOOR);
+        self.peak_tx_rate =
+            update_activity_scale(self.peak_tx_rate, self.total_tx_rate, interval, SCALE_FLOOR);
 
         Ok(())
     }
@@ -144,14 +139,16 @@ impl NetMonitor {
         h: usize,
         colors: &ColorState,
     ) {
-        if h < 4 || w < 30 {
+        if h < 3 || w < 30 {
             return;
         }
 
-        // Calculate panel height: Title(1) + Download(1) + Upload(1) + blank + per-interface lines
-        let num_ifaces = self.interfaces.len().min(4); // Show max 4 interfaces
-                                                       // Each interface: name(1) + download(1) + upload(1) = 3 lines
-        let panel_height = 3 + if num_ifaces > 1 {
+        // The total-only view is three rows. Add per-interface rows only when
+        // at least two interfaces fit in full.
+        let fitting_ifaces = h.saturating_sub(4) / 3;
+        let num_ifaces = self.interfaces.len().min(4).min(fitting_ifaces);
+        let show_breakdown = num_ifaces > 1;
+        let panel_height = 3 + if show_breakdown {
             1 + num_ifaces * 3
         } else {
             0
@@ -188,7 +185,7 @@ impl NetMonitor {
         cy += 1;
 
         // Download rate
-        let rx_pct = ((self.total_rx_rate / self.peak_rx_rate) * 100.0).min(100.0) as f32;
+        let rx_pct = activity_percent(self.total_rx_rate, self.peak_rx_rate);
         self.draw_net_row(
             term,
             start_x,
@@ -203,7 +200,7 @@ impl NetMonitor {
         cy += 1;
 
         // Upload rate
-        let tx_pct = ((self.total_tx_rate / self.peak_tx_rate) * 100.0).min(100.0) as f32;
+        let tx_pct = activity_percent(self.total_tx_rate, self.peak_tx_rate);
         self.draw_net_row(
             term,
             start_x,
@@ -218,7 +215,7 @@ impl NetMonitor {
         cy += 1;
 
         // Per-interface breakdown (if multiple interfaces)
-        if num_ifaces > 1 {
+        if show_breakdown {
             cy += 1; // Blank line
 
             for iface in self.interfaces.iter().take(4) {
@@ -233,7 +230,7 @@ impl NetMonitor {
                 cy += 1;
 
                 // Download for this interface
-                let iface_rx_pct = ((iface.rx_rate / self.peak_rx_rate) * 100.0).min(100.0) as f32;
+                let iface_rx_pct = activity_percent(iface.rx_rate, self.peak_rx_rate);
                 self.draw_net_row(
                     term,
                     start_x,
@@ -248,7 +245,7 @@ impl NetMonitor {
                 cy += 1;
 
                 // Upload for this interface
-                let iface_tx_pct = ((iface.tx_rate / self.peak_tx_rate) * 100.0).min(100.0) as f32;
+                let iface_tx_pct = activity_percent(iface.tx_rate, self.peak_tx_rate);
                 self.draw_net_row(
                     term,
                     start_x,
@@ -278,11 +275,12 @@ impl NetMonitor {
         colors: &ColorState,
         is_download: bool,
     ) {
-        // Layout: Label(10) + Meter(dynamic) + Pct(6) + Rate(12)
+        // Layout: Label(10) + logarithmic activity meter(dynamic) + Rate(12).
+        // The meter percentage is intentionally not printed: it is relative
+        // activity, not link utilization.
         let label_w = 10;
-        let pct_w = 6;
         let rate_w = 12;
-        let meter_w = width.saturating_sub(label_w + pct_w + rate_w);
+        let meter_w = width.saturating_sub(label_w + rate_w);
 
         let mut pos = x;
 
@@ -308,32 +306,22 @@ impl NetMonitor {
             pos += meter_w as i32;
         }
 
-        // Percentage
-        let pct_str = format!("{:4.0}% ", percent);
-        term.set_str(pos, y, &pct_str, Some(color), false);
-        pos += pct_w as i32;
-
         // Rate right-aligned
         let rate_str = format_rate(rate);
         let rate_pad = rate_w.saturating_sub(rate_str.len());
-        term.set_str(
-            pos + rate_pad as i32,
-            y,
-            &rate_str,
-            Some(muted_color_scheme(colors)),
-            false,
-        );
+        term.set_str(pos + rate_pad as i32, y, &rate_str, Some(color), false);
     }
 }
 
 pub fn run(config: MonitorConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
-    let mut state = MonitorState::new(config.time_step.max(1.0));
+    let mut state = MonitorState::new(config.time_step, 1.0);
     let mut monitor = NetMonitor::new();
-    let help_text = build_help("NETWORK MONITOR", "");
+    const HELP: HelpSpec = HelpSpec::animated("NETWORK MONITOR", &[]);
     let mut show_help = false;
 
     monitor.update(1.0)?;
+    let mut last_sample = std::time::Instant::now();
     std::thread::sleep(std::time::Duration::from_millis(100));
 
     loop {
@@ -354,7 +342,9 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
         }
 
         if !state.paused {
-            monitor.update(state.speed)?;
+            let elapsed = last_sample.elapsed().as_secs_f32().max(f32::EPSILON);
+            monitor.update(elapsed)?;
+            last_sample = std::time::Instant::now();
         }
 
         term.clear();
@@ -364,7 +354,7 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
 
         if show_help {
             let (w, h) = term.size();
-            render_help_overlay(&mut term, w, h, &help_text);
+            render_help_spec(&mut term, w, h, &HELP);
         }
 
         term.present()?;

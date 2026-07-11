@@ -3,9 +3,10 @@
 //! Displays real-time Claude API usage statistics in the terminal.
 //! Supports OAuth authentication with proper scopes for usage API access.
 
-use crate::colors::{scheme_color, ColorState};
-use crate::monitor::layout::{cpu_gradient_color_scheme, muted_color_scheme};
+use crate::colors::scheme_color;
+use crate::monitor::layout::muted_color_scheme;
 use crate::terminal::Terminal;
+use crate::viz::usage::{draw_usage_bar, elapsed_percent, format_duration, text_columns};
 use crate::viz::VizState;
 use crossterm::event::KeyCode;
 use crossterm::style::Color;
@@ -15,11 +16,10 @@ use std::io::{self, BufRead, BufReader, Write as IoWrite};
 use std::net::TcpListener;
 use std::time::{Duration, Instant};
 
-const HELP_TEXT: &str = "\
-CLAUDE TOKENS
-────────────────────
-r  Refresh now
-";
+const HELP: crate::help::HelpSpec = crate::help::HelpSpec::animated(
+    "CLAUDE TOKENS",
+    &[crate::help::HelpEntry::new("r", "Refresh now")],
+);
 
 // OAuth configuration
 const OAUTH_AUTHORIZE_URL: &str = "https://claude.ai/oauth/authorize";
@@ -508,119 +508,7 @@ fn time_until_reset(resets_at: &str) -> Option<Duration> {
 /// Calculate elapsed percentage of a window given remaining time
 /// window_hours: total window size (5 for 5-hour, 168 for 7-day)
 fn elapsed_pct(remaining: Duration, window_hours: f64) -> f64 {
-    let remaining_hours = remaining.as_secs_f64() / 3600.0;
-    let elapsed_hours = (window_hours - remaining_hours).max(0.0);
-    (elapsed_hours / window_hours * 100.0).min(100.0)
-}
-
-/// Format duration as human-readable
-fn format_duration(d: Duration) -> String {
-    let secs = d.as_secs();
-    let hours = secs / 3600;
-    let mins = (secs % 3600) / 60;
-    if hours > 0 {
-        format!("{}h {}m", hours, mins)
-    } else {
-        format!("{}m", mins)
-    }
-}
-
-fn text_columns(text: &str) -> usize {
-    text.chars().count()
-}
-
-/// Draw a usage bar with optional pacing ghost
-/// expected_pct: if Some, draws a dim underlay showing elapsed time as expected usage
-#[allow(clippy::too_many_arguments)]
-fn draw_usage_bar(
-    term: &mut Terminal,
-    x: usize,
-    y: usize,
-    width: usize,
-    pct: f64,
-    expected_pct: Option<f64>,
-    label: &str,
-    colors: &ColorState,
-) {
-    // Layout: Label(8) + Meter(dynamic) + Pct(6)
-    let label_w = 8;
-    let pct_w = 6;
-    let meter_w = width.saturating_sub(label_w + pct_w);
-
-    let mut pos = x as i32;
-
-    // Label
-    let label_str = format!("{:<8}", label);
-    term.set_str(
-        pos,
-        y as i32,
-        &label_str,
-        Some(muted_color_scheme(colors)),
-        false,
-    );
-    pos += label_w as i32;
-
-    // Draw meter with pacing ghost
-    draw_meter_with_pacing(
-        term,
-        pos,
-        y as i32,
-        meter_w,
-        pct as f32,
-        expected_pct.map(|p| p as f32),
-        colors,
-    );
-    pos += meter_w as i32;
-
-    // Percentage
-    let pct_str = format!("{:5.1}%", pct);
-    let color = cpu_gradient_color_scheme(pct as f32, colors);
-    term.set_str(pos, y as i32, &pct_str, Some(color), pct >= 80.0);
-}
-
-/// Draw meter with optional pacing ghost underlay
-fn draw_meter_with_pacing(
-    term: &mut Terminal,
-    x: i32,
-    y: i32,
-    width: usize,
-    percent: f32,
-    expected_pct: Option<f32>,
-    colors: &ColorState,
-) {
-    if width == 0 {
-        return;
-    }
-
-    const METER_CHAR: char = '■';
-    let filled = ((percent / 100.0) * width as f32) as usize;
-    let expected_filled = expected_pct
-        .map(|e| ((e / 100.0) * width as f32) as usize)
-        .unwrap_or(0);
-
-    // Ghost color - very dim, shows "expected" usage based on elapsed time
-    let ghost_color = Color::AnsiValue(238); // Dark gray
-
-    for i in 0..width {
-        if i < filled {
-            // Actual usage - gradient color
-            let pos_pct = (i as f32 / width as f32) * 100.0;
-            let grad = cpu_gradient_color_scheme(pos_pct.min(percent), colors);
-            term.set(x + i as i32, y, METER_CHAR, Some(grad), false);
-        } else if i < expected_filled {
-            // Pacing ghost - dim color showing unused capacity
-            term.set(x + i as i32, y, METER_CHAR, Some(ghost_color), false);
-        } else {
-            // Empty - muted
-            term.set(
-                x + i as i32,
-                y,
-                METER_CHAR,
-                Some(muted_color_scheme(colors)),
-                false,
-            );
-        }
-    }
+    elapsed_percent(remaining, Duration::from_secs_f64(window_hours * 3600.0))
 }
 
 /// Check if current time is during peak hours (reduced session quotas)
@@ -764,7 +652,7 @@ pub fn run(config: TokenEaterConfig) -> io::Result<()> {
     };
 
     let mut term = Terminal::new(true)?;
-    let mut state = VizState::new(config.time_step, HELP_TEXT);
+    let mut state = VizState::new(config.time_step, HELP);
 
     let base_interval = Duration::from_secs(config.refresh_interval.max(1));
     let max_backoff = Duration::from_secs(MAX_BACKOFF_SECS.max(config.refresh_interval));

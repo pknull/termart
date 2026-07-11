@@ -979,7 +979,10 @@ impl FocusConnection {
 
 pub fn run(config: DygmaConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
-    let mut state = VizState::new(config.time_step, "");
+    let mut state = VizState::new(
+        config.time_step,
+        crate::help::HelpSpec::animated("DYGMA", &[]),
+    );
 
     let (init_w, init_h) = term.size();
     let mut prev_w = init_w;

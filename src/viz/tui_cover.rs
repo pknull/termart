@@ -1,6 +1,6 @@
 use crate::colors::ColorState;
 use crate::config::FractalConfig;
-use crate::help::render_help_overlay;
+use crate::help::{render_help_spec, HelpEntry, HelpSpec};
 use crate::settings::Settings;
 use crate::terminal::Terminal;
 use crate::tui::cover::{
@@ -12,17 +12,13 @@ use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use std::io;
 use std::time::{Duration, Instant};
 
-const HELP_TEXT: &str = "\
-TUI COVER
-─────────────────
-r      Reconnect
-&      Full RGB cover
-?      Close help
-───────────────────────
- GLOBAL CONTROLS
- !-()   Color scheme
- q/Esc  Quit
-───────────────────────";
+const HELP: HelpSpec = HelpSpec::colored(
+    "TUI COVER",
+    &[
+        HelpEntry::new("r", "Reconnect"),
+        HelpEntry::new("&", "Full RGB cover"),
+    ],
+);
 
 pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
     let mut colors = ColorState::new(7);
@@ -113,7 +109,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         }
 
         if show_help {
-            render_help_overlay(term, width, height, HELP_TEXT);
+            render_help_spec(term, width, height, &HELP);
         }
 
         term.present()?;

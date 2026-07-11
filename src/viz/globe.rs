@@ -410,13 +410,15 @@ fn fetch_user_location() -> Option<(f32, f32)> {
 }
 
 /// Help text for globe visualization
-const HELP: &str = "\
-GLOBE
-─────────────────
-↑/k    Pan up
-↓/j    Pan down
-+/-    Zoom in/out
-0      Reset zoom";
+const HELP: crate::help::HelpSpec = crate::help::HelpSpec::animated(
+    "GLOBE",
+    &[
+        crate::help::HelpEntry::new("↑/k", "Pan up"),
+        crate::help::HelpEntry::new("↓/j", "Pan down"),
+        crate::help::HelpEntry::new("+/-", "Zoom in/out"),
+        crate::help::HelpEntry::new("0", "Reset zoom"),
+    ],
+);
 
 /// Run the globe visualization
 pub fn run(

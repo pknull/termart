@@ -4,6 +4,7 @@
 
 pub mod audio;
 pub mod clock;
+pub mod codex_tokens;
 pub mod cube;
 pub mod donut;
 pub mod dygma;
@@ -25,10 +26,11 @@ pub mod sunlight;
 pub mod tokeneater;
 pub mod tui_control;
 pub mod tui_cover;
+mod usage;
 pub mod waves;
 
 use crate::colors::ColorState;
-use crate::help::render_help_overlay;
+use crate::help::{render_help_spec, HelpSpec};
 use crate::terminal::Terminal;
 use crossterm::event::{KeyCode, KeyModifiers};
 
@@ -38,34 +40,23 @@ pub use crate::colors::scheme_color;
 /// Default color scheme for all visualizations (7 = mono/white)
 const DEFAULT_COLOR_SCHEME: u8 = 7;
 
-/// Global help section appended to all visualizer help text
-const GLOBAL_HELP: &str = "\
-───────────────────────
- GLOBAL CONTROLS
- Space   Pause/resume
- 1-9     Speed (1=fast)
- !-()    Color scheme
- q/Esc   Quit
- ?       Close help
-───────────────────────";
-
 /// Runtime state for interactive controls (shared by all visualizations)
 pub struct VizState {
     pub speed: f32,         // Current speed (time per frame)
     pub colors: ColorState, // Color scheme state (delegated)
     pub paused: bool,
-    pub show_help: bool,     // Whether help overlay is visible
-    help_text: &'static str, // Visualizer-specific help text
+    pub show_help: bool, // Whether help overlay is visible
+    help: HelpSpec,
 }
 
 impl VizState {
-    pub fn new(initial_speed: f32, help_text: &'static str) -> Self {
+    pub fn new(initial_speed: f32, help: HelpSpec) -> Self {
         Self {
             speed: initial_speed,
             colors: ColorState::new(DEFAULT_COLOR_SCHEME),
             paused: false,
             show_help: false,
-            help_text,
+            help,
         }
     }
 
@@ -116,25 +107,19 @@ impl VizState {
             return;
         }
 
-        // Build combined help text
-        let combined = if self.help_text.is_empty() {
-            GLOBAL_HELP.to_string()
-        } else {
-            format!("{}\n{}", self.help_text, GLOBAL_HELP)
-        };
-
-        render_help_overlay(term, width, height, &combined);
+        render_help_spec(term, width, height, &self.help);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::VizState;
+    use crate::help::HelpSpec;
     use crossterm::event::{KeyCode, KeyModifiers};
 
     #[test]
     fn handle_key_toggles_help() {
-        let mut state = VizState::new(0.03, "");
+        let mut state = VizState::new(0.03, HelpSpec::animated("TEST", &[]));
         assert!(!state.show_help);
         let quit = state.handle_key(KeyCode::Char('?'), KeyModifiers::NONE);
         assert!(!quit);
@@ -143,14 +128,14 @@ mod tests {
 
     #[test]
     fn handle_key_quit() {
-        let mut state = VizState::new(0.03, "");
+        let mut state = VizState::new(0.03, HelpSpec::animated("TEST", &[]));
         let quit = state.handle_key(KeyCode::Char('q'), KeyModifiers::NONE);
         assert!(quit);
     }
 
     #[test]
     fn handle_key_speed_presets() {
-        let mut state = VizState::new(0.03, "");
+        let mut state = VizState::new(0.03, HelpSpec::animated("TEST", &[]));
         state.handle_key(KeyCode::Char('1'), KeyModifiers::NONE);
         assert!((state.speed - 0.005).abs() < f32::EPSILON);
         state.handle_key(KeyCode::Char('0'), KeyModifiers::NONE);

@@ -1,17 +1,15 @@
 //! Process list monitor - shows top processes by CPU/memory usage
 
 use crate::colors::ColorState;
-use crate::help::render_help_overlay;
+use crate::help::{render_help_spec, HelpEntry, HelpSpec};
 use crate::monitor::layout::{cpu_gradient_color_scheme, muted_color_scheme, text_color_scheme};
-use crate::monitor::{build_help, MonitorState};
+use crate::monitor::MonitorState;
 use crate::terminal::Terminal;
 use crossterm::event::KeyCode;
 use crossterm::terminal::size;
 use std::collections::HashMap;
 use std::fs;
 use std::io;
-
-const CLK_TCK: f64 = 100.0; // Linux kernel ticks per second
 
 #[derive(Clone)]
 struct ProcessInfo {
@@ -20,6 +18,7 @@ struct ProcessInfo {
     cpu_pct: f32,
     mem_pct: f32,
     cpu_ticks: u64, // Raw ticks for delta calculation
+    is_kernel: bool,
 }
 
 pub struct PsMonitor {
@@ -28,6 +27,8 @@ pub struct PsMonitor {
     mem_total: u64,
     sort_by_mem: bool,
     show_kernel: bool,
+    clock_ticks: f64,
+    page_size: u64,
 }
 
 impl PsMonitor {
@@ -38,6 +39,8 @@ impl PsMonitor {
             mem_total: get_mem_total().unwrap_or(1),
             sort_by_mem: false,
             show_kernel,
+            clock_ticks: sysconf_value(libc::_SC_CLK_TCK).unwrap_or(100) as f64,
+            page_size: sysconf_value(libc::_SC_PAGESIZE).unwrap_or(4096),
         }
     }
 
@@ -75,7 +78,7 @@ impl PsMonitor {
             if let Ok(pid) = name_str.parse::<u32>() {
                 if let Some(info) = self.read_process(pid, uptime) {
                     // Filter kernel threads (empty cmdline) unless show_kernel
-                    if self.show_kernel || !info.name.is_empty() {
+                    if self.show_kernel || !info.is_kernel {
                         new_ticks.insert(pid, (info.cpu_ticks, uptime)); // Store raw ticks for next delta
                         new_processes.push(info);
                     }
@@ -125,14 +128,14 @@ impl PsMonitor {
         let rss_pages: u64 = fields[21].parse().ok()?; // Field 24 (RSS in pages)
 
         let cpu_ticks = utime + stime;
-        let rss_bytes = rss_pages * 4096; // Page size is typically 4KB
+        let rss_bytes = rss_pages.saturating_mul(self.page_size);
 
         // Calculate CPU% using delta from previous reading
         let cpu_pct = if let Some(&(prev_ticks, prev_uptime)) = self.prev_ticks.get(&pid) {
             let delta_ticks = cpu_ticks.saturating_sub(prev_ticks);
             let delta_time = uptime - prev_uptime;
             if delta_time > 0.0 {
-                ((delta_ticks as f64 / CLK_TCK) / delta_time * 100.0) as f32
+                ((delta_ticks as f64 / self.clock_ticks) / delta_time * 100.0) as f32
             } else {
                 0.0
             }
@@ -145,6 +148,7 @@ impl PsMonitor {
 
         // Get better command name from cmdline if available
         let cmdline_name = get_cmdline(pid).unwrap_or_default();
+        let is_kernel = cmdline_name.is_empty();
         let display_name = if cmdline_name.is_empty() {
             format!("[{}]", name) // Kernel thread
         } else {
@@ -157,6 +161,7 @@ impl PsMonitor {
             cpu_pct,
             mem_pct,
             cpu_ticks,
+            is_kernel,
         })
     }
 
@@ -224,10 +229,15 @@ impl PsMonitor {
         }
 
         // Hint line at bottom
-        let hint = "q:Quit  m:Sort  Space:Pause  0-9:Speed";
+        let hint = "q:Quit  m:Sort  Space:Pause  1-9:Speed  ?:Help";
         let hint_y = (h - 1) as i32;
         term.set_str(0, hint_y, hint, Some(muted_color_scheme(colors)), false);
     }
+}
+
+fn sysconf_value(name: libc::c_int) -> Option<u64> {
+    let value = unsafe { libc::sysconf(name) };
+    (value > 0).then_some(value as u64)
 }
 
 fn get_uptime_secs() -> io::Result<f64> {
@@ -276,9 +286,9 @@ pub struct PsConfig {
 
 pub fn run(config: PsConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
-    let mut state = MonitorState::new(config.time_step.max(0.5));
+    let mut state = MonitorState::new(config.time_step, 0.5);
     let mut monitor = PsMonitor::new(config.show_kernel);
-    let help_text = build_help("PROCESS LIST", "m  Cycle sort");
+    const HELP: HelpSpec = HelpSpec::animated("PROCESS LIST", &[HelpEntry::new("m", "Cycle sort")]);
     let mut show_help = false;
 
     monitor.update()?;
@@ -320,7 +330,7 @@ pub fn run(config: PsConfig) -> io::Result<()> {
 
         if show_help {
             let (w, h) = term.size();
-            render_help_overlay(&mut term, w, h, &help_text);
+            render_help_spec(&mut term, w, h, &HELP);
         }
 
         term.present()?;

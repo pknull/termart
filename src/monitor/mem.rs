@@ -1,10 +1,10 @@
 use crate::colors::ColorState;
-use crate::help::render_help_overlay;
+use crate::help::{render_help_spec, HelpSpec};
 use crate::monitor::layout::{
     cpu_gradient_color_scheme, draw_meter_btop_scheme, format_bytes, muted_color_scheme,
     text_color_scheme, Rect,
 };
-use crate::monitor::{build_help, MonitorConfig, MonitorState};
+use crate::monitor::{MonitorConfig, MonitorState};
 use crate::terminal::Terminal;
 use crossterm::style::Color;
 use crossterm::terminal::size;
@@ -36,7 +36,7 @@ impl MemInfo {
 
     pub fn cached_percent(&self) -> f32 {
         if self.mem_total > 0 {
-            ((self.cached + self.buffers) as f32 / self.mem_total as f32) * 100.0
+            (self.cached as f32 / self.mem_total as f32) * 100.0
         } else {
             0.0
         }
@@ -128,7 +128,7 @@ impl MemMonitor {
         h: usize,
         colors: &ColorState,
     ) {
-        if h < 4 || w < 30 {
+        if h < 5 || w < 30 {
             return;
         }
 
@@ -138,7 +138,7 @@ impl MemMonitor {
 
         // Calculate info panel height
         // Title(1) + Used(1) + Cached(1) + Buffers(1) + Free(1) + blank(1) + Swap title(1) + Swap(1) = 8
-        let has_swap = self.info.swap_total > 0;
+        let has_swap = self.info.swap_total > 0 && h >= 8;
         let info_height = if has_swap { 8 } else { 5 };
 
         // Position info panel vertically centered
@@ -207,9 +207,10 @@ impl MemMonitor {
         );
         cy += 1;
 
-        // Free
-        let free_pct = if self.info.mem_total > 0 {
-            (self.info.mem_free as f32 / self.info.mem_total as f32) * 100.0
+        // Available is the kernel's practical estimate of memory that can be
+        // allocated without swapping; raw MemFree alone is usually misleading.
+        let available_pct = if self.info.mem_total > 0 {
+            (self.info.mem_available as f32 / self.info.mem_total as f32) * 100.0
         } else {
             0.0
         };
@@ -218,9 +219,9 @@ impl MemMonitor {
             panel_x,
             cy,
             panel_w,
-            "Free",
-            self.info.mem_free,
-            free_pct,
+            "Available",
+            self.info.mem_available,
+            available_pct,
             colors,
             false,
         );
@@ -269,17 +270,17 @@ impl MemMonitor {
         colors: &ColorState,
         use_gradient: bool,
     ) {
-        // Layout: Label(8) + Meter(dynamic) + Pct(6) + Size(9)
+        // Layout: Label(10) + Meter(dynamic) + Pct(6) + Size(9)
         // Meter fills space between label and pct+size
-        let label_w = 8;
+        let label_w = 10;
         let pct_w = 6; // " 17% " with space
         let size_w = 9; // "448.8MiB" + padding
         let meter_w = width.saturating_sub(label_w + pct_w + size_w);
 
         let mut pos = x;
 
-        // Label (8 chars)
-        let label_str = format!("{:<8}", label);
+        // Label
+        let label_str = format!("{:<10}", label);
         term.set_str(pos, y, &label_str, Some(muted_color_scheme(colors)), false);
         pos += label_w as i32;
 
@@ -318,13 +319,10 @@ impl MemMonitor {
 
 pub fn run(config: MonitorConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
-    let mut state = MonitorState::new(config.time_step.max(0.5));
+    let mut state = MonitorState::new(config.time_step, 0.5);
     let mut monitor = MemMonitor::new();
-    let help_text = build_help("MEMORY MONITOR", "");
+    const HELP: HelpSpec = HelpSpec::animated("MEMORY MONITOR", &[]);
     let mut show_help = false;
-
-    monitor.update()?;
-    std::thread::sleep(std::time::Duration::from_millis(100));
 
     loop {
         if let Ok(Some((code, mods))) = term.check_key() {
@@ -355,7 +353,7 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
 
         if show_help {
             let (w, h) = term.size();
-            render_help_overlay(&mut term, w, h, &help_text);
+            render_help_spec(&mut term, w, h, &HELP);
         }
 
         term.present()?;
@@ -363,4 +361,25 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MemInfo;
+
+    #[test]
+    fn cache_percentage_matches_displayed_cache_bytes() {
+        let info = MemInfo {
+            mem_total: 1000,
+            mem_available: 400,
+            mem_free: 100,
+            buffers: 100,
+            cached: 300,
+            swap_total: 0,
+            swap_free: 0,
+        };
+
+        assert!((info.cached_percent() - 30.0).abs() < 0.001);
+        assert!((info.mem_percent() - 60.0).abs() < 0.001);
+    }
 }

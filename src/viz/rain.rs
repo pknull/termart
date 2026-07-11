@@ -27,7 +27,10 @@ struct Splash {
 
 /// Run the rain effect visualization
 pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io::Result<()> {
-    let mut state = VizState::new(config.time_step, "");
+    let mut state = VizState::new(
+        config.time_step,
+        crate::help::HelpSpec::animated("RAIN", &[]),
+    );
 
     let (init_w, init_h) = term.size();
     let mut w = init_w as usize;

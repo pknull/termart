@@ -279,11 +279,13 @@ fn draw_line(
 }
 
 /// Help text for hypercube visualization
-const HELP: &str = "\
-HYPERCUBE
-─────────────────
-↑/↓      Dimension +/-
-←/→/+/-  Zoom in/out";
+const HELP: crate::help::HelpSpec = crate::help::HelpSpec::animated(
+    "HYPERCUBE",
+    &[
+        crate::help::HelpEntry::new("↑/↓", "Dimension +/-"),
+        crate::help::HelpEntry::new("←/→/+/-", "Zoom in/out"),
+    ],
+);
 
 /// Run the n-dimensional rotating hypercube visualization.
 ///

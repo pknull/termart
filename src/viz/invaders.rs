@@ -45,13 +45,15 @@ const HINT: &str = "←/→:Move SPACE:Fire A:AI R:Reset ?:Help Q:Quit";
 const MSG_GAME_OVER: &str = "GAME OVER - Press R to restart";
 
 /// Help text for Space Invaders
-const HELP: &str = "\
-SPACE INVADERS
-─────────────────
-←/→/h/l  Move
-Space    Fire
-A        Toggle AI
-R        Reset game";
+const HELP: crate::help::HelpSpec = crate::help::HelpSpec::speed_controlled(
+    "SPACE INVADERS",
+    &[
+        crate::help::HelpEntry::new("←/→/h/l", "Move"),
+        crate::help::HelpEntry::new("Space", "Fire"),
+        crate::help::HelpEntry::new("A", "Toggle AI"),
+        crate::help::HelpEntry::new("R", "Reset game"),
+    ],
+);
 
 #[derive(Clone, Copy, PartialEq)]
 enum GameState {

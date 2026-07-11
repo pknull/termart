@@ -1,9 +1,9 @@
 //! Docker container monitor - shows container resource usage
 
 use crate::colors::ColorState;
-use crate::help::render_help_overlay;
+use crate::help::{render_help_spec, HelpEntry, HelpSpec};
 use crate::monitor::layout::{cpu_gradient_color_scheme, muted_color_scheme, text_color_scheme};
-use crate::monitor::{build_help, MonitorState};
+use crate::monitor::MonitorState;
 use crate::terminal::Terminal;
 use crossterm::style::Color;
 use crossterm::terminal::size;
@@ -133,7 +133,7 @@ impl DockerMonitor {
     }
 
     pub fn render(&self, term: &mut Terminal, w: usize, h: usize, colors: &ColorState) {
-        if h < 3 || w < 40 {
+        if h < 4 || w < 40 {
             return;
         }
 
@@ -180,8 +180,6 @@ impl DockerMonitor {
             return;
         }
 
-        y += 1;
-
         // Column header
         let header = format!(
             "{:<20} {:>8} {:>16} {:>8} {:>16}",
@@ -222,7 +220,7 @@ impl DockerMonitor {
         }
 
         // Hint line at bottom
-        let hint = "q:Quit  Space:Pause  m:Sort  0-9:Speed";
+        let hint = "q:Quit  Space:Pause  m:Sort  1-9:Speed  ?:Help";
         let hint_y = (h - 1) as i32;
         term.set_str(0, hint_y, hint, Some(muted_color_scheme(colors)), false);
     }
@@ -262,13 +260,10 @@ pub struct DockerConfig {
 
 pub fn run(config: DockerConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
-    let mut state = MonitorState::new(config.time_step.max(0.5));
+    let mut state = MonitorState::new(config.time_step, 2.0);
     let mut monitor = DockerMonitor::new();
-    let help_text = build_help("DOCKER STATS", "m  Cycle sort");
+    const HELP: HelpSpec = HelpSpec::animated("DOCKER STATS", &[HelpEntry::new("m", "Cycle sort")]);
     let mut show_help = false;
-
-    monitor.update()?;
-    std::thread::sleep(std::time::Duration::from_millis(100));
 
     loop {
         if let Ok(Some((code, mods))) = term.check_key() {
@@ -301,7 +296,7 @@ pub fn run(config: DockerConfig) -> io::Result<()> {
 
         if show_help {
             let (w, h) = term.size();
-            render_help_overlay(&mut term, w, h, &help_text);
+            render_help_spec(&mut term, w, h, &HELP);
         }
 
         term.present()?;

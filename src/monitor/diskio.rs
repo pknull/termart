@@ -1,10 +1,10 @@
 use crate::colors::ColorState;
-use crate::help::render_help_overlay;
+use crate::help::{render_help_spec, HelpSpec};
 use crate::monitor::layout::{
-    cpu_gradient_color_scheme, draw_meter_btop_scheme, format_bytes, format_rate,
-    header_color_scheme, muted_color_scheme, text_color_scheme, Rect,
+    activity_percent, cpu_gradient_color_scheme, draw_meter_btop_scheme, format_bytes, format_rate,
+    header_color_scheme, muted_color_scheme, text_color_scheme, update_activity_scale, Rect,
 };
-use crate::monitor::{build_help, MonitorConfig, MonitorState};
+use crate::monitor::{MonitorConfig, MonitorState};
 use crate::terminal::Terminal;
 use crossterm::style::Color;
 use crossterm::terminal::size;
@@ -42,6 +42,7 @@ impl IoMonitor {
     }
 
     pub fn update(&mut self, interval: f32) -> io::Result<()> {
+        let interval = interval.max(f32::EPSILON);
         let content = fs::read_to_string("/proc/diskstats")?;
         let mut new_disks = Vec::new();
 
@@ -125,17 +126,19 @@ impl IoMonitor {
 
         self.disks = new_disks;
 
-        // Update peak rates for auto-scaling (with decay)
-        if self.total_read_rate > self.peak_read_rate {
-            self.peak_read_rate = self.total_read_rate;
-        } else {
-            self.peak_read_rate = (self.peak_read_rate * 0.999).max(100.0 * 1024.0 * 1024.0);
-        }
-        if self.total_write_rate > self.peak_write_rate {
-            self.peak_write_rate = self.total_write_rate;
-        } else {
-            self.peak_write_rate = (self.peak_write_rate * 0.999).max(100.0 * 1024.0 * 1024.0);
-        }
+        const SCALE_FLOOR: f64 = 100.0 * 1024.0 * 1024.0;
+        self.peak_read_rate = update_activity_scale(
+            self.peak_read_rate,
+            self.total_read_rate,
+            interval,
+            SCALE_FLOOR,
+        );
+        self.peak_write_rate = update_activity_scale(
+            self.peak_write_rate,
+            self.total_write_rate,
+            interval,
+            SCALE_FLOOR,
+        );
 
         Ok(())
     }
@@ -166,7 +169,7 @@ impl IoMonitor {
             return;
         }
 
-        let num_disks = self.disks.len().min(6);
+        let num_disks = self.disks.len().min(6).min(h.saturating_sub(1) / 3);
         if num_disks == 0 {
             let cy = y + (h as i32 / 2);
             term.set_str(x, cy, "No disks found", Some(Color::Yellow), false);
@@ -205,7 +208,7 @@ impl IoMonitor {
             cy += 1;
 
             // Read for this disk
-            let disk_read_pct = ((disk.read_rate / self.peak_read_rate) * 100.0).min(100.0) as f32;
+            let disk_read_pct = activity_percent(disk.read_rate, self.peak_read_rate);
             self.draw_io_row(
                 term,
                 x,
@@ -220,8 +223,7 @@ impl IoMonitor {
             cy += 1;
 
             // Write for this disk
-            let disk_write_pct =
-                ((disk.write_rate / self.peak_write_rate) * 100.0).min(100.0) as f32;
+            let disk_write_pct = activity_percent(disk.write_rate, self.peak_write_rate);
             self.draw_io_row(
                 term,
                 x,
@@ -250,11 +252,10 @@ impl IoMonitor {
         colors: &ColorState,
         is_read: bool,
     ) {
-        // Layout: Label(10) + Meter(dynamic) + Pct(6) + Rate(12)
+        // Layout: Label(10) + logarithmic activity meter(dynamic) + Rate(12).
         let label_w = 10;
-        let pct_w = 6;
         let rate_w = 12;
-        let meter_w = width.saturating_sub(label_w + pct_w + rate_w);
+        let meter_w = width.saturating_sub(label_w + rate_w);
 
         let mut pos = x;
 
@@ -280,32 +281,22 @@ impl IoMonitor {
             pos += meter_w as i32;
         }
 
-        // Percentage
-        let pct_str = format!("{:4.0}% ", percent);
-        term.set_str(pos, y, &pct_str, Some(color), false);
-        pos += pct_w as i32;
-
         // Rate right-aligned
         let rate_str = format_rate(rate);
         let rate_pad = rate_w.saturating_sub(rate_str.len());
-        term.set_str(
-            pos + rate_pad as i32,
-            y,
-            &rate_str,
-            Some(muted_color_scheme(colors)),
-            false,
-        );
+        term.set_str(pos + rate_pad as i32, y, &rate_str, Some(color), false);
     }
 }
 
 pub fn run(config: MonitorConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
-    let mut state = MonitorState::new(config.time_step.max(1.0));
+    let mut state = MonitorState::new(config.time_step, 1.0);
     let mut monitor = IoMonitor::new();
-    let help_text = build_help("DISK I/O MONITOR", "");
+    const HELP: HelpSpec = HelpSpec::animated("DISK I/O MONITOR", &[]);
     let mut show_help = false;
 
     monitor.update(1.0)?;
+    let mut last_sample = std::time::Instant::now();
     std::thread::sleep(std::time::Duration::from_millis(100));
 
     loop {
@@ -326,7 +317,9 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
         }
 
         if !state.paused {
-            monitor.update(state.speed)?;
+            let elapsed = last_sample.elapsed().as_secs_f32().max(f32::EPSILON);
+            monitor.update(elapsed)?;
+            last_sample = std::time::Instant::now();
         }
 
         term.clear();
@@ -336,7 +329,7 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
 
         if show_help {
             let (w, h) = term.size();
-            render_help_overlay(&mut term, w, h, &help_text);
+            render_help_spec(&mut term, w, h, &HELP);
         }
 
         term.present()?;

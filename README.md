@@ -16,11 +16,17 @@ Terminal-based generative art, system monitors, and utilities.
 - **Rain**: Falling raindrops with splashes
 - **Waves**: Animated ocean waves
 - **Cube**: Rotating 3D wireframe cube
+- **Hypercube**: Rotating multidimensional wireframe hypercube
 - **Pipes**: Classic pipes screensaver
 - **Donut**: Rotating 3D torus (donut.c style)
 - **Globe**: Rotating 3D globe with network nodes (eDEX-UI style)
 - **Hex**: Hexagon grid with animated wave pulses
 - **Keyboard**: Real-time keyboard visualization via evdev
+- **Dygma**: Dygma Raise keyboard state visualization
+- **Audio**: Live audio spectrum
+- **Lissajous**: Braille-rendered Lissajous curves
+- **Fractal**: Interactive Julia fractal
+- **Invaders / Pong**: Interactive terminal games
 
 ### System Monitors
 - **CPU**: Per-core usage with temperature and frequency
@@ -29,12 +35,18 @@ Terminal-based generative art, system monitors, and utilities.
 - **I/O**: Disk read/write rates
 - **Network**: Interface traffic rates
 - **GPU**: NVIDIA GPU stats (utilization, memory, temperature)
+- **Processes**: Sortable process list
+- **Docker**: Container resource statistics
 
 ### Utilities
 - **Clock**: Digital clock with nixie tube effects and date display
 - **Weather**: Live weather display with ASCII art animations
 - **Pomodoro**: Timer with ASCII tomato visualization
 - **FAH**: Folding@home stats with real-time work unit progress
+- **Sunlight**: Solar cycle display with optional screen temperature control
+- **TUI Cover / Control**: MPRIS cover art and playback controls
+- **Claude Tokens**: Claude OAuth usage monitor
+- **Codex Tokens**: OpenAI Codex usage monitor using the existing Codex CLI login
 
 ## Installation
 
@@ -86,12 +98,20 @@ termart fire                      # Doom fire
 termart rain                      # Rain animation
 termart waves                     # Ocean waves
 termart cube                      # 3D rotating cube
+termart hypercube                 # Multidimensional hypercube
 termart pipes                     # Pipes screensaver
 termart donut                     # Rotating torus
 termart globe                     # Globe with network nodes
 termart hex                       # Hexagon grid
 termart keyboard                  # Keyboard visualization
+termart dygma                     # Dygma Raise visualization
+termart invaders                  # Space Invaders game
+termart audio                     # Audio spectrum
+termart lissajous                 # Lissajous curves
+termart fractal                   # Julia fractal
 termart clock                     # Digital clock with nixie effects
+termart sunlight                  # Sunlight cycle
+termart pong                      # Two-player Pong
 ```
 
 **Common Options:**
@@ -113,6 +133,7 @@ termart clock                     # Digital clock with nixie effects
 | `1-9` | Change speed (1=fastest, 9=slowest) |
 | `Shift+0-9` | Change color scheme |
 | `Space` | Pause/Resume |
+| `?` | Toggle structured help overlay |
 | `q` / `Esc` | Quit |
 
 **Color Schemes:**
@@ -136,6 +157,8 @@ termart disk                      # Disk space
 termart io                        # Disk I/O rates
 termart net                       # Network traffic
 termart gpu                       # NVIDIA GPU stats
+termart ps                        # Processes by CPU/memory
+termart docker                    # Docker container stats
 ```
 
 **Options:**
@@ -147,7 +170,13 @@ termart gpu                       # NVIDIA GPU stats
 **Monitor Controls:**
 | Key | Action |
 |-----|--------|
+| `1-9` | Change update interval (1=fastest) |
+| `Shift+0-9` | Change color scheme |
+| `Space` | Pause/Resume |
+| `?` | Toggle structured help overlay |
 | `q` / `Esc` | Quit |
+
+Network and disk I/O bars use a logarithmic activity scale so background traffic remains visible. The adjacent byte rate is the precise measurement; the bar is not a claim about hardware saturation.
 
 ### Clock
 
@@ -173,13 +202,12 @@ termart clock --no-seconds        # Hide seconds display
 | Key | Action |
 |-----|--------|
 | `C` | Trigger nixie tube cycling (all digits 0-9) |
-| `+/-` | Adjust cycling speed |
 | `D` | Toggle between date and time display |
 | `S` | Toggle seconds display |
 | `T` | Toggle 12/24 hour format |
 | `A` | Toggle automatic date/time cycling |
-| `1-9` | Change color schemes |
-| `Space` | Pause/Resume |
+| `Shift+0-9` | Change color scheme |
+| `?` | Toggle structured help overlay |
 | `q` / `Esc` | Quit |
 
 **Nixie Tube Effects:**
@@ -210,6 +238,9 @@ termart weather -l "New York"     # City with spaces
 **Controls:**
 | Key | Action |
 |-----|--------|
+| `f` | Toggle °F/°C |
+| `r` | Refresh current conditions |
+| `?` | Toggle structured help overlay |
 | `q` / `Esc` | Quit |
 
 ### Pomodoro Timer
@@ -244,6 +275,8 @@ termart pomodoro -c 6             # 6 pomodoros before long break
 | `s` | Skip to next phase |
 | `r` | Reset timer |
 | `Enter` | Advance when timer done |
+| `Shift+0-9` | Change color scheme |
+| `?` | Toggle structured help overlay |
 | `q` / `Esc` | Quit |
 
 ### Folding@home
@@ -284,7 +317,18 @@ chmod 600 ~/.config/termart/config.toml
 | Key | Action |
 |-----|--------|
 | `r` | Refresh data |
+| `Shift+0-9` | Change color scheme |
+| `?` | Toggle structured help overlay |
 | `q` / `Esc` | Quit |
+
+### AI Usage Monitors
+
+```bash
+termart claude-tokens             # Claude subscription usage
+termart codex-tokens              # Codex subscription usage
+```
+
+`codex-tokens` reads the existing `~/.codex/auth.json` login and does not maintain separate credentials. Run `codex login` first if Codex is not already authenticated.
 
 ## Notes
 

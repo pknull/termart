@@ -1,6 +1,6 @@
 use crate::colors::{scheme_color, ColorState};
 use crate::config::FractalConfig;
-use crate::help::render_help_overlay;
+use crate::help::{render_help_spec, HelpEntry, HelpSpec};
 use crate::settings::Settings;
 use crate::terminal::Terminal;
 use crate::tui::mpris_client::{format_duration, MprisClient};
@@ -11,21 +11,17 @@ use std::borrow::Cow;
 use std::io;
 use std::time::{Duration, Instant};
 
-const HELP_TEXT: &str = "\
-TUI CONTROL
-─────────────────
-Space  Play/pause
-n/p    Next/prev
-h/l    Seek -/+5s
-j/k    Volume -/+
-r      Reconnect
-Mouse  Click bar to seek
-?      Close help
-───────────────────────
- GLOBAL CONTROLS
- !-()   Color scheme
- q/Esc  Quit
-───────────────────────";
+const HELP: HelpSpec = HelpSpec::colored(
+    "TUI CONTROL",
+    &[
+        HelpEntry::new("Space", "Play/pause"),
+        HelpEntry::new("n/p", "Next/prev"),
+        HelpEntry::new("h/l", "Seek -/+5s"),
+        HelpEntry::new("j/k", "Volume -/+"),
+        HelpEntry::new("r", "Reconnect"),
+        HelpEntry::new("Mouse", "Click bar to seek"),
+    ],
+);
 
 #[derive(Copy, Clone, Default)]
 struct Area {
@@ -154,7 +150,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         areas = render_ui(term, width, height, &state, colors.scheme);
 
         if show_help {
-            render_help_overlay(term, width, height, HELP_TEXT);
+            render_help_spec(term, width, height, &HELP);
         }
 
         term.present()?;

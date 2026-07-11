@@ -9,7 +9,7 @@
 //! Optionally adjusts screen color temperature via xrandr gamma.
 
 use crate::colors::{scheme_color, ColorState};
-use crate::help::render_help_overlay;
+use crate::help::{render_help_spec, HelpSpec};
 use crate::terminal::Terminal;
 use chrono::{Local, NaiveDate, Timelike};
 use crossterm::event::KeyCode;
@@ -19,12 +19,7 @@ use std::io;
 use std::process::Command;
 use sunrise_sunset_calculator::SunriseSunsetParameters;
 
-const HELP: &str = "\
-SUNLIGHT
-─────────────────
-!-()   Color scheme
-q/Esc  Quit
-?      Close help";
+const HELP: HelpSpec = HelpSpec::colored("SUNLIGHT", &[]);
 
 pub struct SunlightConfig {
     pub time_step: f32,
@@ -722,7 +717,7 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
 
         if show_help {
             let (w, h) = term.size();
-            render_help_overlay(&mut term, w, h, HELP);
+            render_help_spec(&mut term, w, h, &HELP);
         }
 
         term.present()?;

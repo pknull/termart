@@ -700,10 +700,10 @@ fn render_channel_bar(
 }
 
 /// Help text for audio visualizer
-const HELP: &str = "\
-AUDIO SPECTRUM
-─────────────────
-←/→  Bar width -/+";
+const HELP: crate::help::HelpSpec = crate::help::HelpSpec::animated(
+    "AUDIO SPECTRUM",
+    &[crate::help::HelpEntry::new("←/→", "Bar width -/+")],
+);
 
 /// Run the audio spectrum visualizer
 ///
