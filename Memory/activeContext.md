@@ -1,6 +1,6 @@
 ---
 version: "2.0"
-lastUpdated: "2026-07-11 21:58 UTC"
+lastUpdated: "2026-07-12 01:52 UTC"
 lifecycle: "active"
 synthesizedFrom: "events"
 ---
@@ -8,6 +8,7 @@ synthesizedFrom: "events"
 # Active Context
 
 ## What Was Accomplished (2026-07-11 — output consistency, monitor audit, Codex usage)
+
 <!-- wwa-session: 019f52ae-ed96-70d3-9dfe-51b7a52dc7ef -->
 
 - Replaced hand-formatted in-app help across all interactive commands with the reusable
@@ -38,6 +39,15 @@ synthesizedFrom: "events"
 - Updated README coverage and globally installed the optimized binary. The active command
   `/home/pknull/bin/termart` resolves to the current `target/release/termart`.
 
+## Next Steps
+
+- Test `termart codex-tokens` inside the actual dashboard pane and tune its allocated height if
+  model-specific quota rows should be visible alongside the 5-hour and 7-day windows.
+- Visually confirm Network and Disk I/O logarithmic activity bars under both idle traffic and a
+  sustained transfer; adjust scale floors/30-second half-life only from observed behavior.
+- Optional dependency maintenance: `cargo install --locked` reports that transitive
+  `core2 v0.4.0` is yanked; identify its dependency path before changing the lockfile.
+
 ## Verification (green)
 
 - `cargo test --all-targets`: 24/24 passed (20 unit + 4 integration).
@@ -47,12 +57,3 @@ synthesizedFrom: "events"
   or layout errors.
 - `cargo install --path . --force --locked`: global install replaced successfully.
 - `termart codex-tokens --help`: command available from the active global binary.
-
-## Next Steps
-
-- Test `termart codex-tokens` inside the actual dashboard pane and tune its allocated height if
-  model-specific quota rows should be visible alongside the 5-hour and 7-day windows.
-- Visually confirm Network and Disk I/O logarithmic activity bars under both idle traffic and a
-  sustained transfer; adjust scale floors/30-second half-life only from observed behavior.
-- Optional dependency maintenance: `cargo install --locked` reports that transitive
-  `core2 v0.4.0` is yanked; identify its dependency path before changing the lockfile.

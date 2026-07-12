@@ -33,3 +33,4 @@ Work/
 
 # Asha push-retry queue (transient runtime state)
 Memory/events/push-queue.jsonl
+Memory/events/*.log

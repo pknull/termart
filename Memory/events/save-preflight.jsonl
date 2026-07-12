@@ -27,3 +27,9 @@
 {"ts": "2026-07-11T22:59:36Z", "mode": "enforce", "session_id": "019f52ae-ed96-70d3-9dfe-51b7a52dc7ef", "gate": "ac_handoff", "status": "pass", "hard": false, "detail": "Next Steps is actionable"}
 {"ts": "2026-07-11T22:59:36Z", "mode": "enforce", "session_id": "019f52ae-ed96-70d3-9dfe-51b7a52dc7ef", "gate": "ac_wwa_provenance", "status": "pass", "hard": true, "detail": "lead WWA stamped current session 019f52ae-ed96-70d3-9dfe-51b7a52dc7ef"}
 {"ts": "2026-07-11T22:59:36Z", "mode": "enforce", "session_id": "019f52ae-ed96-70d3-9dfe-51b7a52dc7ef", "gate": "push_durability", "status": "pass", "hard": true, "detail": "pushed to origin"}
+{"ts": "2026-07-12T01:53:02Z", "mode": "guard", "session_id": "019f52ae-ed96-70d3-9dfe-51b7a52dc7ef", "gate": "memory_substrate", "status": "pass", "hard": true, "detail": "Memory/ + events.jsonl present"}
+{"ts": "2026-07-12T01:53:02Z", "mode": "guard", "session_id": "019f52ae-ed96-70d3-9dfe-51b7a52dc7ef", "gate": "session_integrity", "status": "pass", "hard": true, "detail": "all 14 events stamped current session 019f52ae-ed96-70d3-9dfe-51b7a52dc7ef"}
+{"ts": "2026-07-12T01:53:02Z", "mode": "guard", "session_id": "019f52ae-ed96-70d3-9dfe-51b7a52dc7ef", "gate": "ac_clobber", "status": "pass", "hard": true, "detail": "no auto-fallback stub added this save"}
+{"ts": "2026-07-12T01:53:02Z", "mode": "guard", "session_id": "019f52ae-ed96-70d3-9dfe-51b7a52dc7ef", "gate": "ac_fresh", "status": "pass", "hard": false, "detail": "activeContext.md updated this save"}
+{"ts": "2026-07-12T01:53:02Z", "mode": "guard", "session_id": "019f52ae-ed96-70d3-9dfe-51b7a52dc7ef", "gate": "ac_handoff", "status": "pass", "hard": false, "detail": "Next Steps is actionable"}
+{"ts": "2026-07-12T01:53:02Z", "mode": "guard", "session_id": "019f52ae-ed96-70d3-9dfe-51b7a52dc7ef", "gate": "ac_wwa_provenance", "status": "pass", "hard": true, "detail": "lead WWA stamped current session 019f52ae-ed96-70d3-9dfe-51b7a52dc7ef"}
