@@ -47,6 +47,7 @@ pub struct VizState {
     pub paused: bool,
     pub show_help: bool, // Whether help overlay is visible
     help: HelpSpec,
+    animation_controls: bool,
 }
 
 impl VizState {
@@ -57,6 +58,20 @@ impl VizState {
             paused: false,
             show_help: false,
             help,
+            animation_controls: true,
+        }
+    }
+
+    /// Runtime state for static widgets that need colors/help/quit but have no
+    /// meaningful pause or animation-speed controls.
+    pub fn new_static(poll_interval: f32, help: HelpSpec) -> Self {
+        Self {
+            speed: poll_interval.max(0.05),
+            colors: ColorState::new(DEFAULT_COLOR_SCHEME),
+            paused: false,
+            show_help: false,
+            help,
+            animation_controls: false,
         }
     }
 
@@ -74,10 +89,10 @@ impl VizState {
 
         match code {
             KeyCode::Char('q') | KeyCode::Esc => return true,
-            KeyCode::Char(' ') => self.paused = !self.paused,
+            KeyCode::Char(' ') if self.animation_controls => self.paused = !self.paused,
             KeyCode::Char('?') => self.show_help = !self.show_help,
             // Number keys: change speed (1=fastest, 9=slowest, 0=very slow)
-            KeyCode::Char(c) if c.is_ascii_digit() => {
+            KeyCode::Char(c) if self.animation_controls && c.is_ascii_digit() => {
                 let Some(n) = c.to_digit(10) else {
                     return false;
                 };
@@ -140,5 +155,15 @@ mod tests {
         assert!((state.speed - 0.005).abs() < f32::EPSILON);
         state.handle_key(KeyCode::Char('0'), KeyModifiers::NONE);
         assert!((state.speed - 0.2).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn static_state_ignores_animation_controls() {
+        let mut state = VizState::new_static(0.01, HelpSpec::colored("TEST", &[]));
+        assert!((state.speed - 0.05).abs() < f32::EPSILON);
+        state.handle_key(KeyCode::Char('1'), KeyModifiers::NONE);
+        state.handle_key(KeyCode::Char(' '), KeyModifiers::NONE);
+        assert!((state.speed - 0.05).abs() < f32::EPSILON);
+        assert!(!state.paused);
     }
 }

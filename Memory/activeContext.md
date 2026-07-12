@@ -32,12 +32,15 @@ synthesizedFrom: "events"
   and applies exponential backoff. No separate credentials or guessed token limits are used.
 - Extracted shared quota rendering to `src/viz/usage.rs`; Claude and Codex usage monitors now
   share duration, pacing, window-label, and bar presentation code.
+- Added dirty-frame invalidation to both usage monitors. They continue polling input but only
+  rebuild/present after API data, countdown-minute, resize, or UI changes; static widget state
+  also removes meaningless pause/speed controls and enforces a 50 ms polling floor.
 - Updated README coverage and globally installed the optimized binary. The active command
   `/home/pknull/bin/termart` resolves to the current `target/release/termart`.
 
 ## Verification (green)
 
-- `cargo test --all-targets`: 23/23 passed (19 unit + 4 integration).
+- `cargo test --all-targets`: 24/24 passed (20 unit + 4 integration).
 - `cargo clippy --all-targets -- -D warnings`: clean.
 - `cargo build --release`: clean.
 - Live authenticated `codex-tokens` request and 60x12 pseudo-TTY render: no parse, auth, panic,

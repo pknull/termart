@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 
 const USAGE_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
 const MAX_BACKOFF_SECS: u64 = 1800;
-const HELP: crate::help::HelpSpec = crate::help::HelpSpec::animated(
+const HELP: crate::help::HelpSpec = crate::help::HelpSpec::colored(
     "CODEX TOKENS",
     &[crate::help::HelpEntry::new("r", "Refresh now")],
 );
@@ -197,6 +197,29 @@ fn remaining(window: &RateLimitWindow, since_fetch: Duration) -> Option<Duration
         .map(|duration| duration.saturating_sub(since_fetch))
 }
 
+fn countdown_signature(usage: &UsageResponse, since_fetch: Duration) -> u64 {
+    fn fold_window(signature: u64, window: Option<&RateLimitWindow>, elapsed: Duration) -> u64 {
+        let minutes = window
+            .and_then(|window| remaining(window, elapsed))
+            .map(|duration| duration.as_secs() / 60)
+            .unwrap_or(u64::MAX);
+        signature.rotate_left(7) ^ minutes
+    }
+
+    let mut signature = 0xcbf2_9ce4_8422_2325;
+    if let Some(limit) = usage.rate_limit.as_ref() {
+        signature = fold_window(signature, limit.primary_window.as_ref(), since_fetch);
+        signature = fold_window(signature, limit.secondary_window.as_ref(), since_fetch);
+    }
+    for additional in &usage.additional_rate_limits {
+        if let Some(limit) = additional.rate_limit.as_ref() {
+            signature = fold_window(signature, limit.primary_window.as_ref(), since_fetch);
+            signature = fold_window(signature, limit.secondary_window.as_ref(), since_fetch);
+        }
+    }
+    signature
+}
+
 #[allow(clippy::too_many_arguments)]
 fn draw_window(
     term: &mut Terminal,
@@ -248,7 +271,7 @@ pub fn run(config: CodexTokenConfig) -> io::Result<()> {
     }
 
     let mut term = Terminal::new(true)?;
-    let mut state = VizState::new(config.time_step, HELP);
+    let mut state = VizState::new_static(config.time_step, HELP);
     let base_interval = Duration::from_secs(config.refresh_interval.max(1));
     let max_backoff = Duration::from_secs(MAX_BACKOFF_SECS.max(config.refresh_interval));
     let mut current_interval = base_interval;
@@ -265,8 +288,11 @@ pub fn run(config: CodexTokenConfig) -> io::Result<()> {
     );
 
     let (mut width, mut height) = term.size();
+    let mut dirty = true;
+    let mut last_countdown = countdown_signature(&usage, last_fetch.elapsed());
     loop {
         if let Ok(Some((code, modifiers))) = term.check_key() {
+            dirty = true;
             if state.handle_key(code, modifiers) {
                 break;
             }
@@ -279,6 +305,7 @@ pub fn run(config: CodexTokenConfig) -> io::Result<()> {
                     max_backoff,
                 );
                 last_fetch = Instant::now();
+                dirty = true;
             }
         }
 
@@ -288,6 +315,7 @@ pub fn run(config: CodexTokenConfig) -> io::Result<()> {
                 height = new_height;
                 term.resize(width, height);
                 term.clear_screen()?;
+                dirty = true;
             }
         }
 
@@ -300,6 +328,18 @@ pub fn run(config: CodexTokenConfig) -> io::Result<()> {
                 max_backoff,
             );
             last_fetch = Instant::now();
+            dirty = true;
+        }
+
+        let countdown = countdown_signature(&usage, last_fetch.elapsed());
+        if countdown != last_countdown {
+            last_countdown = countdown;
+            dirty = true;
+        }
+
+        if !dirty {
+            term.sleep(state.speed);
+            continue;
         }
 
         term.clear();
@@ -453,6 +493,7 @@ pub fn run(config: CodexTokenConfig) -> io::Result<()> {
 
         state.render_help(&mut term, width, height);
         term.present()?;
+        dirty = false;
         term.sleep(state.speed);
     }
 

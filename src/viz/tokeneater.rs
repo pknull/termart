@@ -16,7 +16,7 @@ use std::io::{self, BufRead, BufReader, Write as IoWrite};
 use std::net::TcpListener;
 use std::time::{Duration, Instant};
 
-const HELP: crate::help::HelpSpec = crate::help::HelpSpec::animated(
+const HELP: crate::help::HelpSpec = crate::help::HelpSpec::colored(
     "CLAUDE TOKENS",
     &[crate::help::HelpEntry::new("r", "Refresh now")],
 );
@@ -505,6 +505,19 @@ fn time_until_reset(resets_at: &str) -> Option<Duration> {
     }
 }
 
+fn countdown_signature(usage: &UsageResponse) -> (Option<u64>, Option<u64>) {
+    let remaining_minutes = |bucket: Option<&UsageBucket>| {
+        bucket
+            .and_then(|bucket| bucket.resets_at.as_deref())
+            .and_then(time_until_reset)
+            .map(|duration| duration.as_secs() / 60)
+    };
+    (
+        remaining_minutes(usage.five_hour.as_ref()),
+        remaining_minutes(usage.seven_day.as_ref()),
+    )
+}
+
 /// Calculate elapsed percentage of a window given remaining time
 /// window_hours: total window size (5 for 5-hour, 168 for 7-day)
 fn elapsed_pct(remaining: Duration, window_hours: f64) -> f64 {
@@ -652,7 +665,7 @@ pub fn run(config: TokenEaterConfig) -> io::Result<()> {
     };
 
     let mut term = Terminal::new(true)?;
-    let mut state = VizState::new(config.time_step, HELP);
+    let mut state = VizState::new_static(config.time_step, HELP);
 
     let base_interval = Duration::from_secs(config.refresh_interval.max(1));
     let max_backoff = Duration::from_secs(MAX_BACKOFF_SECS.max(config.refresh_interval));
@@ -670,9 +683,12 @@ pub fn run(config: TokenEaterConfig) -> io::Result<()> {
     );
 
     let (mut w, mut h) = term.size();
+    let mut dirty = true;
+    let mut last_countdown = countdown_signature(&usage);
 
     loop {
         if let Ok(Some((code, mods))) = term.check_key() {
+            dirty = true;
             if state.handle_key(code, mods) {
                 break;
             }
@@ -690,6 +706,7 @@ pub fn run(config: TokenEaterConfig) -> io::Result<()> {
                     max_backoff,
                 );
                 last_fetch = Instant::now();
+                dirty = true;
             }
         }
 
@@ -699,6 +716,7 @@ pub fn run(config: TokenEaterConfig) -> io::Result<()> {
                 h = new_h;
                 term.resize(w, h);
                 term.clear_screen()?;
+                dirty = true;
             }
         }
 
@@ -716,6 +734,18 @@ pub fn run(config: TokenEaterConfig) -> io::Result<()> {
                 max_backoff,
             );
             last_fetch = Instant::now();
+            dirty = true;
+        }
+
+        let countdown = countdown_signature(&usage);
+        if countdown != last_countdown {
+            last_countdown = countdown;
+            dirty = true;
+        }
+
+        if !dirty {
+            term.sleep(state.speed);
+            continue;
         }
 
         term.clear();
@@ -876,11 +906,11 @@ pub fn run(config: TokenEaterConfig) -> io::Result<()> {
         if let Some(ref err) = fetch_error {
             y += 2;
             let err_str = format!("Error: {}", err);
-            let display = &err_str[..err_str.len().min(w as usize)];
+            let display: String = err_str.chars().take(w as usize).collect();
             term.set_str(
-                (cx - display.len() / 2) as i32,
+                cx.saturating_sub(text_columns(&display) / 2) as i32,
                 y as i32,
-                display,
+                &display,
                 Some(Color::Red),
                 false,
             );
@@ -888,6 +918,7 @@ pub fn run(config: TokenEaterConfig) -> io::Result<()> {
 
         state.render_help(&mut term, w, h);
         term.present()?;
+        dirty = false;
         term.sleep(state.speed);
     }
 
