@@ -1,9 +1,9 @@
 use crate::colors::scheme_color;
 use crate::terminal::Terminal;
 use crossterm::style::Color;
-use image::{DynamicImage, RgbaImage};
+use image::{DynamicImage, GenericImageView, ImageReader, Limits, RgbaImage};
 use std::collections::{HashMap, VecDeque};
-use std::io::Read;
+use std::io::{Cursor, Read};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
@@ -17,7 +17,10 @@ const MAX_COVER_SIZE: u64 = 10 * 1024 * 1024;
 const ALPHA_THRESHOLD: u8 = 10;
 
 /// Maximum number of cached cover art images
-const MAX_CACHE_SIZE: usize = 50;
+const MAX_CACHE_SIZE: usize = 16;
+const MAX_IMAGE_DIMENSION: u32 = 4096;
+const MAX_CACHED_DIMENSION: u32 = 1024;
+const MAX_DECODE_ALLOC: u64 = 64 * 1024 * 1024;
 
 /// Cover art cache and loader
 pub struct CoverArtLoader {
@@ -115,8 +118,9 @@ pub fn calc_cover_dimensions(term_w: u16, term_h: u16) -> (u16, u16, u16, u16) {
     // With half-blocks each cell covers 1 pixel wide × 2 pixels tall.
     // For a visually square result: art_w = 2 * art_h_cells.
     // Image pixel dimensions: art_w × (art_h_cells * 2) = 2h × 2h = square.
-    let (art_w, art_h_cells) = if term_h * 2 <= term_w {
-        (term_h * 2, term_h)
+    let doubled_height = u32::from(term_h) * 2;
+    let (art_w, art_h_cells) = if doubled_height <= u32::from(term_w) {
+        (doubled_height as u16, term_h)
     } else {
         (term_w, term_w / 2)
     };
@@ -322,8 +326,8 @@ fn load_image(url: &str, cancel: &AtomicBool) -> Option<DynamicImage> {
     if url.starts_with("file://") {
         let path = url.strip_prefix("file://")?;
         let path = urlencoding::decode(path).ok()?;
-        let bytes = std::fs::read(Path::new(path.as_ref())).ok()?;
-        image::load_from_memory(&bytes).ok()
+        let bytes = read_limited_file(Path::new(path.as_ref()))?;
+        decode_image(bytes)
     } else if url.starts_with("http://") || url.starts_with("https://") {
         if cancel.load(Ordering::Relaxed) {
             return None;
@@ -346,17 +350,110 @@ fn load_image(url: &str, cancel: &AtomicBool) -> Option<DynamicImage> {
         let mut bytes = Vec::new();
         response
             .into_reader()
-            .take(MAX_COVER_SIZE)
+            .take(MAX_COVER_SIZE + 1)
             .read_to_end(&mut bytes)
             .ok()?;
+        if bytes.len() as u64 > MAX_COVER_SIZE {
+            return None;
+        }
 
         if cancel.load(Ordering::Relaxed) {
             return None;
         }
 
-        image::load_from_memory(&bytes).ok()
+        decode_image(bytes)
     } else {
-        let bytes = std::fs::read(Path::new(url)).ok()?;
-        image::load_from_memory(&bytes).ok()
+        let bytes = read_limited_file(Path::new(url))?;
+        decode_image(bytes)
+    }
+}
+
+fn read_limited_file(path: &Path) -> Option<Vec<u8>> {
+    let file = std::fs::File::open(path).ok()?;
+    if file.metadata().ok()?.len() > MAX_COVER_SIZE {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    file.take(MAX_COVER_SIZE + 1).read_to_end(&mut bytes).ok()?;
+    (bytes.len() as u64 <= MAX_COVER_SIZE).then_some(bytes)
+}
+
+fn decode_image(bytes: Vec<u8>) -> Option<DynamicImage> {
+    let mut reader = ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()
+        .ok()?;
+    let mut limits = Limits::default();
+    limits.max_image_width = Some(MAX_IMAGE_DIMENSION);
+    limits.max_image_height = Some(MAX_IMAGE_DIMENSION);
+    limits.max_alloc = Some(MAX_DECODE_ALLOC);
+    reader.limits(limits);
+    let image = reader.decode().ok()?;
+    let (width, height) = image.dimensions();
+    if width > MAX_CACHED_DIMENSION || height > MAX_CACHED_DIMENSION {
+        Some(image.thumbnail(MAX_CACHED_DIMENSION, MAX_CACHED_DIMENSION))
+    } else {
+        Some(image)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        calc_cover_dimensions, decode_image, read_limited_file, MAX_CACHED_DIMENSION,
+        MAX_COVER_SIZE, MAX_IMAGE_DIMENSION,
+    };
+    use image::{DynamicImage, GenericImageView, ImageFormat};
+    use std::io::Cursor;
+
+    fn encoded_png(width: u32, height: u32) -> Vec<u8> {
+        let image = DynamicImage::new_rgba8(width, height);
+        let mut bytes = Cursor::new(Vec::new());
+        image
+            .write_to(&mut bytes, ImageFormat::Png)
+            .expect("test image should encode");
+        bytes.into_inner()
+    }
+
+    #[test]
+    fn cover_dimensions_handle_max_terminal_size_without_overflow() {
+        let (width, height, _, _) = calc_cover_dimensions(u16::MAX, u16::MAX);
+        assert_eq!(width, u16::MAX);
+        assert_eq!(height, u16::MAX / 2);
+    }
+
+    #[test]
+    fn local_cover_size_limit_accepts_exact_limit_and_rejects_larger_file() {
+        let path = std::env::temp_dir().join(format!(
+            "termart-cover-limit-{}-{}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        let file = std::fs::File::create(&path).expect("test file should be created");
+        file.set_len(MAX_COVER_SIZE)
+            .expect("test file should resize");
+        assert_eq!(
+            read_limited_file(&path).map(|bytes| bytes.len() as u64),
+            Some(MAX_COVER_SIZE)
+        );
+
+        file.set_len(MAX_COVER_SIZE + 1)
+            .expect("test file should resize");
+        assert!(read_limited_file(&path).is_none());
+        std::fs::remove_file(path).expect("test file should be removed");
+    }
+
+    #[test]
+    fn decoder_rejects_malformed_and_oversized_images() {
+        assert!(decode_image(b"not an image".to_vec()).is_none());
+        assert!(decode_image(encoded_png(MAX_IMAGE_DIMENSION + 1, 1)).is_none());
+    }
+
+    #[test]
+    fn decoded_images_are_downscaled_before_caching() {
+        let image = decode_image(encoded_png(MAX_CACHED_DIMENSION + 1, 32))
+            .expect("valid image should decode");
+        let (width, height) = image.dimensions();
+        assert!(width <= MAX_CACHED_DIMENSION);
+        assert!(height <= MAX_CACHED_DIMENSION);
     }
 }

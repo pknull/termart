@@ -51,7 +51,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         if event::poll(Duration::from_millis(0))? {
             if let Event::Key(key) = event::read()? {
                 let code = normalize_key(key.code, key.modifiers);
-                if !colors.handle_key(code) {
+                if !colors.handle_key(code, key.modifiers) {
                     match code {
                         KeyCode::Char('q') | KeyCode::Esc => break,
                         KeyCode::Char('?') => show_help = !show_help,
@@ -85,7 +85,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
             if let Some(img) = cover_loader.get(url) {
                 let (art_w, art_h_cells, x_off, _y_off) = calc_cover_dimensions(width, height);
                 if art_w > 0 && art_h_cells > 0 {
-                    let pixel_h = art_h_cells * 2;
+                    let pixel_h = art_h_cells.saturating_mul(2);
                     let rgba = resized_rgba(&mut render_cache, url, art_w, pixel_h, img);
                     if colors.scheme == 7 {
                         render_cover_halfblock(term, rgba, x_off, 0, art_w, art_h_cells);

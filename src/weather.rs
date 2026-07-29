@@ -266,6 +266,9 @@ impl WeatherDisplay {
 
     pub fn init_particles(&mut self, w: usize, h: usize) {
         self.particles.clear();
+        if w == 0 || h == 0 {
+            return;
+        }
 
         let Some(ref data) = self.data else { return };
 
@@ -961,10 +964,10 @@ pub fn run(config: WeatherConfig) -> io::Result<()> {
 
     loop {
         // Check for quit
-        if let Ok(Some((code, _))) = term.check_key() {
+        if let Ok(Some((code, modifiers))) = term.check_key() {
             if code == KeyCode::Char('?') {
                 show_help = !show_help;
-            } else if !colors.handle_key(code) {
+            } else if !colors.handle_key(code, modifiers) {
                 match code {
                     KeyCode::Char('q') | KeyCode::Esc => break,
                     KeyCode::Char('r') if !config.demo => {
@@ -1025,10 +1028,21 @@ pub fn run(config: WeatherConfig) -> io::Result<()> {
             }
         }
 
-        display.update(term.size().0 as usize, term.size().1 as usize);
+        let (w, h) = term.size();
+        if w < 12 || h < 7 {
+            term.clear();
+            term.set_str(0, 0, "Terminal too small", Some(Color::Yellow), true);
+            if show_help {
+                render_help_spec(&mut term, w, h, &HELP);
+            }
+            term.present()?;
+            term.sleep(config.time_step);
+            continue;
+        }
+
+        display.update(w as usize, h as usize);
 
         term.clear();
-        let (w, h) = term.size();
         display.render(&mut term, w as usize, h as usize, &colors, use_fahrenheit);
 
         // Demo mode progress indicator

@@ -291,6 +291,19 @@ fn reset_gamma() -> io::Result<()> {
     apply_gamma(1.0, 1.0, 1.0)
 }
 
+#[derive(Default)]
+struct GammaResetGuard {
+    active: bool,
+}
+
+impl Drop for GammaResetGuard {
+    fn drop(&mut self) {
+        if self.active {
+            let _ = reset_gamma();
+        }
+    }
+}
+
 /// Check if the active window is fullscreen; returns the output name it's on
 fn fullscreen_output() -> Option<String> {
     let active = Command::new("xdotool")
@@ -411,8 +424,7 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
     let mut last_fullscreen_check = std::time::Instant::now() - fullscreen_check_interval;
     let mut fullscreen_on_output: Option<String> = None;
 
-    // Track if we've applied gamma (for cleanup)
-    let mut gamma_applied = false;
+    let mut gamma_guard = GammaResetGuard::default();
 
     // Demo mode: simulated hour - start at current time
     let now_init = Local::now();
@@ -441,7 +453,7 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
                 apply_gamma_to_output(&output.name, r, g, b);
             }
         }
-        gamma_applied = true;
+        gamma_guard.active = true;
         fullscreen_on_output = fs_output;
 
         // Initialize cache
@@ -453,10 +465,10 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
 
     loop {
         // Handle input
-        if let Ok(Some((code, _))) = term.check_key() {
+        if let Ok(Some((code, modifiers))) = term.check_key() {
             if code == KeyCode::Char('?') {
                 show_help = !show_help;
-            } else if !colors.handle_key(code) {
+            } else if !colors.handle_key(code, modifiers) {
                 match code {
                     KeyCode::Char('q') | KeyCode::Esc => break,
                     _ => {}
@@ -478,10 +490,8 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
 
         // In demo mode, use simulated time; otherwise use real time
         let current_hour = if config.demo {
-            demo_hour += config.demo_speed as f64 * config.time_step as f64;
-            if demo_hour >= 24.0 {
-                demo_hour -= 24.0;
-            }
+            demo_hour =
+                (demo_hour + config.demo_speed as f64 * config.time_step as f64).rem_euclid(24.0);
             demo_hour
         } else {
             now.hour() as f64 + now.minute() as f64 / 60.0 + now.second() as f64 / 3600.0
@@ -521,7 +531,7 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
                         apply_gamma_to_output(&output.name, r, g, b);
                     }
                 }
-                gamma_applied = true;
+                gamma_guard.active = true;
             }
             fullscreen_on_output = curr_fs;
         }
@@ -536,7 +546,7 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
                     apply_gamma_to_output(&output.name, r, g, b);
                 }
             }
-            gamma_applied = true;
+            gamma_guard.active = true;
             last_gamma_update = std::time::Instant::now();
         }
 
@@ -627,7 +637,7 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
             sunrise_bold,
         );
         term.set_str(
-            (wave_start_x + wave_width - sunset_str.len()) as i32,
+            (wave_start_x + wave_width).saturating_sub(sunset_str.chars().count()) as i32,
             info_y,
             &sunset_str,
             Some(sunset_color),
@@ -722,11 +732,6 @@ pub fn run(config: SunlightConfig) -> io::Result<()> {
 
         term.present()?;
         term.sleep(config.time_step);
-    }
-
-    // Reset gamma on exit
-    if gamma_applied {
-        let _ = reset_gamma();
     }
 
     Ok(())

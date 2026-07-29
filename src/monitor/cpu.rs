@@ -1,10 +1,10 @@
 use crate::colors::ColorState;
-use crate::help::{render_help_spec, HelpSpec};
+use crate::help::HelpSpec;
 use crate::monitor::layout::{
     cpu_gradient_color_scheme, draw_core_graphs_scheme, draw_meter_btop_scheme, muted_color_scheme,
     temp_gradient_color_scheme, text_color_scheme, Rect,
 };
-use crate::monitor::{MonitorConfig, MonitorState};
+use crate::monitor::{MonitorAction, MonitorConfig, MonitorState};
 use crate::terminal::Terminal;
 use crossterm::terminal::size;
 use std::fs;
@@ -535,17 +535,16 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
     let mut state = MonitorState::new(config.time_step, 0.5);
     let mut monitor = CpuMonitor::new();
-    const HELP: HelpSpec = HelpSpec::animated("CPU MONITOR", &[]);
-    let mut show_help = false;
+    const HELP: HelpSpec = HelpSpec::monitor("CPU MONITOR", &[]);
 
-    monitor.update()?;
+    state.record_sample(monitor.update());
     std::thread::sleep(std::time::Duration::from_millis(100));
 
     loop {
+        let mut action = MonitorAction::None;
         if let Ok(Some((code, mods))) = term.check_key() {
-            if code == crossterm::event::KeyCode::Char('?') {
-                show_help = !show_help;
-            } else if state.handle_key(code, mods) {
+            action = state.handle_key(code, mods);
+            if action == MonitorAction::Quit {
                 break;
             }
         }
@@ -558,8 +557,8 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
             }
         }
 
-        if !state.paused {
-            monitor.update()?;
+        if state.should_sample(action) {
+            state.record_sample(monitor.update());
         }
 
         term.clear();
@@ -567,14 +566,10 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
         // Render without border
         let (w, h) = term.size();
         monitor.render_fullscreen(&mut term, w as usize, h as usize, &state.colors);
-
-        if show_help {
-            let (w, h) = term.size();
-            render_help_spec(&mut term, w, h, &HELP);
-        }
+        state.render_help(&mut term, w, h, &HELP);
 
         term.present()?;
-        term.sleep(state.speed);
+        term.sleep(state.poll_delay());
     }
 
     Ok(())

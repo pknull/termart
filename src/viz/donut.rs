@@ -163,8 +163,8 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
 
         state.render_help(term, prev_w, prev_h);
         term.present()?;
-        a += 0.04 * (state.speed / 0.03);
-        b += 0.02 * (state.speed / 0.03);
+        a += 0.04 * (state.animation_step() / 0.03);
+        b += 0.02 * (state.animation_step() / 0.03);
         term.sleep(state.speed);
     }
 

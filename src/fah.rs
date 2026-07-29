@@ -266,6 +266,7 @@ pub struct RemoteWorkUnit {
 }
 
 pub struct RemoteMachine {
+    pub id: String,
     pub name: String,
     pub units: Vec<RemoteWorkUnit>,
 }
@@ -311,6 +312,32 @@ impl FahDisplay {
     /// Set persistent session ID from config
     pub fn set_fah_sid(&mut self, sid: Option<String>) {
         self.fah_sid = sid;
+    }
+
+    fn reconcile_remote_machines(&mut self, machines: Vec<FahMachine>) {
+        let mut active_ids = Vec::with_capacity(machines.len());
+        for machine in machines {
+            let id = machine.id;
+            let short_id: String = id.chars().take(8).collect();
+            let name = machine
+                .name
+                .unwrap_or_else(|| format!("Machine {}", short_id));
+            active_ids.push(id.clone());
+
+            if let Some(existing) = self.remote_machines.iter_mut().find(|item| item.id == id) {
+                existing.name = name;
+            } else {
+                self.remote_machines.push(RemoteMachine {
+                    id,
+                    name,
+                    units: Vec::new(),
+                });
+            }
+        }
+
+        self.remote_machines
+            .retain(|machine| active_ids.iter().any(|id| id == &machine.id));
+        self.remote_machine_ids = active_ids;
     }
 
     /// Load RSA private key from base64-encoded PKCS#8 format (from browser localStorage fah-secret)
@@ -862,7 +889,7 @@ impl FahDisplay {
                         let machine_name = machine_state
                             .name
                             .clone()
-                            .unwrap_or_else(|| machine_id[..8.min(machine_id.len())].to_string());
+                            .unwrap_or_else(|| machine_id.chars().take(8).collect());
                         // eprintln!("[DEBUG] Machine {} ({})", machine_name, machine_id);
 
                         // Skip local machine (we get that directly)
@@ -889,14 +916,14 @@ impl FahDisplay {
                         // eprintln!("[DEBUG] Machine {} has {} active units", machine_name, units.len());
 
                         // Update or add machine
-                        if let Some(m) = self
-                            .remote_machines
-                            .iter_mut()
-                            .find(|m| m.name == machine_name)
+                        if let Some(m) =
+                            self.remote_machines.iter_mut().find(|m| m.id == machine_id)
                         {
+                            m.name = machine_name;
                             m.units = units;
                         } else {
                             self.remote_machines.push(RemoteMachine {
+                                id: machine_id,
                                 name: machine_name,
                                 units,
                             });
@@ -909,12 +936,6 @@ impl FahDisplay {
     }
 
     fn update_remote_machine(&mut self, machine_id: &str, state: RemoteWsState) {
-        // Find machine index by ID in our mapping
-        let machine_idx = self
-            .remote_machine_ids
-            .iter()
-            .position(|id| id == machine_id);
-
         // Check if content is a full state object or a delta update array
         if let Some(content_obj) = state.content.as_object() {
             // Full state: {"info":{...},"units":[{...}]}
@@ -932,10 +953,12 @@ impl FahDisplay {
                         .collect();
 
                     // Find or create machine
-                    if let Some(idx) = machine_idx {
-                        if idx < self.remote_machines.len() {
-                            self.remote_machines[idx].units = new_units;
-                        }
+                    if let Some(machine) = self
+                        .remote_machines
+                        .iter_mut()
+                        .find(|machine| machine.id == machine_id)
+                    {
+                        machine.units = new_units;
                     } else {
                         // Get machine name from info or use machine_id
                         let name = content_obj
@@ -945,10 +968,13 @@ impl FahDisplay {
                             .unwrap_or(machine_id)
                             .to_string();
                         self.remote_machines.push(RemoteMachine {
+                            id: machine_id.to_string(),
                             name,
                             units: new_units,
                         });
-                        self.remote_machine_ids.push(machine_id.to_string());
+                        if !self.remote_machine_ids.iter().any(|id| id == machine_id) {
+                            self.remote_machine_ids.push(machine_id.to_string());
+                        }
                     }
                     debug_log!(
                         "[WS] Updated machine {} with {} units",
@@ -970,35 +996,36 @@ impl FahDisplay {
                     content_arr.get(3),
                 ) {
                     // Find the machine by ID and update the specific unit field
-                    if let Some(mach_idx) = machine_idx {
-                        if mach_idx < self.remote_machines.len() {
-                            let machine = &mut self.remote_machines[mach_idx];
-                            if machine.units.len() > unit_idx {
-                                match field {
-                                    "wu_progress" => {
-                                        if let Some(progress) = value.as_f64() {
-                                            machine.units[unit_idx].progress =
-                                                (progress * 100.0) as f32;
-                                            debug_log!(
-                                                "[WS] Delta: {} unit {} progress = {:.1}%",
-                                                machine_id,
-                                                unit_idx,
-                                                machine.units[unit_idx].progress
-                                            );
-                                        }
+                    if let Some(machine) = self
+                        .remote_machines
+                        .iter_mut()
+                        .find(|machine| machine.id == machine_id)
+                    {
+                        if machine.units.len() > unit_idx {
+                            match field {
+                                "wu_progress" => {
+                                    if let Some(progress) = value.as_f64() {
+                                        machine.units[unit_idx].progress =
+                                            (progress * 100.0) as f32;
+                                        debug_log!(
+                                            "[WS] Delta: {} unit {} progress = {:.1}%",
+                                            machine_id,
+                                            unit_idx,
+                                            machine.units[unit_idx].progress
+                                        );
                                     }
-                                    "ppd" => {
-                                        if let Some(ppd) = value.as_u64() {
-                                            machine.units[unit_idx].ppd = ppd;
-                                        }
-                                    }
-                                    "state" => {
-                                        if let Some(s) = value.as_str() {
-                                            machine.units[unit_idx].state = s.to_string();
-                                        }
-                                    }
-                                    _ => {}
                                 }
+                                "ppd" => {
+                                    if let Some(ppd) = value.as_u64() {
+                                        machine.units[unit_idx].ppd = ppd;
+                                    }
+                                }
+                                "state" => {
+                                    if let Some(s) = value.as_str() {
+                                        machine.units[unit_idx].state = s.to_string();
+                                    }
+                                }
+                                _ => {}
                             }
                         }
                     }
@@ -1217,10 +1244,7 @@ impl FahDisplay {
             return SidFetch::Ok;
         };
 
-        // Only update machine IDs list, preserve existing machine data
-        self.remote_machine_ids.clear();
         for machine in &machines {
-            self.remote_machine_ids.push(machine.id.clone());
             debug_log!(
                 "[API] Machine: {} ({})",
                 machine.name.as_deref().unwrap_or("unnamed"),
@@ -1228,26 +1252,7 @@ impl FahDisplay {
             );
         }
 
-        // Only add NEW machines (don't clear existing ones with their units)
-        for machine in machines {
-            let short_id = if machine.id.len() > 8 {
-                &machine.id[..8]
-            } else {
-                &machine.id
-            };
-            let name = machine
-                .name
-                .unwrap_or_else(|| format!("Machine {}", short_id));
-
-            // Check if machine already exists
-            let exists = self.remote_machines.iter().any(|m| m.name == name);
-            if !exists {
-                self.remote_machines.push(RemoteMachine {
-                    name,
-                    units: Vec::new(), // Will be populated via WebSocket
-                });
-            }
-        }
+        self.reconcile_remote_machines(machines);
         debug_log!("[API] Fetched {} machines", self.remote_machine_ids.len());
         SidFetch::Ok
     }
@@ -1302,29 +1307,7 @@ impl FahDisplay {
             return;
         };
 
-        // Store machine IDs for WebSocket subscription
-        self.remote_machine_ids.clear();
-
-        // Add NEW machines only (preserve existing ones with their units)
-        for machine in machines {
-            self.remote_machine_ids.push(machine.id.clone());
-            let short_id = if machine.id.len() > 8 {
-                &machine.id[..8]
-            } else {
-                &machine.id
-            };
-            let name = machine
-                .name
-                .unwrap_or_else(|| format!("Machine {}", short_id));
-
-            let exists = self.remote_machines.iter().any(|m| m.name == name);
-            if !exists {
-                self.remote_machines.push(RemoteMachine {
-                    name,
-                    units: Vec::new(), // Will be populated via WebSocket
-                });
-            }
-        }
+        self.reconcile_remote_machines(machines);
     }
 
     /// Subscribe to remote machines on the relay WebSocket
@@ -1638,10 +1621,10 @@ pub fn run(config: FahConfig) -> io::Result<()> {
     let mut last_machine = Instant::now();
 
     loop {
-        if let Ok(Some((code, _))) = term.check_key() {
+        if let Ok(Some((code, modifiers))) = term.check_key() {
             if code == KeyCode::Char('?') {
                 show_help = !show_help;
-            } else if !colors.handle_key(code) {
+            } else if !colors.handle_key(code, modifiers) {
                 match code {
                     KeyCode::Char('q') | KeyCode::Esc => break,
                     KeyCode::Char('r') => {
@@ -1740,4 +1723,68 @@ pub fn run(config: FahConfig) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FahDisplay, FahMachine, RemoteMachine, RemoteWorkUnit};
+
+    fn machine(id: &str, name: Option<&str>) -> FahMachine {
+        FahMachine {
+            id: id.to_string(),
+            name: name.map(str::to_string),
+            cpus: 0,
+            gpus: 0,
+        }
+    }
+
+    fn work_unit(project: u32) -> RemoteWorkUnit {
+        RemoteWorkUnit {
+            project,
+            progress: 50.0,
+            ppd: 1,
+            state: "running".to_string(),
+            is_gpu: false,
+        }
+    }
+
+    #[test]
+    fn reconciliation_tracks_identity_by_id_and_preserves_units() {
+        let mut display = FahDisplay::new();
+        display.remote_machines.push(RemoteMachine {
+            id: "machine-a".to_string(),
+            name: "Old name".to_string(),
+            units: vec![work_unit(42)],
+        });
+
+        display.reconcile_remote_machines(vec![
+            machine("machine-b", Some("Same name")),
+            machine("machine-a", Some("Same name")),
+        ]);
+
+        assert_eq!(display.remote_machines.len(), 2);
+        let existing = display
+            .remote_machines
+            .iter()
+            .find(|machine| machine.id == "machine-a")
+            .expect("existing machine should remain");
+        assert_eq!(existing.name, "Same name");
+        assert_eq!(existing.units.len(), 1);
+        assert_eq!(existing.units[0].project, 42);
+    }
+
+    #[test]
+    fn reconciliation_prunes_removed_ids_and_handles_unicode_fallback_names() {
+        let mut display = FahDisplay::new();
+        display.reconcile_remote_machines(vec![
+            machine("obsolete", Some("Old")),
+            machine("機械識別子", None),
+        ]);
+        display.reconcile_remote_machines(vec![machine("機械識別子", None)]);
+
+        assert_eq!(display.remote_machine_ids, vec!["機械識別子"]);
+        assert_eq!(display.remote_machines.len(), 1);
+        assert_eq!(display.remote_machines[0].id, "機械識別子");
+        assert!(display.remote_machines[0].name.starts_with("Machine "));
+    }
 }

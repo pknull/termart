@@ -404,8 +404,8 @@ pub fn run(mut config: ClockConfig) -> io::Result<()> {
 
     loop {
         // Handle input
-        if let Ok(Some((code, _mods))) = term.check_key() {
-            if !colors.handle_key(code) {
+        if let Ok(Some((code, modifiers))) = term.check_key() {
+            if !colors.handle_key(code, modifiers) {
                 match code {
                     KeyCode::Char('q') | KeyCode::Esc => break,
                     KeyCode::Char('d') | KeyCode::Char('D') => {

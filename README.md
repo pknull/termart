@@ -171,10 +171,26 @@ termart docker                    # Docker container stats
 | Key | Action |
 |-----|--------|
 | `1-9` | Change update interval (1=fastest) |
+| `+` / `-` | Fine update interval adjustment |
+| `d` | Restore the command's default interval |
 | `Shift+0-9` | Change color scheme |
 | `Space` | Pause/Resume |
+| `r` | Refresh immediately |
+| `.` | Take one sample while paused |
 | `?` | Toggle structured help overlay |
 | `q` / `Esc` | Quit |
+
+Press `?` to view the monitor's live state alongside its controls: sampling
+mode, update interval, color scheme, sample age, and brief control confirmations.
+Input is polled independently from metric collection, so pause, quit, help,
+refresh, and interval changes remain responsive even at slow update intervals.
+Transient collection errors are reported in the help overlay and retried at the
+configured interval instead of terminating the monitor. External Docker and GPU
+collectors are terminated after three seconds so a stalled tool cannot capture
+the interface.
+
+Process and Docker monitors also support `Up`/`Down` or `j`/`k` to select a
+row, `Enter` to inspect it, and `m` or `s` to cycle sorting.
 
 Network and disk I/O bars use a logarithmic activity scale so background traffic remains visible. The adjacent byte rate is the precise measurement; the bar is not a claim about hardware saturation.
 

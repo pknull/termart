@@ -76,7 +76,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
             match event::read()? {
                 Event::Key(key) => {
                     let code = normalize_key(key.code, key.modifiers);
-                    if !colors.handle_key(code) {
+                    if !colors.handle_key(code, key.modifiers) {
                         match code {
                             KeyCode::Char('q') | KeyCode::Esc => break,
                             KeyCode::Char('?') => show_help = !show_help,

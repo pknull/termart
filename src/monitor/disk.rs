@@ -1,15 +1,39 @@
 use crate::colors::ColorState;
-use crate::help::{render_help_spec, HelpSpec};
+use crate::help::HelpSpec;
 use crate::monitor::layout::{
     cpu_gradient_color_scheme, draw_meter_btop_scheme, format_bytes, header_color_scheme,
     muted_color_scheme, text_color_scheme, Rect,
 };
-use crate::monitor::{MonitorConfig, MonitorState};
+use crate::monitor::{MonitorAction, MonitorConfig, MonitorState};
 use crate::terminal::Terminal;
 use crossterm::style::Color;
 use crossterm::terminal::size;
 use std::fs;
 use std::io;
+
+fn decode_mount_field(field: &str) -> String {
+    let bytes = field.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'\\'
+            && index + 3 < bytes.len()
+            && bytes[index + 1..=index + 3]
+                .iter()
+                .all(|byte| matches!(byte, b'0'..=b'7'))
+        {
+            let value = (bytes[index + 1] - b'0') * 64
+                + (bytes[index + 2] - b'0') * 8
+                + (bytes[index + 3] - b'0');
+            decoded.push(value);
+            index += 4;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8_lossy(&decoded).into_owned()
+}
 
 pub struct DiskInfo {
     pub mount_point: String,
@@ -50,7 +74,7 @@ impl DiskMonitor {
             }
 
             let device = parts[0];
-            let mount_point = parts[1];
+            let mount_point = decode_mount_field(parts[1]);
 
             if !device.starts_with("/dev/") {
                 continue;
@@ -59,7 +83,7 @@ impl DiskMonitor {
                 continue;
             }
 
-            if let Ok(statvfs) = Self::statvfs(mount_point) {
+            if let Ok(statvfs) = Self::statvfs(&mount_point) {
                 let total = statvfs.blocks * statvfs.frsize;
                 let free = statvfs.bfree * statvfs.frsize;
                 let available = statvfs.bavail * statvfs.frsize;
@@ -67,7 +91,7 @@ impl DiskMonitor {
 
                 if total > 0 {
                     self.disks.push(DiskInfo {
-                        mount_point: mount_point.to_string(),
+                        mount_point,
                         total,
                         used,
                         available,
@@ -262,14 +286,13 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
     let mut state = MonitorState::new(config.time_step, 2.0);
     let mut monitor = DiskMonitor::new();
-    const HELP: HelpSpec = HelpSpec::animated("DISK MONITOR", &[]);
-    let mut show_help = false;
+    const HELP: HelpSpec = HelpSpec::monitor("DISK MONITOR", &[]);
 
     loop {
+        let mut action = MonitorAction::None;
         if let Ok(Some((code, mods))) = term.check_key() {
-            if code == crossterm::event::KeyCode::Char('?') {
-                show_help = !show_help;
-            } else if state.handle_key(code, mods) {
+            action = state.handle_key(code, mods);
+            if action == MonitorAction::Quit {
                 break;
             }
         }
@@ -282,22 +305,18 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
             }
         }
 
-        if !state.paused {
-            monitor.update()?;
+        if state.should_sample(action) {
+            state.record_sample(monitor.update());
         }
 
         term.clear();
 
         let (w, h) = term.size();
         monitor.render_fullscreen(&mut term, w as usize, h as usize, &state.colors);
-
-        if show_help {
-            let (w, h) = term.size();
-            render_help_spec(&mut term, w, h, &HELP);
-        }
+        state.render_help(&mut term, w, h, &HELP);
 
         term.present()?;
-        term.sleep(state.speed);
+        term.sleep(state.poll_delay());
     }
 
     Ok(())
@@ -305,7 +324,21 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::DiskInfo;
+    use super::{decode_mount_field, DiskInfo};
+
+    #[test]
+    fn mount_fields_decode_proc_octal_escapes() {
+        assert_eq!(decode_mount_field(r"/media/My\040Disk"), "/media/My Disk");
+        assert_eq!(
+            decode_mount_field(r"/path/with\134slash"),
+            r"/path/with\slash"
+        );
+        assert_eq!(
+            decode_mount_field(r"/tabs\011and\012lines"),
+            "/tabs\tand\nlines"
+        );
+        assert_eq!(decode_mount_field(r"/incomplete\04"), r"/incomplete\04");
+    }
 
     #[test]
     fn capacity_percentage_uses_user_available_space() {

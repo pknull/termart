@@ -91,15 +91,26 @@ impl PomodoroState {
     }
 
     fn tick(&mut self) {
+        self.tick_at(Instant::now());
+    }
+
+    fn tick_at(&mut self, now: Instant) {
         if self.paused || self.remaining_secs == 0 {
             return;
         }
 
-        let now = Instant::now();
-        if now.duration_since(self.last_tick) >= Duration::from_secs(1) {
-            self.remaining_secs = self.remaining_secs.saturating_sub(1);
-            self.last_tick = now;
+        let elapsed_secs = now.duration_since(self.last_tick).as_secs();
+        if elapsed_secs > 0 {
+            self.remaining_secs = self
+                .remaining_secs
+                .saturating_sub(elapsed_secs.min(u32::MAX as u64) as u32);
+            self.last_tick += Duration::from_secs(elapsed_secs);
         }
+    }
+
+    fn toggle_pause(&mut self) {
+        self.paused = !self.paused;
+        self.last_tick = Instant::now();
     }
 
     fn next_phase(&mut self, config: &PomodoroConfig) {
@@ -294,13 +305,13 @@ pub fn run(config: PomodoroConfig) -> io::Result<()> {
 
     loop {
         // Handle input
-        if let Ok(Some((code, _mods))) = term.check_key() {
+        if let Ok(Some((code, modifiers))) = term.check_key() {
             if code == KeyCode::Char('?') {
                 show_help = !show_help;
-            } else if !colors.handle_key(code) {
+            } else if !colors.handle_key(code, modifiers) {
                 match code {
                     KeyCode::Char('q') | KeyCode::Esc => break,
-                    KeyCode::Char(' ') => state.paused = !state.paused,
+                    KeyCode::Char(' ') => state.toggle_pause(),
                     KeyCode::Char('s') => state.next_phase(&config),
                     KeyCode::Char('r') => state.reset(&config),
                     KeyCode::Enter if state.remaining_secs == 0 => state.next_phase(&config),
@@ -367,7 +378,7 @@ pub fn run(config: PomodoroConfig) -> io::Result<()> {
         y += 4;
 
         // Progress bar
-        let bar_width = 30.min(w - 4);
+        let bar_width = 30.min(w.saturating_sub(4));
         let bar_x = cx.saturating_sub(bar_width / 2);
         draw_progress_bar(
             &mut term,
@@ -399,4 +410,39 @@ pub fn run(config: PomodoroConfig) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PomodoroConfig, PomodoroState};
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn tick_accounts_for_all_elapsed_whole_seconds() {
+        let mut state = PomodoroState::new(&PomodoroConfig::default());
+        let now = Instant::now();
+        state.last_tick = now - Duration::from_millis(3_500);
+        let initial = state.remaining_secs;
+
+        state.tick_at(now);
+
+        assert_eq!(state.remaining_secs, initial - 3);
+        assert_eq!(
+            now.duration_since(state.last_tick),
+            Duration::from_millis(500)
+        );
+    }
+
+    #[test]
+    fn resume_resets_tick_anchor() {
+        let mut state = PomodoroState::new(&PomodoroConfig::default());
+        state.paused = true;
+        state.last_tick = Instant::now() - Duration::from_secs(30);
+
+        state.toggle_pause();
+        let initial = state.remaining_secs;
+        state.tick();
+
+        assert_eq!(state.remaining_secs, initial);
+    }
 }

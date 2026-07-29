@@ -12,8 +12,10 @@ use crossterm::event::KeyCode;
 use crossterm::style::Color;
 use crossterm::terminal::size;
 use serde::{Deserialize, Serialize};
+use std::fs::OpenOptions;
 use std::io::{self, BufRead, BufReader, Write as IoWrite};
 use std::net::TcpListener;
+use std::os::unix::fs::OpenOptionsExt;
 use std::time::{Duration, Instant};
 
 const HELP: crate::help::HelpSpec = crate::help::HelpSpec::colored(
@@ -204,8 +206,25 @@ fn save_token(token: &TokenResponse) -> io::Result<()> {
     };
 
     let json = serde_json::to_string_pretty(&stored)?;
-    std::fs::write(path, json)?;
-    Ok(())
+    let temp_path = path.with_extension(format!(
+        "tmp-{}-{}",
+        std::process::id(),
+        rand::random::<u64>()
+    ));
+    let result = (|| -> io::Result<()> {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&temp_path)?;
+        file.write_all(json.as_bytes())?;
+        file.sync_all()?;
+        std::fs::rename(&temp_path, &path)
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temp_path);
+    }
+    result
 }
 
 /// Read Claude Code's live OAuth token from ~/.claude/.credentials.json.
@@ -431,66 +450,50 @@ pub fn run_auth() -> io::Result<()> {
 
 /// Fetch usage data from Anthropic API
 fn fetch_usage(token: &str) -> Result<UsageResponse, FetchError> {
-    let output = std::process::Command::new("curl")
-        .args([
-            "-sS",
-            "-w",
-            "\nHTTPSTATUS:%{http_code}",
-            "-H",
-            &format!("Authorization: Bearer {}", token),
-            "-H",
-            "anthropic-beta: oauth-2025-04-20",
-            "https://api.anthropic.com/api/oauth/usage",
-        ])
-        .output()
-        .map_err(|e| FetchError::other(format!("Failed to run curl: {}", e)))?;
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(10))
+        .timeout_read(Duration::from_secs(20))
+        .timeout_write(Duration::from_secs(10))
+        .build();
+    let response = agent
+        .get("https://api.anthropic.com/api/oauth/usage")
+        .set("Authorization", &format!("Bearer {}", token))
+        .set("anthropic-beta", "oauth-2025-04-20")
+        .set("Accept", "application/json")
+        .call();
 
-    if !output.status.success() {
-        return Err(FetchError::other(format!(
-            "Network error: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        )));
-    }
+    match response {
+        Ok(response) => response
+            .into_json::<UsageResponse>()
+            .map_err(|error| FetchError::other(format!("JSON parse error: {}", error))),
+        Err(ureq::Error::Status(status, response)) => {
+            let body = response.into_string().unwrap_or_default();
+            let api_message = serde_json::from_str::<ApiError>(&body)
+                .ok()
+                .filter(|error| error.error_type.as_deref() == Some("error"))
+                .and_then(|error| error.error)
+                .and_then(|detail| detail.message);
 
-    // Split the trailing "\nHTTPSTATUS:<code>" marker (added via curl -w) off the body.
-    let raw = String::from_utf8_lossy(&output.stdout).into_owned();
-    let (body, status) = match raw.rsplit_once("\nHTTPSTATUS:") {
-        Some((b, s)) => (b, s.trim().parse::<u16>().unwrap_or(0)),
-        None => (raw.as_str(), 0),
-    };
+            if status == 429 {
+                return Err(FetchError::rate_limited(
+                    api_message.unwrap_or_else(|| "rate limited".to_string()),
+                ));
+            }
+            if let Some(message) = api_message {
+                if message.contains("scope") {
+                    return Err(FetchError::other(
+                        "OAuth scope error - run 'termart claude-tokens --auth' to authorize"
+                            .to_string(),
+                    ));
+                }
+                return Err(FetchError::other(message));
+            }
 
-    // Extract the API's error message, if the body carries one.
-    let api_message = serde_json::from_str::<ApiError>(body)
-        .ok()
-        .filter(|e| e.error_type.as_deref() == Some("error"))
-        .and_then(|e| e.error)
-        .and_then(|d| d.message);
-
-    // Rate limited: surface a clear message and signal backoff to the caller.
-    if status == 429 {
-        let msg = api_message.unwrap_or_else(|| "rate limited".to_string());
-        return Err(FetchError::rate_limited(msg));
-    }
-
-    if let Some(msg) = api_message {
-        if msg.contains("scope") {
-            return Err(FetchError::other(
-                "OAuth scope error - run 'termart claude-tokens --auth' to authorize".to_string(),
-            ));
+            let snippet: String = body.trim().chars().take(120).collect();
+            Err(FetchError::other(format!("HTTP {}: {}", status, snippet)))
         }
-        return Err(FetchError::other(msg));
+        Err(error) => Err(FetchError::other(format!("Network error: {}", error))),
     }
-
-    if status != 0 && !(200..300).contains(&status) {
-        let snippet = body.trim();
-        return Err(FetchError::other(format!(
-            "HTTP {}: {}",
-            status,
-            &snippet[..snippet.len().min(120)]
-        )));
-    }
-
-    serde_json::from_str(body).map_err(|e| FetchError::other(format!("JSON parse error: {}", e)))
 }
 
 /// Parse ISO 8601 timestamp to Duration until reset

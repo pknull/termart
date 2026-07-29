@@ -1256,47 +1256,47 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
             }
         }
 
-        // Query layer from keyboard periodically
-        layer_query_timer += state.speed;
-        if layer_query_timer > 0.5 {
-            layer_query_timer = 0.0;
-            if let Some(ref mut f) = focus {
-                if let Some(resp) = f.command("layer.state") {
-                    if config.debug {
-                        debug_info = format!("layer.state: {}", resp);
-                    }
-                    // Parse layer state into bitmask
-                    let mut mask: u32 = 0;
-                    for (i, s) in resp.split_whitespace().enumerate() {
-                        if i >= 32 {
-                            break;
+        if !state.paused {
+            // Query layer from keyboard periodically
+            layer_query_timer += state.speed;
+            if layer_query_timer > 0.5 {
+                layer_query_timer = 0.0;
+                if let Some(ref mut f) = focus {
+                    if let Some(resp) = f.command("layer.state") {
+                        if config.debug {
+                            debug_info = format!("layer.state: {}", resp);
                         }
-                        if let Ok(v) = s.parse::<u8>() {
-                            if v != 0 {
-                                mask |= 1 << i;
+                        // Parse layer state into bitmask
+                        let mut mask: u32 = 0;
+                        for (i, s) in resp.split_whitespace().enumerate() {
+                            if i >= 32 {
+                                break;
+                            }
+                            if let Ok(v) = s.parse::<u8>() {
+                                if v != 0 {
+                                    mask |= 1 << i;
+                                }
                             }
                         }
+                        // Ensure layer 0 is always in the mask (base layer fallback for transparent keys)
+                        mask |= 1;
+                        // Note: There's a benign race here where evdev could set shift_held true
+                        // right after we set it false. This only causes a momentary visual glitch.
+                        if mask != prev_layer_mask {
+                            shift_held.store(false, Ordering::Release);
+                            prev_layer_mask = mask;
+                        }
+                        active_layers.store(mask, Ordering::Relaxed);
+                    } else if config.debug {
+                        debug_info = "layer.state: no response".to_string();
                     }
-                    // Ensure layer 0 is always in the mask (base layer fallback for transparent keys)
-                    mask |= 1;
-                    // Note: There's a benign race here where evdev could set shift_held true
-                    // right after we set it false. This only causes a momentary visual glitch.
-                    if mask != prev_layer_mask {
-                        shift_held.store(false, Ordering::Release);
-                        prev_layer_mask = mask;
-                    }
-                    active_layers.store(mask, Ordering::Relaxed);
-                } else if config.debug {
-                    debug_info = "layer.state: no response".to_string();
                 }
             }
-        }
 
-        // Decay heat values
-        {
+            // Decay heat values
             let mut heat = key_heat.lock().unwrap_or_else(|e| e.into_inner());
             for v in heat.values_mut() {
-                *v = (*v - state.speed * 3.0).max(0.0);
+                *v = (*v - state.animation_step() * 3.0).max(0.0);
             }
             heat.retain(|_, v| *v > 0.0);
         }
@@ -1340,7 +1340,7 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
             "none"
         };
         let layer_text = format!("[ Layer {} : {} ]", top_layer + 1, connection_status);
-        let layer_x = (width as usize - layer_text.len()) / 2;
+        let layer_x = (width as usize).saturating_sub(layer_text.len()) / 2;
         let (layer_color, _) = scheme_color(state.color_scheme(), 2, true);
         term.set_str(layer_x as i32, 0, &layer_text, Some(layer_color), true);
 
@@ -1450,7 +1450,7 @@ pub fn run(config: DygmaConfig) -> io::Result<()> {
 
         state.render_help(&mut term, prev_w, prev_h);
         term.present()?;
-        term.sleep(state.speed);
+        term.sleep(if state.paused { 0.1 } else { state.speed });
     }
 
     // Cleanup

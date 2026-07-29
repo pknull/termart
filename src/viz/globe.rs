@@ -434,6 +434,7 @@ pub fn run(
     let base_rotation: f32 = user_location.map(|(_, lon)| -lon).unwrap_or(0.0);
     let mut tilt: f32 = user_location.map(|(lat, _)| -lat).unwrap_or(default_tilt);
     let mut view_offset: f32 = 0.0;
+    let mut auto_rotation: f32 = 0.0;
 
     let mut zoom_override: Option<f32> = None;
     let mut current_zoom: f32 = 1.0;
@@ -566,7 +567,7 @@ pub fn run(
 
         let is_daylight = |lon: f32| -> bool { daylight_level(lon) > 0.5 };
 
-        let rotation = base_rotation + view_offset;
+        let rotation = base_rotation + view_offset + auto_rotation;
         let (cos_tilt, sin_tilt) = (fast_cos(tilt), fast_sin(tilt));
 
         let lat_lon_to_screen = |lat: f32, lon: f32| -> Option<(i32, i32, f32)> {
@@ -783,7 +784,7 @@ pub fn run(
         // Draw and update blips
         let mut new_blips = Vec::new();
         for mut blip in blips {
-            blip.age += state.speed * 2.0;
+            blip.age += state.animation_step() * 2.0;
             if blip.age < blip.max_age {
                 let pulse = (blip.age / blip.max_age * std::f32::consts::PI).sin();
                 let size = (pulse * 3.0) as i32;
@@ -808,7 +809,7 @@ pub fn run(
         // Draw and update arcs
         let mut new_arcs = Vec::new();
         for mut arc in arcs {
-            arc.progress += state.speed * 1.5;
+            arc.progress += state.animation_step() * 1.5;
             if arc.progress < 1.0 {
                 let steps = (arc.progress * 30.0) as i32;
                 for t in 0..=steps {
@@ -834,7 +835,7 @@ pub fn run(
 
         // Draw user location marker
         if let Some((user_lat, user_lon)) = user_location {
-            user_pulse += state.speed * 3.0;
+            user_pulse += state.animation_step() * 3.0;
             let pulse_size = ((user_pulse.sin() + 1.0) * 2.0 + 2.0) as i32;
 
             if let Some((bx, by, _)) = lat_lon_to_screen(user_lat, user_lon) {
@@ -908,6 +909,7 @@ pub fn run(
 
         state.render_help(term, width, height);
         term.present()?;
+        auto_rotation = (auto_rotation + state.animation_step() * 0.1) % std::f32::consts::TAU;
         term.sleep(state.speed);
     }
 

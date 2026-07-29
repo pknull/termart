@@ -199,7 +199,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         }
 
         // Update curve
-        curve.update(state.speed);
+        curve.update(state.animation_step());
 
         // Clear intensity grid (decay existing values)
         for row in &mut intensity_grid {

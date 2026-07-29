@@ -488,7 +488,8 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         state.render_help(term, width, height);
         term.present()?;
         // Wrap time to prevent f32 precision loss after long runtime
-        time = (time + (state.speed / TIME_STEP_NORM) * TIME_INCREMENT) % TIME_WRAP_PERIOD;
+        time =
+            (time + (state.animation_step() / TIME_STEP_NORM) * TIME_INCREMENT) % TIME_WRAP_PERIOD;
         term.sleep(state.speed);
     }
 

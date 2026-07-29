@@ -167,8 +167,8 @@ pub fn run(time_step: f32) -> io::Result<()> {
 
     loop {
         // Process all pending input
-        while let Ok(Some((code, _))) = term.check_key() {
-            if colors.handle_key(code) {
+        while let Ok(Some((code, modifiers))) = term.check_key() {
+            if colors.handle_key(code, modifiers) {
                 continue;
             }
             match code {

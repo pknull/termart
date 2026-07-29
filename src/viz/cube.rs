@@ -201,7 +201,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
         state.render_help(term, width, height);
         term.present()?;
         // Animation time advances at 2x frame rate
-        time += state.speed * 2.0;
+        time += state.animation_step() * 2.0;
         term.sleep(state.speed);
     }
 

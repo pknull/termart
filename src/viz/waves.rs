@@ -95,7 +95,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig) -> io::Result<()> {
 
         state.render_help(term, width, height);
         term.present()?;
-        time += state.speed as f64;
+        time += state.animation_step() as f64;
         term.sleep(state.speed);
     }
 

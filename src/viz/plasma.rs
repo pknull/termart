@@ -109,8 +109,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
 
         state.render_help(term, width, height);
         term.present()?;
-        // Advance time: state.speed * 2.0 (normalized from default 30fps timing)
-        time += state.speed as f64 * 2.0;
+        time += state.animation_step() as f64 * 2.0;
         term.sleep(state.speed);
     }
 

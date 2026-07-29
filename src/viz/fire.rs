@@ -30,7 +30,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
     let fire_chars = [' ', '.', ':', ';', '*', 'o', 'O', '#', '@', '%'];
 
     loop {
-        let (new_w, new_h) = term.size();
+        let (new_w, new_h) = crossterm::terminal::size().unwrap_or(term.size());
         if new_w as usize != w || new_h as usize != h {
             w = new_w as usize;
             h = new_h as usize;

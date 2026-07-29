@@ -33,6 +33,8 @@ pub enum GlobalControls {
     SpeedControlled,
     /// Pause, speed, color selection, quit, and help.
     Animated,
+    /// Sampling, interval, pause, color selection, quit, and help.
+    Monitor,
 }
 
 const BASIC_CONTROLS: &[HelpEntry] = &[
@@ -63,6 +65,18 @@ const PAUSABLE_CONTROLS: &[HelpEntry] = &[
 
 const SPEED_CONTROLS: &[HelpEntry] = &[
     HelpEntry::new("1-9", "Speed (1=fast)"),
+    HelpEntry::new("!-()", "Color scheme"),
+    HelpEntry::new("q/Esc", "Quit"),
+    HelpEntry::new("?", "Toggle help"),
+];
+
+const MONITOR_CONTROLS: &[HelpEntry] = &[
+    HelpEntry::new("Space", "Pause/resume"),
+    HelpEntry::new("r", "Refresh now"),
+    HelpEntry::new(".", "Sample while paused"),
+    HelpEntry::new("+/-", "Fine interval adjustment"),
+    HelpEntry::new("1-9", "Interval preset (1=fast)"),
+    HelpEntry::new("d", "Default interval"),
     HelpEntry::new("!-()", "Color scheme"),
     HelpEntry::new("q/Esc", "Quit"),
     HelpEntry::new("?", "Toggle help"),
@@ -112,6 +126,10 @@ impl HelpSpec {
         Self::new(title, controls, GlobalControls::SpeedControlled)
     }
 
+    pub const fn monitor(title: &'static str, controls: &'static [HelpEntry]) -> Self {
+        Self::new(title, controls, GlobalControls::Monitor)
+    }
+
     pub fn render(&self) -> String {
         let global = match self.global_controls {
             GlobalControls::Basic => BASIC_CONTROLS,
@@ -119,6 +137,7 @@ impl HelpSpec {
             GlobalControls::Pausable => PAUSABLE_CONTROLS,
             GlobalControls::SpeedControlled => SPEED_CONTROLS,
             GlobalControls::Animated => ANIMATED_CONTROLS,
+            GlobalControls::Monitor => MONITOR_CONTROLS,
         };
 
         let key_width = self
@@ -415,5 +434,15 @@ mod tests {
         assert!(!help.contains("GLOBAL CONTROLS"));
         assert!(help.contains("q/Esc  Quit"));
         assert!(help.contains("?      Toggle help"));
+    }
+
+    #[test]
+    fn monitor_help_describes_sampling_and_interval_controls() {
+        let help = HelpSpec::monitor("MONITOR", &[]).render();
+
+        assert!(help.contains("r      Refresh now"));
+        assert!(help.contains(".      Sample while paused"));
+        assert!(help.contains("+/-    Fine interval adjustment"));
+        assert!(help.contains("d      Default interval"));
     }
 }

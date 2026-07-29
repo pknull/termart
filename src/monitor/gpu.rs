@@ -1,16 +1,20 @@
 use crate::colors::ColorState;
-use crate::help::{render_help_spec, HelpSpec};
+use crate::help::HelpSpec;
 use crate::monitor::layout::{
     cpu_gradient_color_scheme, draw_meter_btop_scheme, format_bytes, header_color_scheme,
     muted_color_scheme, temp_gradient_color_scheme, Rect,
 };
-use crate::monitor::{MonitorConfig, MonitorState};
+use crate::monitor::{command_output_with_timeout, MonitorAction, MonitorConfig, MonitorState};
 use crate::terminal::Terminal;
 use crossterm::style::Color;
 use crossterm::terminal::size;
 use std::fs;
 use std::io;
 use std::process::Command;
+use std::time::Duration;
+
+const COLLECTOR_TIMEOUT: Duration = Duration::from_secs(3);
+const BACKEND_RETRY_INTERVAL: Duration = Duration::from_secs(5);
 
 struct GpuInfo {
     name: String,
@@ -60,16 +64,18 @@ pub struct GpuMonitor {
     amd_hwmon_path: Option<String>,
     amd_name: Option<String>,
     error_msg: Option<String>,
+    next_backend_probe: std::time::Instant,
 }
 
 impl GpuMonitor {
     pub fn new() -> Self {
         // Check for NVIDIA first
-        let has_nvidia = Command::new("nvidia-smi")
-            .arg("--list-gpus")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false);
+        let has_nvidia = command_output_with_timeout(
+            Command::new("nvidia-smi").arg("--list-gpus"),
+            COLLECTOR_TIMEOUT,
+        )
+        .map(|o| o.status.success())
+        .unwrap_or(false);
 
         if has_nvidia {
             return Self {
@@ -79,6 +85,7 @@ impl GpuMonitor {
                 amd_hwmon_path: None,
                 amd_name: None,
                 error_msg: None,
+                next_backend_probe: std::time::Instant::now() + BACKEND_RETRY_INTERVAL,
             };
         }
 
@@ -92,6 +99,7 @@ impl GpuMonitor {
                 amd_name: Some(Self::get_amd_gpu_name()),
                 amd_card_path: Some(card_path),
                 error_msg: None,
+                next_backend_probe: std::time::Instant::now() + BACKEND_RETRY_INTERVAL,
             };
         }
 
@@ -102,6 +110,7 @@ impl GpuMonitor {
             amd_hwmon_path: None,
             amd_name: None,
             error_msg: Some("No GPU detected".to_string()),
+            next_backend_probe: std::time::Instant::now() + BACKEND_RETRY_INTERVAL,
         }
     }
 
@@ -143,7 +152,9 @@ impl GpuMonitor {
 
     fn get_amd_gpu_name() -> String {
         // Try lspci for a nice name
-        if let Ok(output) = Command::new("lspci").output() {
+        if let Ok(output) =
+            command_output_with_timeout(&mut Command::new("lspci"), COLLECTOR_TIMEOUT)
+        {
             let stdout = String::from_utf8_lossy(&output.stdout);
             for line in stdout.lines() {
                 if line.contains("VGA") && line.contains("AMD") {
@@ -165,21 +176,39 @@ impl GpuMonitor {
         match self.backend {
             GpuBackend::Nvidia => self.update_nvidia(),
             GpuBackend::Amd => self.update_amd(),
-            GpuBackend::None => Ok(()),
+            GpuBackend::None if std::time::Instant::now() < self.next_backend_probe => {
+                Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    self.error_msg.as_deref().unwrap_or("No GPU detected"),
+                ))
+            }
+            GpuBackend::None => {
+                *self = Self::new();
+                match self.backend {
+                    GpuBackend::None => Err(io::Error::new(
+                        io::ErrorKind::NotFound,
+                        self.error_msg.as_deref().unwrap_or("No GPU detected"),
+                    )),
+                    _ => self.update(),
+                }
+            }
         }
     }
 
     fn update_nvidia(&mut self) -> io::Result<()> {
-        let output = Command::new("nvidia-smi")
-            .arg("--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,power.limit,fan.speed")
-            .arg("--format=csv,noheader,nounits")
-            .output();
+        let output = command_output_with_timeout(
+            Command::new("nvidia-smi")
+                .arg("--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,power.limit,fan.speed")
+                .arg("--format=csv,noheader,nounits"),
+            COLLECTOR_TIMEOUT,
+        );
 
         match output {
             Ok(out) => {
                 if !out.status.success() {
-                    self.error_msg = Some("nvidia-smi failed".to_string());
-                    return Ok(());
+                    let message = "nvidia-smi failed".to_string();
+                    self.error_msg = Some(message.clone());
+                    return Err(io::Error::other(message));
                 }
 
                 let stdout = String::from_utf8_lossy(&out.stdout);
@@ -209,10 +238,17 @@ impl GpuMonitor {
                     }
                 }
 
+                if self.gpus.is_empty() {
+                    let message = "nvidia-smi returned no GPU data".to_string();
+                    self.error_msg = Some(message.clone());
+                    return Err(io::Error::new(io::ErrorKind::InvalidData, message));
+                }
                 self.error_msg = None;
             }
             Err(e) => {
-                self.error_msg = Some(format!("Error: {}", e));
+                let message = format!("Error: {e}");
+                self.error_msg = Some(message.clone());
+                return Err(io::Error::new(e.kind(), message));
             }
         }
 
@@ -221,11 +257,18 @@ impl GpuMonitor {
 
     fn update_amd(&mut self) -> io::Result<()> {
         let Some(ref card_path) = self.amd_card_path else {
-            return Ok(());
+            let message = "AMD GPU path unavailable".to_string();
+            self.error_msg = Some(message.clone());
+            return Err(io::Error::new(io::ErrorKind::NotFound, message));
         };
 
-        let utilization =
-            Self::read_sysfs_u32(&format!("{}/gpu_busy_percent", card_path)).unwrap_or(0) as f32;
+        let utilization_path = format!("{}/gpu_busy_percent", card_path);
+        let Some(utilization) = Self::read_sysfs_u32(&utilization_path) else {
+            let message = "Unable to read AMD GPU utilization".to_string();
+            self.error_msg = Some(message.clone());
+            return Err(io::Error::new(io::ErrorKind::InvalidData, message));
+        };
+        let utilization = utilization as f32;
 
         let memory_used =
             Self::read_sysfs_u64(&format!("{}/mem_info_vram_used", card_path)).unwrap_or(0);
@@ -505,14 +548,13 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
     let mut state = MonitorState::new(config.time_step, 0.5);
     let mut monitor = GpuMonitor::new();
-    const HELP: HelpSpec = HelpSpec::animated("GPU MONITOR", &[]);
-    let mut show_help = false;
+    const HELP: HelpSpec = HelpSpec::monitor("GPU MONITOR", &[]);
 
     loop {
+        let mut action = MonitorAction::None;
         if let Ok(Some((code, mods))) = term.check_key() {
-            if code == crossterm::event::KeyCode::Char('?') {
-                show_help = !show_help;
-            } else if state.handle_key(code, mods) {
+            action = state.handle_key(code, mods);
+            if action == MonitorAction::Quit {
                 break;
             }
         }
@@ -525,23 +567,41 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
             }
         }
 
-        if !state.paused {
-            monitor.update()?;
+        if state.should_sample(action) {
+            state.record_sample(monitor.update());
         }
 
         term.clear();
 
         let (w, h) = term.size();
         monitor.render_fullscreen(&mut term, w as usize, h as usize, &state.colors);
-
-        if show_help {
-            let (w, h) = term.size();
-            render_help_spec(&mut term, w, h, &HELP);
-        }
+        state.render_help(&mut term, w, h, &HELP);
 
         term.present()?;
-        term.sleep(state.speed);
+        term.sleep(state.poll_delay());
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{GpuBackend, GpuMonitor, BACKEND_RETRY_INTERVAL};
+
+    #[test]
+    fn missing_gpu_backend_is_a_collection_error() {
+        let mut monitor = GpuMonitor {
+            gpus: Vec::new(),
+            backend: GpuBackend::None,
+            amd_card_path: None,
+            amd_hwmon_path: None,
+            amd_name: None,
+            error_msg: Some("No GPU detected".to_string()),
+            next_backend_probe: std::time::Instant::now() + BACKEND_RETRY_INTERVAL,
+        };
+
+        let error = monitor.update().expect_err("missing backend must fail");
+        assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+        assert_eq!(error.to_string(), "No GPU detected");
+    }
 }

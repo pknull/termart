@@ -129,3 +129,33 @@ fn every_subcommand_has_consistent_help_output() {
         );
     }
 }
+
+#[test]
+fn invalid_timing_and_pomodoro_values_are_rejected_without_panicking() {
+    let cases: &[&[&str]] = &[
+        &["matrix", "--time=-1"],
+        &["matrix", "--time=0"],
+        &["matrix", "--time=NaN"],
+        &["matrix", "--time=3.4028235e38"],
+        &["matrix", "--time=1e-10"],
+        &["sunlight", "--demo-speed=1e-10"],
+        &["sunlight", "--demo-speed=3.4028235e38"],
+        &["pomodoro", "--count=0"],
+        &["pomodoro", "--count=4294967295"],
+        &["pomodoro", "--work=0"],
+        &["pomodoro", "--work=71582789"],
+    ];
+
+    for args in cases {
+        let output = termart()
+            .args(*args)
+            .output()
+            .unwrap_or_else(|error| panic!("Failed to run {args:?}: {error}"));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "{args:?} should be rejected");
+        assert!(
+            !stderr.contains("panicked at"),
+            "{args:?} should produce a validation error, not a panic: {stderr}"
+        );
+    }
+}

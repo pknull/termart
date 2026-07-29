@@ -1,10 +1,10 @@
 use crate::colors::ColorState;
-use crate::help::{render_help_spec, HelpSpec};
+use crate::help::HelpSpec;
 use crate::monitor::layout::{
     activity_percent, cpu_gradient_color_scheme, draw_meter_btop_scheme, format_bytes, format_rate,
     header_color_scheme, muted_color_scheme, text_color_scheme, update_activity_scale, Rect,
 };
-use crate::monitor::{MonitorConfig, MonitorState};
+use crate::monitor::{MonitorAction, MonitorConfig, MonitorState};
 use crate::terminal::Terminal;
 use crossterm::style::Color;
 use crossterm::terminal::size;
@@ -317,18 +317,17 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
     let mut term = Terminal::new(true)?;
     let mut state = MonitorState::new(config.time_step, 1.0);
     let mut monitor = NetMonitor::new();
-    const HELP: HelpSpec = HelpSpec::animated("NETWORK MONITOR", &[]);
-    let mut show_help = false;
+    const HELP: HelpSpec = HelpSpec::monitor("NETWORK MONITOR", &[]);
 
-    monitor.update(1.0)?;
+    state.record_sample(monitor.update(1.0));
     let mut last_sample = std::time::Instant::now();
     std::thread::sleep(std::time::Duration::from_millis(100));
 
     loop {
+        let mut action = MonitorAction::None;
         if let Ok(Some((code, mods))) = term.check_key() {
-            if code == crossterm::event::KeyCode::Char('?') {
-                show_help = !show_help;
-            } else if state.handle_key(code, mods) {
+            action = state.handle_key(code, mods);
+            if action == MonitorAction::Quit {
                 break;
             }
         }
@@ -341,24 +340,21 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
             }
         }
 
-        if !state.paused {
+        if state.should_sample(action) {
             let elapsed = last_sample.elapsed().as_secs_f32().max(f32::EPSILON);
-            monitor.update(elapsed)?;
-            last_sample = std::time::Instant::now();
+            if state.record_sample(monitor.update(elapsed)) {
+                last_sample = std::time::Instant::now();
+            }
         }
 
         term.clear();
 
         let (w, h) = term.size();
         monitor.render_fullscreen(&mut term, w as usize, h as usize, &state.colors);
-
-        if show_help {
-            let (w, h) = term.size();
-            render_help_spec(&mut term, w, h, &HELP);
-        }
+        state.render_help(&mut term, w, h, &HELP);
 
         term.present()?;
-        term.sleep(state.speed);
+        term.sleep(state.poll_delay());
     }
 
     Ok(())

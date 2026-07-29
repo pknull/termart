@@ -39,6 +39,8 @@ const FIRE_COOLDOWN: f32 = 0.2;
 const AI_FIRE_COOLDOWN: f32 = 0.15;
 const ALIEN_FIRE_INTERVAL: f32 = 0.8;
 const AUTO_RESTART_DELAY: f32 = 2.0;
+const MIN_WIDTH: usize = 20;
+const MIN_HEIGHT: usize = 15;
 
 // Static UI strings
 const HINT: &str = "←/→:Move SPACE:Fire A:AI R:Reset ?:Help Q:Quit";
@@ -225,7 +227,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
 
     // Cached layout values
     let mut alien_cols = calc_alien_cols(w);
-    let mut player_y_i32 = (h - 2) as i32;
+    let mut player_y_i32 = h.saturating_sub(2) as i32;
 
     loop {
         // Check for terminal resize
@@ -239,7 +241,21 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
             game.shields = create_shields(w, h);
             game.player_x = w as f32 / 2.0;
             alien_cols = calc_alien_cols(w);
-            player_y_i32 = (h - 2) as i32;
+            player_y_i32 = h.saturating_sub(2) as i32;
+        }
+
+        if w < MIN_WIDTH || h < MIN_HEIGHT {
+            if let Some((code, mods)) = term.check_key()? {
+                if state.handle_key(code, mods) {
+                    break;
+                }
+            }
+            term.clear();
+            term.set_str(0, 0, "Terminal too small", Some(Color::Yellow), true);
+            state.render_help(term, w as u16, h as u16);
+            term.present()?;
+            term.sleep(0.1);
+            continue;
         }
 
         // Handle input
@@ -281,7 +297,7 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
             }
         }
 
-        let dt = state.speed;
+        let dt = state.animation_step();
         player_fire_cooldown = (player_fire_cooldown - dt).max(0.0);
 
         // Auto-play AI - predict bullet landing positions

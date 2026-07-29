@@ -1,9 +1,10 @@
 use crossterm::{
     cursor::{Hide, MoveTo, Show},
-    event::{poll, read, Event, KeyCode, KeyModifiers},
+    event::{poll, read, Event, KeyCode, KeyEventKind, KeyModifiers},
     queue,
     style::{
-        Attribute, Color, Print, ResetColor, SetAttribute, SetBackgroundColor, SetForegroundColor,
+        force_color_output, Attribute, Color, Print, ResetColor, SetAttribute, SetBackgroundColor,
+        SetForegroundColor,
     },
     terminal::{
         disable_raw_mode, enable_raw_mode, size, Clear, ClearType, EnterAlternateScreen,
@@ -14,11 +15,41 @@ use std::io::{self, stdout, BufWriter, Write};
 use std::time::Duration;
 
 fn normalize_key(code: KeyCode, mods: KeyModifiers) -> KeyCode {
-    if code == KeyCode::Char('/') && mods.contains(KeyModifiers::SHIFT) {
-        KeyCode::Char('?')
-    } else {
-        code
+    if !mods.contains(KeyModifiers::SHIFT) {
+        return code;
     }
+
+    // Depending on the terminal keyboard protocol, crossterm may report a
+    // shifted key either as the resulting character (`!`) or as the base key
+    // (`1`) plus SHIFT. Normalize the latter so shared key handling works in
+    // both modes.
+    match code {
+        KeyCode::Char('0') => KeyCode::Char(')'),
+        KeyCode::Char('1') => KeyCode::Char('!'),
+        KeyCode::Char('2') => KeyCode::Char('@'),
+        KeyCode::Char('3') => KeyCode::Char('#'),
+        KeyCode::Char('4') => KeyCode::Char('$'),
+        KeyCode::Char('5') => KeyCode::Char('%'),
+        KeyCode::Char('6') => KeyCode::Char('^'),
+        KeyCode::Char('7') => KeyCode::Char('&'),
+        KeyCode::Char('8') => KeyCode::Char('*'),
+        KeyCode::Char('9') => KeyCode::Char('('),
+        KeyCode::Char('/') => KeyCode::Char('?'),
+        KeyCode::Char('=') => KeyCode::Char('+'),
+        KeyCode::Char('-') => KeyCode::Char('_'),
+        _ => code,
+    }
+}
+
+fn is_key_action(kind: KeyEventKind) -> bool {
+    matches!(kind, KeyEventKind::Press | KeyEventKind::Repeat)
+}
+
+fn enable_visual_colors() {
+    // Color is part of the rendered content in termart, not optional CLI
+    // decoration. Some launchers export NO_COLOR for their own output;
+    // overriding it here keeps color schemes functional in the visualizer.
+    force_color_output(true);
 }
 
 /// Terminal abstraction for rendering
@@ -53,13 +84,22 @@ impl Default for Cell {
 impl Terminal {
     /// Initialize the terminal for drawing
     pub fn new(alternate_screen: bool) -> io::Result<Self> {
+        enable_visual_colors();
+
         let (width, height) = size()?;
 
         if alternate_screen {
             enable_raw_mode()?;
             let mut stdout = stdout();
-            queue!(stdout, EnterAlternateScreen, Hide)?;
-            stdout.flush()?;
+            if let Err(error) = (|| -> io::Result<()> {
+                queue!(stdout, EnterAlternateScreen, Hide)?;
+                stdout.flush()
+            })() {
+                let _ = queue!(stdout, Show, LeaveAlternateScreen);
+                let _ = stdout.flush();
+                let _ = disable_raw_mode();
+                return Err(error);
+            }
         }
 
         let front_buffer = vec![vec![Cell::default(); width as usize]; height as usize];
@@ -121,7 +161,7 @@ impl Terminal {
     pub fn set(&mut self, x: i32, y: i32, ch: char, fg: Option<Color>, bold: bool) {
         if x >= 0 && x < self.width as i32 && y >= 0 && y < self.height as i32 {
             self.back_buffer[y as usize][x as usize] = Cell {
-                ch,
+                ch: printable_cell_char(ch),
                 fg,
                 bg: None,
                 bold,
@@ -140,7 +180,12 @@ impl Terminal {
         bold: bool,
     ) {
         if x >= 0 && x < self.width as i32 && y >= 0 && y < self.height as i32 {
-            self.back_buffer[y as usize][x as usize] = Cell { ch, fg, bg, bold };
+            self.back_buffer[y as usize][x as usize] = Cell {
+                ch: printable_cell_char(ch),
+                fg,
+                bg,
+                bold,
+            };
         }
     }
 
@@ -294,8 +339,10 @@ impl Terminal {
     pub fn check_key(&self) -> io::Result<Option<(KeyCode, crossterm::event::KeyModifiers)>> {
         if poll(Duration::from_millis(0))? {
             if let Event::Key(key_event) = read()? {
-                let code = normalize_key(key_event.code, key_event.modifiers);
-                return Ok(Some((code, key_event.modifiers)));
+                if is_key_action(key_event.kind) {
+                    let code = normalize_key(key_event.code, key_event.modifiers);
+                    return Ok(Some((code, key_event.modifiers)));
+                }
             }
         }
         Ok(None)
@@ -305,8 +352,10 @@ impl Terminal {
     pub fn wait_key(&self, timeout_ms: u64) -> io::Result<Option<KeyCode>> {
         if poll(Duration::from_millis(timeout_ms))? {
             if let Event::Key(key_event) = read()? {
-                let code = normalize_key(key_event.code, key_event.modifiers);
-                return Ok(Some(code));
+                if is_key_action(key_event.kind) {
+                    let code = normalize_key(key_event.code, key_event.modifiers);
+                    return Ok(Some(code));
+                }
             }
         }
         Ok(None)
@@ -344,6 +393,14 @@ impl Terminal {
             let _ = writeln!(out);
         }
         let _ = out.flush();
+    }
+}
+
+fn printable_cell_char(ch: char) -> char {
+    if ch.is_control() {
+        '�'
+    } else {
+        ch
     }
 }
 
@@ -403,6 +460,81 @@ impl Drop for Terminal {
             let _ = stdout.flush();
             let _ = disable_raw_mode();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{enable_visual_colors, is_key_action, normalize_key, Cell, Terminal};
+    use crossterm::{
+        event::{KeyCode, KeyEventKind, KeyModifiers},
+        style::{force_color_output, Color, SetForegroundColor},
+    };
+
+    #[test]
+    fn shifted_digits_are_normalized_to_color_shortcuts() {
+        let expected = [')', '!', '@', '#', '$', '%', '^', '&', '*', '('];
+
+        for (digit, symbol) in ('0'..='9').zip(expected) {
+            assert_eq!(
+                normalize_key(KeyCode::Char(digit), KeyModifiers::SHIFT),
+                KeyCode::Char(symbol)
+            );
+        }
+    }
+
+    #[test]
+    fn already_shifted_and_unmodified_keys_are_preserved() {
+        assert_eq!(
+            normalize_key(KeyCode::Char('!'), KeyModifiers::SHIFT),
+            KeyCode::Char('!')
+        );
+        assert_eq!(
+            normalize_key(KeyCode::Char('1'), KeyModifiers::NONE),
+            KeyCode::Char('1')
+        );
+        assert_eq!(
+            normalize_key(KeyCode::Char('/'), KeyModifiers::SHIFT),
+            KeyCode::Char('?')
+        );
+        assert_eq!(
+            normalize_key(KeyCode::Char('='), KeyModifiers::SHIFT),
+            KeyCode::Char('+')
+        );
+    }
+
+    #[test]
+    fn key_actions_ignore_release_events() {
+        assert!(is_key_action(KeyEventKind::Press));
+        assert!(is_key_action(KeyEventKind::Repeat));
+        assert!(!is_key_action(KeyEventKind::Release));
+    }
+
+    #[test]
+    fn visual_colors_override_inherited_no_color_setting() {
+        force_color_output(false);
+        assert_eq!(SetForegroundColor(Color::Red).to_string(), "\u{1b}[m");
+
+        enable_visual_colors();
+        assert_eq!(SetForegroundColor(Color::Red).to_string(), "\u{1b}[38;5;9m");
+    }
+
+    #[test]
+    fn terminal_cells_replace_control_characters() {
+        let cells = vec![vec![Cell::default(); 3]];
+        let mut terminal = Terminal {
+            width: 3,
+            height: 1,
+            front_buffer: cells.clone(),
+            back_buffer: cells,
+            alternate_screen: false,
+        };
+
+        terminal.set_str(0, 0, "\u{1b}\nA", None, false);
+
+        assert_eq!(terminal.back_buffer[0][0].ch, '�');
+        assert_eq!(terminal.back_buffer[0][1].ch, '�');
+        assert_eq!(terminal.back_buffer[0][2].ch, 'A');
     }
 }
 

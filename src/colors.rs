@@ -1,4 +1,4 @@
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyModifiers};
 use crossterm::style::Color;
 
 /// Shared color scheme state
@@ -15,26 +15,46 @@ impl ColorState {
     }
 
     /// Handle color scheme key input. Returns true if key was handled.
-    pub fn handle_key(&mut self, code: KeyCode) -> bool {
-        match code {
-            KeyCode::Char('!') => self.scheme = 1, // Shift+1: fire
-            KeyCode::Char('@') => self.scheme = 2, // Shift+2: ice
-            KeyCode::Char('#') => self.scheme = 3, // Shift+3: pink
-            KeyCode::Char('$') => self.scheme = 4, // Shift+4: gold
-            KeyCode::Char('%') => self.scheme = 5, // Shift+5: electric
-            KeyCode::Char('^') => self.scheme = 6, // Shift+6: lava
-            KeyCode::Char('&') => self.scheme = 7, // Shift+7: mono
-            KeyCode::Char('*') => self.scheme = 8, // Shift+8: rainbow
-            KeyCode::Char('(') => self.scheme = 9, // Shift+9: neon
-            KeyCode::Char(')') => self.scheme = 0, // Shift+0: green/matrix
+    pub fn handle_key(&mut self, code: KeyCode, modifiers: KeyModifiers) -> bool {
+        let scheme = match code {
+            KeyCode::Char('!') => 1, // Shift+1: fire
+            KeyCode::Char('@') => 2, // Shift+2: ice
+            KeyCode::Char('#') => 3, // Shift+3: pink
+            KeyCode::Char('$') => 4, // Shift+4: gold
+            KeyCode::Char('%') => 5, // Shift+5: electric
+            KeyCode::Char('^') => 6, // Shift+6: lava
+            KeyCode::Char('&') => 7, // Shift+7: mono
+            KeyCode::Char('*') => 8, // Shift+8: rainbow
+            KeyCode::Char('(') => 9, // Shift+9: neon
+            KeyCode::Char(')') => 0, // Shift+0: green/matrix
+            KeyCode::Char(c) if modifiers.contains(KeyModifiers::SHIFT) && c.is_ascii_digit() => {
+                c as u8 - b'0'
+            }
             _ => return false,
-        }
+        };
+        self.scheme = scheme;
         true
     }
 
     /// Check if using mono/semantic color mode
     pub fn is_mono(&self) -> bool {
         self.scheme == 7
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self.scheme {
+            0 => "Matrix",
+            1 => "Fire",
+            2 => "Ice",
+            3 => "Pink",
+            4 => "Gold",
+            5 => "Electric",
+            6 => "Lava",
+            7 => "Mono",
+            8 => "Rainbow",
+            9 => "Neon",
+            _ => "Unknown",
+        }
     }
 }
 
@@ -111,5 +131,45 @@ pub fn scheme_color(scheme: u8, intensity: u8, bold: bool) -> (Color, bool) {
             2 => (Color::Green, true),
             _ => (Color::AnsiValue(10), true), // Bright green
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ColorState;
+    use crossterm::event::{KeyCode, KeyModifiers};
+
+    #[test]
+    fn color_shortcuts_accept_both_shifted_key_representations() {
+        let symbols = [')', '!', '@', '#', '$', '%', '^', '&', '*', '('];
+        let mut colors = ColorState::new(7);
+
+        for (scheme, symbol) in symbols.into_iter().enumerate() {
+            assert!(colors.handle_key(KeyCode::Char(symbol), KeyModifiers::NONE));
+            assert_eq!(colors.scheme, scheme as u8);
+
+            let digit = char::from_digit(scheme as u32, 10).expect("valid test digit");
+            colors.scheme = 7;
+            assert!(colors.handle_key(KeyCode::Char(digit), KeyModifiers::SHIFT));
+            assert_eq!(colors.scheme, scheme as u8);
+        }
+    }
+
+    #[test]
+    fn unmodified_digits_remain_available_for_speed_controls() {
+        let mut colors = ColorState::new(7);
+        assert!(!colors.handle_key(KeyCode::Char('1'), KeyModifiers::NONE));
+        assert_eq!(colors.scheme, 7);
+    }
+
+    #[test]
+    fn schemes_have_stable_display_names() {
+        let expected = [
+            "Matrix", "Fire", "Ice", "Pink", "Gold", "Electric", "Lava", "Mono", "Rainbow", "Neon",
+        ];
+
+        for (scheme, name) in expected.into_iter().enumerate() {
+            assert_eq!(ColorState::new(scheme as u8).name(), name);
+        }
     }
 }

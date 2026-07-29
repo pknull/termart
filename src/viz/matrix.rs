@@ -117,11 +117,6 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
             }
         }
 
-        if state.paused {
-            term.sleep(0.1);
-            continue;
-        }
-
         term.clear();
 
         // Render all drops
@@ -165,22 +160,24 @@ pub fn run(term: &mut Terminal, config: &FractalConfig, rng: &mut StdRng) -> io:
         state.render_help(term, w as u16, h as u16);
         term.present()?;
 
-        // Advance drops based on frame-skip (cmatrix-style async)
-        frame = frame.wrapping_add(1);
-        for drop in &mut drops {
-            // Glitch effect runs every frame regardless of movement
-            drop.maybe_glitch(rng);
+        if !state.paused {
+            // Advance drops based on frame-skip (cmatrix-style async)
+            frame = frame.wrapping_add(1);
+            for drop in &mut drops {
+                // Glitch effect runs every frame regardless of movement
+                drop.maybe_glitch(rng);
 
-            // Column advances only when frame counter is divisible by its update_rate
-            if frame.is_multiple_of(drop.update_rate) {
-                drop.y += 1;
-                if drop.y - drop.length as i32 >= h as i32 {
-                    drop.reset(rng);
+                // Column advances only when frame counter is divisible by its update_rate
+                if frame.is_multiple_of(drop.update_rate) {
+                    drop.y += 1;
+                    if drop.y - drop.length as i32 >= h as i32 {
+                        drop.reset(rng);
+                    }
                 }
             }
         }
 
-        term.sleep(state.speed);
+        term.sleep(if state.paused { 0.1 } else { state.speed });
     }
 
     Ok(())

@@ -39,6 +39,7 @@ pub use crate::colors::scheme_color;
 
 /// Default color scheme for all visualizations (7 = mono/white)
 const DEFAULT_COLOR_SCHEME: u8 = 7;
+const ANIMATION_STEP: f32 = 0.03;
 
 /// Runtime state for interactive controls (shared by all visualizations)
 pub struct VizState {
@@ -80,10 +81,17 @@ impl VizState {
         self.colors.scheme
     }
 
+    /// Fixed simulation step. Runtime speed controls change frame cadence;
+    /// keeping the step fixed makes those controls change animation speed
+    /// instead of cancelling themselves out.
+    pub fn animation_step(&self) -> f32 {
+        ANIMATION_STEP
+    }
+
     /// Handle keypress, returns true if should quit
-    pub fn handle_key(&mut self, code: KeyCode, _modifiers: KeyModifiers) -> bool {
+    pub fn handle_key(&mut self, code: KeyCode, modifiers: KeyModifiers) -> bool {
         // Try color key handling first
-        if self.colors.handle_key(code) {
+        if self.colors.handle_key(code, modifiers) {
             return false;
         }
 
@@ -155,6 +163,24 @@ mod tests {
         assert!((state.speed - 0.005).abs() < f32::EPSILON);
         state.handle_key(KeyCode::Char('0'), KeyModifiers::NONE);
         assert!((state.speed - 0.2).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn shifted_digit_changes_color_without_changing_speed() {
+        let mut state = VizState::new(0.03, HelpSpec::animated("TEST", &[]));
+        state.handle_key(KeyCode::Char('1'), KeyModifiers::SHIFT);
+        assert_eq!(state.color_scheme(), 1);
+        assert!((state.speed - 0.03).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn speed_presets_do_not_change_simulation_step() {
+        let mut state = VizState::new(0.03, HelpSpec::animated("TEST", &[]));
+        let step = state.animation_step();
+        state.handle_key(KeyCode::Char('1'), KeyModifiers::NONE);
+        assert_eq!(state.animation_step(), step);
+        state.handle_key(KeyCode::Char('9'), KeyModifiers::NONE);
+        assert_eq!(state.animation_step(), step);
     }
 
     #[test]

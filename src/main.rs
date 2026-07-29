@@ -31,10 +31,51 @@ use monitor::{MonitorConfig, MonitorType};
 use std::io;
 use std::path::PathBuf;
 
+fn parse_positive_f32(value: &str) -> Result<f32, String> {
+    const MIN_INTERVAL: std::time::Duration = std::time::Duration::from_millis(1);
+    let parsed = value
+        .parse::<f32>()
+        .map_err(|_| format!("'{value}' is not a number"))?;
+    let duration = std::time::Duration::try_from_secs_f32(parsed).ok();
+    if parsed.is_finite() && duration.is_some_and(|duration| duration >= MIN_INTERVAL) {
+        Ok(parsed)
+    } else {
+        Err("value must be a finite, representable number of at least 0.001 seconds".to_string())
+    }
+}
+
+fn parse_positive_f64(value: &str) -> Result<f64, String> {
+    const MIN_INTERVAL: std::time::Duration = std::time::Duration::from_millis(1);
+    let parsed = value
+        .parse::<f64>()
+        .map_err(|_| format!("'{value}' is not a number"))?;
+    let duration = std::time::Duration::try_from_secs_f64(parsed).ok();
+    if parsed.is_finite() && duration.is_some_and(|duration| duration >= MIN_INTERVAL) {
+        Ok(parsed)
+    } else {
+        Err("value must be a finite, representable number of at least 0.001 seconds".to_string())
+    }
+}
+
+fn parse_positive_rate_f32(value: &str) -> Result<f32, String> {
+    const MIN_RATE: f32 = 0.001;
+    const MAX_RATE: f32 = 1000.0;
+    let parsed = value
+        .parse::<f32>()
+        .map_err(|_| format!("'{value}' is not a number"))?;
+    if parsed.is_finite() && (MIN_RATE..=MAX_RATE).contains(&parsed) {
+        Ok(parsed)
+    } else {
+        Err(format!(
+            "value must be a finite number between {MIN_RATE} and {MAX_RATE}"
+        ))
+    }
+}
+
 #[derive(Args, Clone)]
 struct VizOptions {
     /// Animation speed (seconds per frame)
-    #[arg(short, long, default_value = "0.03")]
+    #[arg(short, long, default_value = "0.03", value_parser = parse_positive_f32)]
     time: f32,
 
     /// Random seed for reproducibility
@@ -49,7 +90,7 @@ struct VizOptions {
 #[derive(Args, Clone)]
 struct MonitorOptions {
     /// Update interval (seconds)
-    #[arg(short, long, default_value = "1.0")]
+    #[arg(short, long, default_value = "1.0", value_parser = parse_positive_f32)]
     time: f32,
 
     /// Show debug info
@@ -60,7 +101,7 @@ struct MonitorOptions {
 #[derive(Args, Clone)]
 struct TuiOptions {
     /// UI refresh interval (seconds)
-    #[arg(short, long, default_value = "0.1")]
+    #[arg(short, long, default_value = "0.1", value_parser = parse_positive_f32)]
     time: f32,
 
     /// Show debug info
@@ -95,11 +136,11 @@ enum Commands {
         print: bool,
 
         /// Animation step delay in seconds
-        #[arg(short, long, default_value = "0.03")]
+        #[arg(short, long, default_value = "0.03", value_parser = parse_positive_f32)]
         time: f32,
 
         /// Wait time between trees in infinite mode (seconds)
-        #[arg(short, long, default_value = "4.0")]
+        #[arg(short, long, default_value = "4.0", value_parser = parse_positive_f64)]
         wait: f64,
 
         /// Initial branch life (0-200, higher = bigger tree)
@@ -220,7 +261,7 @@ enum Commands {
     /// Dygma Raise split keyboard visualization
     Dygma {
         /// Animation speed (seconds per frame)
-        #[arg(short, long, default_value = "0.03")]
+        #[arg(short, long, default_value = "0.03", value_parser = parse_positive_f32)]
         time: f32,
 
         /// Serial port path (auto-detect if not specified)
@@ -259,7 +300,7 @@ enum Commands {
     /// Clock display with nixie tube effects - alternates between time and date
     Clock {
         /// Animation speed (seconds per frame)
-        #[arg(short, long, default_value = "0.1")]
+        #[arg(short, long, default_value = "0.1", value_parser = parse_positive_f32)]
         time: f32,
 
         /// Hide seconds (show only HH:MM)
@@ -270,7 +311,7 @@ enum Commands {
     /// Sunlight cycle visualization with screen temperature control
     Sunlight {
         /// Animation speed (seconds per frame)
-        #[arg(short, long, default_value = "0.1")]
+        #[arg(short, long, default_value = "0.1", value_parser = parse_positive_f32)]
         time: f32,
 
         /// Latitude in degrees (-90 to 90)
@@ -290,7 +331,7 @@ enum Commands {
         demo: bool,
 
         /// Demo speed: hours per second (default 2.0 = full day in 12s)
-        #[arg(long, default_value = "2.0")]
+        #[arg(long, default_value = "2.0", value_parser = parse_positive_rate_f32)]
         demo_speed: f32,
 
         /// Night color temperature in Kelvin (1900-6500, default 3400 like f.lux)
@@ -309,7 +350,7 @@ enum Commands {
     /// Pong - two player game
     Pong {
         /// Game speed (seconds per frame)
-        #[arg(short, long, default_value = "0.016")]
+        #[arg(short, long, default_value = "0.016", value_parser = parse_positive_f32)]
         time: f32,
     },
 
@@ -352,7 +393,7 @@ enum Commands {
     /// Process list (top processes by CPU/memory)
     Ps {
         /// Update interval (seconds)
-        #[arg(short, long, default_value = "2.0")]
+        #[arg(short, long, default_value = "2.0", value_parser = parse_positive_f32)]
         time: f32,
 
         /// Max processes to show
@@ -367,7 +408,7 @@ enum Commands {
     /// Docker container stats
     Docker {
         /// Update interval (seconds)
-        #[arg(short, long, default_value = "2.0")]
+        #[arg(short, long, default_value = "2.0", value_parser = parse_positive_f32)]
         time: f32,
     },
 
@@ -378,7 +419,7 @@ enum Commands {
         location: Option<String>,
 
         /// Animation speed (seconds per frame)
-        #[arg(short, long, default_value = "0.1")]
+        #[arg(short, long, default_value = "0.1", value_parser = parse_positive_f32)]
         time: f32,
 
         /// Demo mode: cycle through all weather conditions
@@ -386,26 +427,46 @@ enum Commands {
         demo: bool,
 
         /// Demo speed: seconds per condition (default 3.0)
-        #[arg(long, default_value = "3.0")]
+        #[arg(long, default_value = "3.0", value_parser = parse_positive_f32)]
         demo_speed: f32,
     },
 
     /// Pomodoro timer with ASCII tomato
     Pomodoro {
         /// Work duration in minutes
-        #[arg(short, long, default_value = "25")]
+        #[arg(
+            short,
+            long,
+            default_value = "25",
+            value_parser = clap::value_parser!(u32).range(1..=u32::MAX as i64 / 60)
+        )]
         work: u32,
 
         /// Short break duration in minutes
-        #[arg(short, long, default_value = "5")]
+        #[arg(
+            short,
+            long,
+            default_value = "5",
+            value_parser = clap::value_parser!(u32).range(1..=u32::MAX as i64 / 60)
+        )]
         short_break: u32,
 
         /// Long break duration in minutes
-        #[arg(short, long, default_value = "15")]
+        #[arg(
+            short,
+            long,
+            default_value = "15",
+            value_parser = clap::value_parser!(u32).range(1..=u32::MAX as i64 / 60)
+        )]
         long_break: u32,
 
         /// Pomodoros before long break
-        #[arg(short, long, default_value = "4")]
+        #[arg(
+            short,
+            long,
+            default_value = "4",
+            value_parser = clap::value_parser!(u32).range(1..=100)
+        )]
         count: u32,
     },
 
@@ -416,7 +477,7 @@ enum Commands {
         user: Option<String>,
 
         /// Animation speed (seconds per frame)
-        #[arg(short, long, default_value = "0.1")]
+        #[arg(short, long, default_value = "0.1", value_parser = parse_positive_f32)]
         time: f32,
     },
 
@@ -435,7 +496,7 @@ enum Commands {
     /// Claude AI usage monitor (TokenEater-style)
     ClaudeTokens {
         /// UI refresh interval (seconds)
-        #[arg(short, long, default_value = "0.1")]
+        #[arg(short, long, default_value = "0.1", value_parser = parse_positive_f32)]
         time: f32,
 
         /// API refresh interval (seconds)
@@ -450,7 +511,7 @@ enum Commands {
     /// OpenAI Codex usage monitor
     CodexTokens {
         /// UI refresh interval (seconds)
-        #[arg(short, long, default_value = "0.1")]
+        #[arg(short, long, default_value = "0.1", value_parser = parse_positive_f32)]
         time: f32,
 
         /// API refresh interval (seconds)
