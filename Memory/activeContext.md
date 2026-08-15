@@ -9,11 +9,13 @@
 - Quotas without pacing data use fixed fallback bands: green below 50%, yellow from 50% through 80%, and red above 80%.
 - The release binary is installed at the active asdf Rust path and matches `target/release/termart`. The Claude and Codex token widgets were restarted in tmux panes `0:0.14` and `0:0.15` and rendered successfully.
 - Verification is green: standard Rust verification passed format, tests, check, and clippy; `cargo test --all-targets` passed 61 unit and 5 integration tests.
+- The repository now has a valid Memory v2 publication with stable project id `d911d695-6af2-4096-a31b-8c16cb6b1cc9`. The prior `activeContext.md` was backed up through the reviewed migration; all other legacy project material and global learnings were deferred unchanged.
 
 # Next
 
 - Review the live color transitions as usage approaches and crosses the grey pacing boundary.
 - Commit the source and README changes separately when approved; they remain intentionally uncommitted.
+- Decide whether to commit the migration-managed `.gitignore` entries; they remain unstaged with the other working-tree changes.
 
 # Blockers
 
