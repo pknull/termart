@@ -1,8 +1,8 @@
 use crate::colors::ColorState;
 use crate::help::HelpSpec;
 use crate::monitor::layout::{
-    cpu_gradient_color_scheme, draw_meter_btop_scheme, format_bytes, muted_color_scheme,
-    text_color_scheme, Rect,
+    cpu_gradient_color_scheme, draw_meter_btop_scheme, draw_meter_headroom_scheme, format_bytes,
+    headroom_gradient_color_scheme, muted_color_scheme, text_color_scheme, Rect,
 };
 use crate::monitor::{MonitorAction, MonitorConfig, MonitorState};
 use crate::terminal::Terminal;
@@ -53,6 +53,17 @@ impl MemInfo {
             0.0
         }
     }
+}
+
+/// How a memory row reads its own value.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MeterStyle {
+    /// Consumption: more is worse, colored by the usage gradient.
+    Usage,
+    /// Informational (cached, buffers): neither good nor bad.
+    Neutral,
+    /// Headroom: more is better, so the usage gradient is inverted.
+    Headroom,
 }
 
 pub struct MemMonitor {
@@ -169,7 +180,7 @@ impl MemMonitor {
             self.info.mem_used(),
             used_pct,
             colors,
-            true,
+            MeterStyle::Usage,
         );
         cy += 1;
 
@@ -184,7 +195,7 @@ impl MemMonitor {
             self.info.cached,
             cached_pct,
             colors,
-            false,
+            MeterStyle::Neutral,
         );
         cy += 1;
 
@@ -203,7 +214,7 @@ impl MemMonitor {
             self.info.buffers,
             buffers_pct,
             colors,
-            false,
+            MeterStyle::Neutral,
         );
         cy += 1;
 
@@ -223,7 +234,7 @@ impl MemMonitor {
             self.info.mem_available,
             available_pct,
             colors,
-            false,
+            MeterStyle::Headroom,
         );
         cy += 1;
 
@@ -252,7 +263,7 @@ impl MemMonitor {
                 self.info.swap_used(),
                 swap_pct,
                 colors,
-                true,
+                MeterStyle::Usage,
             );
         }
     }
@@ -268,7 +279,7 @@ impl MemMonitor {
         bytes: u64,
         percent: f32,
         colors: &ColorState,
-        use_gradient: bool,
+        style: MeterStyle,
     ) {
         // Layout: Label(10) + Meter(dynamic) + Pct(6) + Size(9)
         // Meter fills space between label and pct+size
@@ -285,17 +296,22 @@ impl MemMonitor {
         pos += label_w as i32;
 
         // Get color based on scheme
-        let color = if use_gradient {
-            cpu_gradient_color_scheme(percent, colors)
-        } else if colors.is_mono() {
-            Color::AnsiValue(12) // Blue for non-gradient items in mono
-        } else {
-            cpu_gradient_color_scheme(50.0, colors) // Mid-intensity for non-gradient
+        let color = match style {
+            MeterStyle::Usage => cpu_gradient_color_scheme(percent, colors),
+            MeterStyle::Headroom => headroom_gradient_color_scheme(percent, colors),
+            MeterStyle::Neutral if colors.is_mono() => {
+                Color::AnsiValue(12) // Blue for non-gradient items in mono
+            }
+            MeterStyle::Neutral => cpu_gradient_color_scheme(50.0, colors), // Mid-intensity
         };
 
         // Meter (dynamic width)
         if meter_w > 0 {
-            draw_meter_btop_scheme(term, pos, y, meter_w, percent, colors);
+            if style == MeterStyle::Headroom {
+                draw_meter_headroom_scheme(term, pos, y, meter_w, percent, colors);
+            } else {
+                draw_meter_btop_scheme(term, pos, y, meter_w, percent, colors);
+            }
             pos += meter_w as i32;
         }
 

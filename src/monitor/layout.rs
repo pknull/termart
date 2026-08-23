@@ -59,6 +59,32 @@ pub fn draw_meter_btop_scheme(
     }
 }
 
+/// Draw a meter whose fill reads as headroom rather than load: a full bar is
+/// healthy (green), an empty one is critical (red). The fill is a single color
+/// so the row reports a state instead of a left-to-right severity ramp.
+pub fn draw_meter_headroom_scheme(
+    term: &mut Terminal,
+    x: i32,
+    y: i32,
+    width: usize,
+    percent: f32,
+    colors: &ColorState,
+) {
+    if width == 0 {
+        return;
+    }
+
+    const METER_CHAR: char = '■';
+    let filled = ((percent / 100.0) * width as f32) as usize;
+    let fill_color = headroom_gradient_color_scheme(percent, colors);
+    let empty_color = muted_color_scheme(colors);
+
+    for i in 0..width {
+        let color = if i < filled { fill_color } else { empty_color };
+        term.set(x + i as i32, y, METER_CHAR, Some(color), false);
+    }
+}
+
 /// Draw per-core meters with temps and color scheme support
 #[allow(clippy::too_many_arguments)]
 pub fn draw_core_graphs_scheme(
@@ -259,6 +285,12 @@ pub fn cpu_gradient_color_scheme(percent: f32, colors: &ColorState) -> Color {
     }
 }
 
+/// Get gradient color for a headroom value, where a high percentage is healthy.
+/// Inverts the usage gradient: >=50% available is green, <20% is red.
+pub fn headroom_gradient_color_scheme(percent: f32, colors: &ColorState) -> Color {
+    cpu_gradient_color_scheme(100.0 - percent.clamp(0.0, 100.0), colors)
+}
+
 /// Get temperature gradient color with scheme support
 pub fn temp_gradient_color_scheme(percent: f32, colors: &ColorState) -> Color {
     if colors.is_mono() {
@@ -304,7 +336,9 @@ pub fn header_color_scheme(colors: &ColorState) -> Color {
 
 #[cfg(test)]
 mod tests {
-    use super::{activity_percent, update_activity_scale};
+    use super::{activity_percent, headroom_gradient_color_scheme, update_activity_scale};
+    use crate::colors::ColorState;
+    use crossterm::style::Color;
 
     #[test]
     fn activity_scale_keeps_low_rates_visible() {
@@ -319,5 +353,22 @@ mod tests {
         let decayed = update_activity_scale(8.0 * mib, 0.0, 30.0, mib);
         assert!((decayed - 4.0 * mib).abs() < 1.0);
         assert_eq!(update_activity_scale(mib, 0.0, 300.0, mib), mib);
+    }
+
+    #[test]
+    fn headroom_gradient_is_green_when_free_and_red_when_scarce() {
+        let mono = ColorState::new(7);
+        assert_eq!(
+            headroom_gradient_color_scheme(70.0, &mono),
+            Color::AnsiValue(10)
+        );
+        assert_eq!(
+            headroom_gradient_color_scheme(35.0, &mono),
+            Color::AnsiValue(11)
+        );
+        assert_eq!(
+            headroom_gradient_color_scheme(5.0, &mono),
+            Color::AnsiValue(9)
+        );
     }
 }
