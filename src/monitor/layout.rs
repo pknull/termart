@@ -1,6 +1,7 @@
 use crate::colors::{scheme_color, ColorState};
 use crate::terminal::Terminal;
 use crossterm::style::Color;
+use std::collections::VecDeque;
 
 /// A bounding box for layout calculations
 pub struct Rect {
@@ -82,6 +83,141 @@ pub fn draw_meter_headroom_scheme(
     for i in 0..width {
         let color = if i < filled { fill_color } else { empty_color };
         term.set(x + i as i32, y, METER_CHAR, Some(color), false);
+    }
+}
+
+/// Vertical block glyphs from lowest to highest fill. Eight levels give a
+/// single-row graph enough resolution to read as a trend rather than a step.
+const SPARK_GLYPHS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+
+/// Columns an inline history graph occupies inside a metric row.
+const HISTORY_GRAPH_WIDTH: usize = 16;
+
+/// Blank column separating a graph from the meter to its left.
+const HISTORY_GRAPH_GAP: usize = 1;
+
+/// Meter columns a row keeps before it may spend any width on a graph.
+const MIN_GRAPHED_METER_WIDTH: usize = 8;
+
+/// Samples retained per graphed metric. Only the newest `HISTORY_GRAPH_WIDTH`
+/// of them reach the screen; the slack bounds memory whilst leaving room for a
+/// wider graph without revisiting the sampling path.
+pub const HISTORY_CAPACITY: usize = 32;
+
+/// A fixed-capacity ring of recent samples.
+///
+/// The capacity is fixed at construction and pushing past it evicts the oldest
+/// sample, so a panel that has run for days holds no more history than one that
+/// has just started.
+pub struct SampleHistory {
+    samples: VecDeque<f32>,
+    capacity: usize,
+}
+
+impl SampleHistory {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            samples: VecDeque::with_capacity(capacity),
+            capacity,
+        }
+    }
+
+    /// Record the newest sample, evicting the oldest ones once full. A capacity
+    /// of zero retains nothing.
+    pub fn push(&mut self, value: f32) {
+        if self.capacity == 0 {
+            return;
+        }
+
+        while self.samples.len() >= self.capacity {
+            self.samples.pop_front();
+        }
+        self.samples.push_back(value);
+    }
+
+    pub fn len(&self) -> usize {
+        self.samples.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.samples.is_empty()
+    }
+
+    /// Samples in the order they were recorded, oldest first.
+    pub fn iter(&self) -> impl Iterator<Item = f32> + '_ {
+        self.samples.iter().copied()
+    }
+}
+
+/// Map a history onto `width` columns with the newest sample in the rightmost
+/// one. A buffer holding fewer samples than there are columns renders flush
+/// right and leaves the left remainder empty; a fuller one drops its oldest
+/// samples off the left edge.
+fn history_columns(history: &SampleHistory, width: usize) -> Vec<Option<f32>> {
+    let shown = history.len().min(width);
+    let mut columns = vec![None; width - shown];
+    columns.extend(history.iter().skip(history.len() - shown).map(Some));
+    columns
+}
+
+/// Pick the block glyph reporting a percentage on a single row.
+fn spark_glyph(percent: f32) -> char {
+    let level = (percent.clamp(0.0, 100.0) / 100.0 * SPARK_GLYPHS.len() as f32) as usize;
+    SPARK_GLYPHS[level.min(SPARK_GLYPHS.len() - 1)]
+}
+
+/// Somewhere colored glyphs land one cell at a time. `Terminal` is the live
+/// surface; tests substitute a recorder so what a renderer actually drew can
+/// be asserted without a tty.
+pub trait GlyphSink {
+    fn put(&mut self, x: i32, y: i32, glyph: char, color: Color);
+}
+
+impl GlyphSink for Terminal {
+    fn put(&mut self, x: i32, y: i32, glyph: char, color: Color) {
+        self.set(x, y, glyph, Some(color), false);
+    }
+}
+
+/// Draw a right-anchored single-row history graph: the newest sample occupies
+/// the rightmost column and older samples extend leftward.
+///
+/// `tint` maps a sample to its color so callers reuse an existing gradient
+/// instead of restating its thresholds. A zero width or an empty history draws
+/// nothing, leaving the row reading exactly as it did before the first sample.
+pub fn draw_history_graph_scheme(
+    sink: &mut impl GlyphSink,
+    x: i32,
+    y: i32,
+    width: usize,
+    history: &SampleHistory,
+    tint: fn(f32, &ColorState) -> Color,
+    colors: &ColorState,
+) {
+    if width == 0 || history.is_empty() {
+        return;
+    }
+
+    let empty_color = muted_color_scheme(colors);
+    for (i, sample) in history_columns(history, width).into_iter().enumerate() {
+        let (glyph, color) = match sample {
+            Some(percent) => (spark_glyph(percent), tint(percent, colors)),
+            None => (SPARK_GLYPHS[0], empty_color),
+        };
+        sink.put(x + i as i32, y, glyph, color);
+    }
+}
+
+/// Split a metric row's elastic span into meter columns and graph columns.
+///
+/// The graph is dropped whole rather than squeezed in beside a stub of a meter,
+/// so a row too narrow to afford one renders exactly as it did before graphs
+/// existed. A zero graph width means no graph.
+pub fn split_row_for_graph(elastic: usize) -> (usize, usize) {
+    let cost = HISTORY_GRAPH_GAP + HISTORY_GRAPH_WIDTH;
+    match elastic.checked_sub(cost) {
+        Some(meter) if meter >= MIN_GRAPHED_METER_WIDTH => (meter, HISTORY_GRAPH_WIDTH),
+        _ => (elastic, 0),
     }
 }
 
@@ -336,9 +472,23 @@ pub fn header_color_scheme(colors: &ColorState) -> Color {
 
 #[cfg(test)]
 mod tests {
-    use super::{activity_percent, headroom_gradient_color_scheme, update_activity_scale};
+    use super::{
+        activity_percent, draw_history_graph_scheme, headroom_gradient_color_scheme,
+        history_columns, muted_color_scheme, spark_glyph, split_row_for_graph,
+        update_activity_scale, GlyphSink, SampleHistory, HISTORY_GRAPH_GAP, HISTORY_GRAPH_WIDTH,
+        MIN_GRAPHED_METER_WIDTH,
+    };
     use crate::colors::ColorState;
     use crossterm::style::Color;
+
+    /// Records every cell a renderer draws, standing in for `Terminal`.
+    struct RecordingSink(Vec<(i32, i32, char, Color)>);
+
+    impl GlyphSink for RecordingSink {
+        fn put(&mut self, x: i32, y: i32, glyph: char, color: Color) {
+            self.0.push((x, y, glyph, color));
+        }
+    }
 
     #[test]
     fn activity_scale_keeps_low_rates_visible() {
@@ -369,6 +519,185 @@ mod tests {
         assert_eq!(
             headroom_gradient_color_scheme(5.0, &mono),
             Color::AnsiValue(9)
+        );
+    }
+
+    #[test]
+    fn history_graph_puts_the_newest_sample_in_the_rightmost_column() {
+        let mut history = SampleHistory::new(8);
+        for value in [10.0, 20.0, 30.0, 40.0] {
+            history.push(value);
+        }
+
+        // Wider than the sample count, so a left-anchored graph would differ:
+        // it would pad on the right instead of the left.
+        let columns = history_columns(&history, 6);
+        assert_eq!(
+            columns,
+            vec![None, None, Some(10.0), Some(20.0), Some(30.0), Some(40.0)]
+        );
+        assert_eq!(columns.last().copied().flatten(), Some(40.0));
+    }
+
+    #[test]
+    fn draw_history_graph_writes_right_anchored_cells_through_the_sink() {
+        let mono = ColorState::new(7);
+        let mut history = SampleHistory::new(8);
+        for value in [10.0, 55.0, 95.0] {
+            history.push(value);
+        }
+
+        let mut sink = RecordingSink(Vec::new());
+        draw_history_graph_scheme(
+            &mut sink,
+            4,
+            2,
+            6,
+            &history,
+            headroom_gradient_color_scheme,
+            &mono,
+        );
+
+        // Three muted filler cells on the left, then the samples, oldest to
+        // newest, each tinted by headroom and ending flush right at x=9.
+        let muted = muted_color_scheme(&mono);
+        assert_eq!(
+            sink.0,
+            vec![
+                (4, 2, '\u{2581}', muted),
+                (5, 2, '\u{2581}', muted),
+                (6, 2, '\u{2581}', muted),
+                (7, 2, '\u{2581}', Color::AnsiValue(9)),
+                (8, 2, '\u{2585}', Color::AnsiValue(10)),
+                (9, 2, '\u{2588}', Color::AnsiValue(10)),
+            ]
+        );
+    }
+
+    #[test]
+    fn draw_history_graph_draws_nothing_for_zero_width_or_empty_history() {
+        let mono = ColorState::new(7);
+        let mut history = SampleHistory::new(4);
+        history.push(50.0);
+
+        let mut sink = RecordingSink(Vec::new());
+        draw_history_graph_scheme(
+            &mut sink,
+            0,
+            0,
+            0,
+            &history,
+            headroom_gradient_color_scheme,
+            &mono,
+        );
+        draw_history_graph_scheme(
+            &mut sink,
+            0,
+            0,
+            6,
+            &SampleHistory::new(4),
+            headroom_gradient_color_scheme,
+            &mono,
+        );
+
+        assert!(sink.0.is_empty());
+    }
+
+    #[test]
+    fn history_graph_renders_a_partial_buffer_flush_right() {
+        let mut history = SampleHistory::new(8);
+        history.push(25.0);
+        history.push(75.0);
+
+        assert_eq!(
+            history_columns(&history, 5),
+            vec![None, None, None, Some(25.0), Some(75.0)]
+        );
+    }
+
+    #[test]
+    fn history_graph_drops_the_oldest_samples_off_the_left_edge() {
+        let mut history = SampleHistory::new(8);
+        for value in [1.0, 2.0, 3.0, 4.0] {
+            history.push(value);
+        }
+
+        assert_eq!(history_columns(&history, 2), vec![Some(3.0), Some(4.0)]);
+        assert!(history_columns(&history, 0).is_empty());
+    }
+
+    #[test]
+    fn sample_history_evicts_the_oldest_at_capacity() {
+        let mut history = SampleHistory::new(3);
+        for value in [1.0, 2.0, 3.0, 4.0, 5.0] {
+            history.push(value);
+        }
+        assert_eq!(history.len(), 3);
+        assert_eq!(history.iter().collect::<Vec<_>>(), vec![3.0, 4.0, 5.0]);
+
+        let mut single = SampleHistory::new(1);
+        single.push(1.0);
+        single.push(2.0);
+        assert_eq!(single.iter().collect::<Vec<_>>(), vec![2.0]);
+
+        let mut nothing = SampleHistory::new(0);
+        nothing.push(1.0);
+        assert!(nothing.is_empty());
+    }
+
+    #[test]
+    fn spark_glyphs_span_the_percentage_range_without_panicking() {
+        assert_eq!(spark_glyph(0.0), '\u{2581}');
+        assert_eq!(spark_glyph(50.0), '\u{2585}');
+        assert_eq!(spark_glyph(100.0), '\u{2588}');
+        assert_eq!(spark_glyph(150.0), '\u{2588}');
+        assert_eq!(spark_glyph(-10.0), '\u{2581}');
+        assert_eq!(spark_glyph(f32::NAN), '\u{2581}');
+    }
+
+    #[test]
+    fn narrow_rows_drop_the_graph_instead_of_the_meter() {
+        let cost = HISTORY_GRAPH_GAP + HISTORY_GRAPH_WIDTH;
+        let widest_without_graph = cost + MIN_GRAPHED_METER_WIDTH - 1;
+
+        assert_eq!(split_row_for_graph(0), (0, 0));
+        assert_eq!(
+            split_row_for_graph(widest_without_graph),
+            (widest_without_graph, 0)
+        );
+        assert_eq!(
+            split_row_for_graph(widest_without_graph + 1),
+            (MIN_GRAPHED_METER_WIDTH, HISTORY_GRAPH_WIDTH)
+        );
+    }
+
+    #[test]
+    fn headroom_gradient_bands_switch_at_their_boundaries() {
+        let mono = ColorState::new(7);
+
+        assert_eq!(
+            headroom_gradient_color_scheme(0.0, &mono),
+            Color::AnsiValue(9)
+        );
+        assert_eq!(
+            headroom_gradient_color_scheme(20.0, &mono),
+            Color::AnsiValue(9)
+        );
+        assert_eq!(
+            headroom_gradient_color_scheme(20.1, &mono),
+            Color::AnsiValue(11)
+        );
+        assert_eq!(
+            headroom_gradient_color_scheme(50.0, &mono),
+            Color::AnsiValue(11)
+        );
+        assert_eq!(
+            headroom_gradient_color_scheme(50.1, &mono),
+            Color::AnsiValue(10)
+        );
+        assert_eq!(
+            headroom_gradient_color_scheme(100.0, &mono),
+            Color::AnsiValue(10)
         );
     }
 }

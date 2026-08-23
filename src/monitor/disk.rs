@@ -1,13 +1,15 @@
 use crate::colors::ColorState;
 use crate::help::HelpSpec;
 use crate::monitor::layout::{
-    cpu_gradient_color_scheme, draw_meter_btop_scheme, format_bytes, header_color_scheme,
-    muted_color_scheme, text_color_scheme, Rect,
+    cpu_gradient_color_scheme, draw_history_graph_scheme, draw_meter_btop_scheme, format_bytes,
+    header_color_scheme, headroom_gradient_color_scheme, muted_color_scheme, split_row_for_graph,
+    text_color_scheme, Rect, SampleHistory, HISTORY_CAPACITY,
 };
 use crate::monitor::{MonitorAction, MonitorConfig, MonitorState};
 use crate::terminal::Terminal;
 use crossterm::style::Color;
 use crossterm::terminal::size;
+use std::collections::HashMap;
 use std::fs;
 use std::io;
 
@@ -36,6 +38,7 @@ fn decode_mount_field(field: &str) -> String {
 }
 
 pub struct DiskInfo {
+    pub device: String,
     pub mount_point: String,
     pub total: u64,
     pub used: u64,
@@ -51,15 +54,42 @@ impl DiskInfo {
             0.0
         }
     }
+
+    /// Share of usable capacity still available to the user. The history graph
+    /// reads this as headroom, so a falling graph is a filling disk.
+    fn available_percent(&self) -> f32 {
+        100.0 - self.percent()
+    }
+}
+
+/// A mount point's availability history plus the device it was recorded from,
+/// so a different filesystem mounted at the same path starts a fresh graph
+/// instead of inheriting samples that described the old one.
+struct MountHistory {
+    device: String,
+    samples: SampleHistory,
+}
+
+impl MountHistory {
+    fn new(device: &str) -> Self {
+        Self {
+            device: device.to_string(),
+            samples: SampleHistory::new(HISTORY_CAPACITY),
+        }
+    }
 }
 
 pub struct DiskMonitor {
     pub disks: Vec<DiskInfo>,
+    histories: HashMap<String, MountHistory>,
 }
 
 impl DiskMonitor {
     pub fn new() -> Self {
-        Self { disks: Vec::new() }
+        Self {
+            disks: Vec::new(),
+            histories: HashMap::new(),
+        }
     }
 
     pub fn update(&mut self) -> io::Result<()> {
@@ -91,6 +121,7 @@ impl DiskMonitor {
 
                 if total > 0 {
                     self.disks.push(DiskInfo {
+                        device: device.to_string(),
                         mount_point,
                         total,
                         used,
@@ -101,7 +132,39 @@ impl DiskMonitor {
         }
 
         self.disks.sort_by(|a, b| a.mount_point.cmp(&b.mount_point));
+        self.record_history();
         Ok(())
+    }
+
+    /// Record each mount point's current headroom exactly once per refresh,
+    /// first forgetting mounts that have gone away so the map cannot grow
+    /// without bound across remounts.
+    ///
+    /// When /proc/mounts lists a mount point more than once (an overmount or a
+    /// bind remount) the last row wins, matching the filesystem statvfs sees;
+    /// pushing every row would scroll that graph at double speed. A history
+    /// whose device changes is restarted rather than continued: its samples
+    /// described a filesystem that is no longer there.
+    fn record_history(&mut self) {
+        let disks = &self.disks;
+        self.histories
+            .retain(|mount, _| disks.iter().any(|disk| &disk.mount_point == mount));
+
+        let mut visible: HashMap<&str, &DiskInfo> = HashMap::new();
+        for disk in &self.disks {
+            visible.insert(disk.mount_point.as_str(), disk);
+        }
+
+        for disk in visible.into_values() {
+            let entry = self
+                .histories
+                .entry(disk.mount_point.clone())
+                .or_insert_with(|| MountHistory::new(&disk.device));
+            if entry.device != disk.device {
+                *entry = MountHistory::new(&disk.device);
+            }
+            entry.samples.push(disk.available_percent());
+        }
     }
 
     fn statvfs(path: &str) -> io::Result<StatVfs> {
@@ -221,7 +284,7 @@ impl DiskMonitor {
         let mount_w = 12;
         let pct_w = 6;
         let size_w = 18;
-        let meter_w = width.saturating_sub(mount_w + pct_w + size_w);
+        let elastic = width.saturating_sub(mount_w + pct_w + size_w);
 
         let mut pos = x;
 
@@ -252,11 +315,9 @@ impl DiskMonitor {
 
         let color = cpu_gradient_color_scheme(percent, colors);
 
-        // Meter
-        if meter_w > 0 {
-            draw_meter_btop_scheme(term, pos, y, meter_w, percent, colors);
-            pos += meter_w as i32;
-        }
+        // Meter, plus a history graph when the row can afford one.
+        self.draw_disk_span(term, pos, y, elastic, percent, mount, colors);
+        pos += elastic as i32;
 
         // Percentage
         let pct_str = format!("{:4.0}% ", percent);
@@ -272,6 +333,43 @@ impl DiskMonitor {
             Some(muted_color_scheme(colors)),
             false,
         );
+    }
+
+    /// Draw the elastic part of a row: the usage meter, and a right-anchored
+    /// graph of the mount's availability history when the row is wide enough to
+    /// add one without shrinking the meter past its floor.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_disk_span(
+        &self,
+        term: &mut Terminal,
+        x: i32,
+        y: i32,
+        elastic: usize,
+        percent: f32,
+        mount: &str,
+        colors: &ColorState,
+    ) {
+        let history = self.histories.get(mount).map(|entry| &entry.samples);
+        let (meter_w, graph_w) = match history {
+            Some(_) => split_row_for_graph(elastic),
+            None => (elastic, 0),
+        };
+
+        if meter_w > 0 {
+            draw_meter_btop_scheme(term, x, y, meter_w, percent, colors);
+        }
+
+        if let Some(history) = history {
+            draw_history_graph_scheme(
+                term,
+                x + (elastic - graph_w) as i32,
+                y,
+                graph_w,
+                history,
+                headroom_gradient_color_scheme,
+                colors,
+            );
+        }
     }
 }
 
@@ -324,7 +422,7 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_mount_field, DiskInfo};
+    use super::{decode_mount_field, DiskInfo, DiskMonitor};
 
     #[test]
     fn mount_fields_decode_proc_octal_escapes() {
@@ -340,9 +438,20 @@ mod tests {
         assert_eq!(decode_mount_field(r"/incomplete\04"), r"/incomplete\04");
     }
 
+    fn disk(device: &str, mount_point: &str, used: u64, available: u64) -> DiskInfo {
+        DiskInfo {
+            device: device.to_string(),
+            mount_point: mount_point.to_string(),
+            total: used + available,
+            used,
+            available,
+        }
+    }
+
     #[test]
     fn capacity_percentage_uses_user_available_space() {
         let disk = DiskInfo {
+            device: "/dev/sda1".to_string(),
             mount_point: "/".to_string(),
             total: 1000,
             used: 800,
@@ -350,5 +459,62 @@ mod tests {
         };
 
         assert!((disk.percent() - 88.888_89).abs() < 0.001);
+        assert!((disk.available_percent() - 11.111_11).abs() < 0.001);
+    }
+
+    #[test]
+    fn history_records_headroom_and_forgets_removed_mounts() {
+        let mut monitor = DiskMonitor::new();
+        monitor.disks = vec![
+            disk("/dev/sda1", "/", 750, 250),
+            disk("/dev/sdb1", "/data", 100, 900),
+        ];
+
+        monitor.record_history();
+        monitor.record_history();
+
+        assert_eq!(monitor.histories.len(), 2);
+        let root = &monitor.histories["/"].samples;
+        assert_eq!(root.len(), 2);
+        assert!((root.iter().last().unwrap() - 25.0).abs() < 0.001);
+
+        monitor.disks.remove(1);
+        monitor.record_history();
+
+        assert_eq!(monitor.histories.len(), 1);
+        assert!(monitor.histories.contains_key("/"));
+    }
+
+    #[test]
+    fn duplicate_mount_rows_push_one_sample_from_the_last_row() {
+        let mut monitor = DiskMonitor::new();
+        monitor.disks = vec![
+            disk("/dev/sda1", "/mnt", 900, 100),
+            disk("/dev/sdb1", "/mnt", 250, 750),
+        ];
+
+        monitor.record_history();
+
+        let history = &monitor.histories["/mnt"];
+        assert_eq!(history.samples.len(), 1);
+        assert_eq!(history.device, "/dev/sdb1");
+        assert!((history.samples.iter().last().unwrap() - 75.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn swapping_the_device_at_a_mount_point_restarts_its_history() {
+        let mut monitor = DiskMonitor::new();
+        monitor.disks = vec![disk("/dev/sda1", "/mnt", 900, 100)];
+        monitor.record_history();
+        monitor.record_history();
+        assert_eq!(monitor.histories["/mnt"].samples.len(), 2);
+
+        monitor.disks = vec![disk("/dev/sdb1", "/mnt", 500, 500)];
+        monitor.record_history();
+
+        let history = &monitor.histories["/mnt"];
+        assert_eq!(history.device, "/dev/sdb1");
+        assert_eq!(history.samples.len(), 1);
+        assert!((history.samples.iter().last().unwrap() - 50.0).abs() < 0.001);
     }
 }
