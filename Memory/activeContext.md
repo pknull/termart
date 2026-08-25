@@ -1,21 +1,37 @@
 # Objective
 
-- Make the Claude and Codex quota graphs communicate pacing clearly while retaining every quota returned by each provider.
+Make the quota graphs and the system monitor communicate pacing and headroom
+at a glance, retaining every quota each provider returns.
 
 # State
 
-- `src/viz/tokeneater.rs` and `README.md` contain uncommitted dynamic Anthropic quota support. API-named scoped limits such as Fable render alongside legacy buckets, and null legacy model buckets are omitted.
-- `src/viz/usage.rs` contains uncommitted shared color-band logic for both token widgets. Usage stays green while more than 15 percentage points below the grey pacing boundary, turns yellow within that margin through the boundary, and turns red only after crossing it.
-- Quotas without pacing data use fixed fallback bands: green below 50%, yellow from 50% through 80%, and red above 80%.
-- The release binary is installed at the active asdf Rust path and matches `target/release/termart`. The Claude and Codex token widgets were restarted in tmux panes `0:0.14` and `0:0.15` and rendered successfully.
-- Verification is green: standard Rust verification passed format, tests, check, and clippy; `cargo test --all-targets` passed 61 unit and 5 integration tests.
-- The repository now has a valid Memory v2 publication with stable project id `d911d695-6af2-4096-a31b-8c16cb6b1cc9`. The prior `activeContext.md` was backed up through the reviewed migration; all other legacy project material and global learnings were deferred unchanged.
+- Dynamic Anthropic quota support is committed (`68acf185`). Quotas render from
+  the endpoint's `limits` list using API-provided scoped display names, so a
+  model-scoped limit such as Fable appears without a field per model; null
+  legacy buckets are omitted, and both token widgets share the same bar
+  rendering and colour semantics.
+- Right-anchored headroom history graphs are committed (`55654101`),
+  integrated from the Asha initiative `monitor-headroom-history-graphs` (seal
+  `2576826e`, review `accepted-pass`, verification `passed` under a minimal
+  environment). A bounded fixed-capacity sample buffer feeds a reusable
+  renderer in `src/monitor/layout.rs`; the memory Available row and the disk
+  available rows each draw a graph beside their existing meter, coloured by
+  `headroom_gradient_color_scheme` so high availability reads green and low
+  reads red.
+- Verification is green on the current tree: `cargo build --release`,
+  `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and
+  `cargo test --all-targets` (75 unit and 5 integration tests).
+- Memory v2 publication is valid with stable project id
+  `d911d695-6af2-4096-a31b-8c16cb6b1cc9`.
 
 # Next
 
-- Review the live color transitions as usage approaches and crosses the grey pacing boundary.
-- Commit the source and README changes separately when approved; they remain intentionally uncommitted.
-- Decide whether to commit the migration-managed `.gitignore` entries; they remain unstaged with the other working-tree changes.
+- Watch the live colour transitions as usage approaches and crosses the grey
+  pacing boundary.
+- Confirm the history graphs read correctly at small terminal heights and while
+  the sample buffer is only partially filled.
+- Install the freshly built release binary over the active asdf Rust path and
+  restart the token widgets when convenient.
 
 # Blockers
 
