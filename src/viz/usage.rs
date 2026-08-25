@@ -49,6 +49,49 @@ pub(super) fn text_columns(text: &str) -> usize {
     text.chars().count()
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum QuotaColorBand {
+    OnPace,
+    NearBoundary,
+    OverBoundary,
+}
+
+const PACING_WARNING_MARGIN: f32 = 15.0;
+const DEFAULT_WARNING_THRESHOLD: f32 = 50.0;
+const DEFAULT_OVERUSE_THRESHOLD: f32 = 80.0;
+
+fn quota_color_band(pct: f32, expected_pct: Option<f32>) -> QuotaColorBand {
+    if let Some(boundary) = expected_pct {
+        if pct > boundary {
+            QuotaColorBand::OverBoundary
+        } else if pct >= (boundary - PACING_WARNING_MARGIN).max(0.0) {
+            QuotaColorBand::NearBoundary
+        } else {
+            QuotaColorBand::OnPace
+        }
+    } else if pct > DEFAULT_OVERUSE_THRESHOLD {
+        QuotaColorBand::OverBoundary
+    } else if pct >= DEFAULT_WARNING_THRESHOLD {
+        QuotaColorBand::NearBoundary
+    } else {
+        QuotaColorBand::OnPace
+    }
+}
+
+fn quota_band_color(band: QuotaColorBand, colors: &ColorState) -> Color {
+    let gradient_value = match band {
+        QuotaColorBand::OnPace => 0.0,
+        QuotaColorBand::NearBoundary => 50.0,
+        QuotaColorBand::OverBoundary => 80.0,
+    };
+    cpu_gradient_color_scheme(gradient_value, colors)
+}
+
+fn meter_color_band(index: usize, width: usize, expected_pct: Option<f32>) -> QuotaColorBand {
+    let position = (index as f32 / width as f32) * 100.0;
+    quota_color_band(position, expected_pct)
+}
+
 /// Draw a quota bar with an optional pacing underlay.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn draw_usage_bar(
@@ -90,8 +133,18 @@ pub(super) fn draw_usage_bar(
 
     let pct = pct.clamp(0.0, 100.0);
     let pct_str = format!("{:5.1}%", pct);
-    let color = cpu_gradient_color_scheme(pct as f32, colors);
-    term.set_str(pos, y as i32, &pct_str, Some(color), pct >= 80.0);
+    let band = quota_color_band(
+        pct as f32,
+        expected_pct.map(|value| value.clamp(0.0, 100.0) as f32),
+    );
+    let color = quota_band_color(band, colors);
+    term.set_str(
+        pos,
+        y as i32,
+        &pct_str,
+        Some(color),
+        band == QuotaColorBand::OverBoundary,
+    );
 }
 
 fn draw_meter_with_pacing(
@@ -116,8 +169,7 @@ fn draw_meter_with_pacing(
 
     for i in 0..width {
         let color = if i < filled {
-            let position = (i as f32 / width as f32) * 100.0;
-            cpu_gradient_color_scheme(position.min(percent), colors)
+            quota_band_color(meter_color_band(i, width, expected_pct), colors)
         } else if i < expected_filled {
             ghost_color
         } else {
@@ -129,7 +181,12 @@ fn draw_meter_with_pacing(
 
 #[cfg(test)]
 mod tests {
-    use super::{elapsed_percent, format_duration, format_window};
+    use super::{
+        elapsed_percent, format_duration, format_window, meter_color_band, quota_band_color,
+        quota_color_band, QuotaColorBand,
+    };
+    use crate::colors::ColorState;
+    use crossterm::style::Color;
     use std::time::Duration;
 
     #[test]
@@ -140,6 +197,65 @@ mod tests {
         assert_eq!(
             elapsed_percent(Duration::from_secs(15), Duration::from_secs(60)),
             75.0
+        );
+    }
+
+    #[test]
+    fn quota_color_warns_before_and_errors_after_the_pacing_boundary() {
+        assert_eq!(quota_color_band(24.9, Some(40.0)), QuotaColorBand::OnPace);
+        assert_eq!(
+            quota_color_band(25.0, Some(40.0)),
+            QuotaColorBand::NearBoundary
+        );
+        assert_eq!(
+            quota_color_band(40.0, Some(40.0)),
+            QuotaColorBand::NearBoundary
+        );
+        assert_eq!(
+            quota_color_band(40.1, Some(40.0)),
+            QuotaColorBand::OverBoundary
+        );
+    }
+
+    #[test]
+    fn quota_color_preserves_legacy_threshold_without_pacing_data() {
+        assert_eq!(quota_color_band(49.9, None), QuotaColorBand::OnPace);
+        assert_eq!(quota_color_band(50.0, None), QuotaColorBand::NearBoundary);
+        assert_eq!(quota_color_band(80.0, None), QuotaColorBand::NearBoundary);
+        assert_eq!(quota_color_band(80.1, None), QuotaColorBand::OverBoundary);
+    }
+
+    #[test]
+    fn meter_warns_before_and_errors_after_the_pacing_boundary() {
+        assert_eq!(meter_color_band(2, 10, Some(40.0)), QuotaColorBand::OnPace);
+        assert_eq!(
+            meter_color_band(3, 10, Some(40.0)),
+            QuotaColorBand::NearBoundary
+        );
+        assert_eq!(
+            meter_color_band(4, 10, Some(40.0)),
+            QuotaColorBand::NearBoundary
+        );
+        assert_eq!(
+            meter_color_band(5, 10, Some(40.0)),
+            QuotaColorBand::OverBoundary
+        );
+    }
+
+    #[test]
+    fn default_meter_bands_are_green_yellow_and_red() {
+        let colors = ColorState::new(7);
+        assert_eq!(
+            quota_band_color(QuotaColorBand::OnPace, &colors),
+            Color::AnsiValue(10)
+        );
+        assert_eq!(
+            quota_band_color(QuotaColorBand::NearBoundary, &colors),
+            Color::AnsiValue(11)
+        );
+        assert_eq!(
+            quota_band_color(QuotaColorBand::OverBoundary, &colors),
+            Color::AnsiValue(9)
         );
     }
 }

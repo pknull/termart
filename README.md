@@ -344,6 +344,8 @@ termart claude-tokens             # Claude subscription usage
 termart codex-tokens              # Codex subscription usage
 ```
 
+`claude-tokens` renders each quota returned by Anthropic, including model-scoped limits such as Fable when they apply to the account.
+
 `codex-tokens` reads the existing `~/.codex/auth.json` login and does not maintain separate credentials. Run `codex login` first if Codex is not already authenticated.
 
 ## Notes

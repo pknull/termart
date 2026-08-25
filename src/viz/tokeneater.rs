@@ -74,6 +74,56 @@ struct UsageResponse {
     seven_day_sonnet: Option<UsageBucket>,
     #[serde(rename = "seven_day_opus")]
     seven_day_opus: Option<UsageBucket>,
+    #[serde(default)]
+    limits: Vec<UsageLimit>,
+}
+
+/// Current usage endpoint representation. Unlike the legacy fixed fields above,
+/// this includes scoped limits with API-provided display names (for example,
+/// Fable) and can grow without requiring a field per model.
+#[derive(Deserialize, Clone, Default)]
+struct UsageLimit {
+    #[serde(default)]
+    kind: String,
+    #[serde(default)]
+    percent: f64,
+    resets_at: Option<String>,
+    scope: Option<UsageScope>,
+}
+
+#[derive(Deserialize, Clone, Default)]
+struct UsageScope {
+    model: Option<UsageScopeValue>,
+    surface: Option<UsageScopeValue>,
+}
+
+#[derive(Deserialize, Clone)]
+#[serde(untagged)]
+enum UsageScopeValue {
+    Details {
+        display_name: Option<String>,
+        id: Option<String>,
+    },
+    Name(String),
+}
+
+impl UsageScopeValue {
+    fn display_name(&self) -> Option<&str> {
+        match self {
+            Self::Details { display_name, id } => display_name.as_deref().or(id.as_deref()),
+            Self::Name(name) => Some(name),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct UsageBar {
+    kind: String,
+    label: String,
+    utilization: f64,
+    resets_at: Option<String>,
+    window_hours: Option<f64>,
+    show_reset: bool,
 }
 
 /// API error response
@@ -508,17 +558,154 @@ fn time_until_reset(resets_at: &str) -> Option<Duration> {
     }
 }
 
-fn countdown_signature(usage: &UsageResponse) -> (Option<u64>, Option<u64>) {
-    let remaining_minutes = |bucket: Option<&UsageBucket>| {
-        bucket
-            .and_then(|bucket| bucket.resets_at.as_deref())
-            .and_then(time_until_reset)
-            .map(|duration| duration.as_secs() / 60)
+fn humanize_limit_kind(kind: &str) -> String {
+    kind.split('_')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            if part.eq_ignore_ascii_case("oauth") {
+                "OAuth".to_string()
+            } else {
+                let mut chars = part.chars();
+                match chars.next() {
+                    Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                    None => String::new(),
+                }
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn usage_limit_label(limit: &UsageLimit) -> String {
+    let scoped_name = limit.scope.as_ref().and_then(|scope| {
+        scope
+            .model
+            .as_ref()
+            .and_then(UsageScopeValue::display_name)
+            .or_else(|| {
+                scope
+                    .surface
+                    .as_ref()
+                    .and_then(UsageScopeValue::display_name)
+            })
+    });
+
+    if let Some(name) = scoped_name.filter(|name| !name.trim().is_empty()) {
+        return name.to_string();
+    }
+
+    match limit.kind.as_str() {
+        "session" => "5-Hour".to_string(),
+        "weekly_all" | "weekly" => "7-Day".to_string(),
+        _ => humanize_limit_kind(&limit.kind),
+    }
+}
+
+fn limit_window_hours(kind: &str) -> Option<f64> {
+    match kind {
+        "session" => Some(5.0),
+        kind if kind.starts_with("weekly") => Some(168.0),
+        _ => None,
+    }
+}
+
+fn push_legacy_bar(
+    bars: &mut Vec<UsageBar>,
+    kind: &str,
+    label: &str,
+    bucket: Option<&UsageBucket>,
+    fallback_reset: Option<&str>,
+    window_hours: f64,
+    show_reset: bool,
+) {
+    let Some(bucket) = bucket else {
+        return;
     };
-    (
-        remaining_minutes(usage.five_hour.as_ref()),
-        remaining_minutes(usage.seven_day.as_ref()),
-    )
+    if bars.iter().any(|bar| bar.label == label) {
+        return;
+    }
+
+    bars.push(UsageBar {
+        kind: kind.to_string(),
+        label: label.to_string(),
+        utilization: bucket.utilization,
+        resets_at: bucket
+            .resets_at
+            .clone()
+            .or_else(|| fallback_reset.map(str::to_string)),
+        window_hours: Some(window_hours),
+        show_reset,
+    });
+}
+
+fn usage_bars(usage: &UsageResponse) -> Vec<UsageBar> {
+    let mut bars = usage
+        .limits
+        .iter()
+        .map(|limit| UsageBar {
+            kind: limit.kind.clone(),
+            label: usage_limit_label(limit),
+            utilization: limit.percent,
+            resets_at: limit.resets_at.clone(),
+            window_hours: limit_window_hours(&limit.kind),
+            show_reset: matches!(limit.kind.as_str(), "session" | "weekly_all" | "weekly"),
+        })
+        .collect::<Vec<_>>();
+
+    let weekly_reset = usage
+        .seven_day
+        .as_ref()
+        .and_then(|bucket| bucket.resets_at.as_deref());
+    push_legacy_bar(
+        &mut bars,
+        "session",
+        "5-Hour",
+        usage.five_hour.as_ref(),
+        None,
+        5.0,
+        true,
+    );
+    push_legacy_bar(
+        &mut bars,
+        "weekly_all",
+        "7-Day",
+        usage.seven_day.as_ref(),
+        None,
+        168.0,
+        true,
+    );
+    push_legacy_bar(
+        &mut bars,
+        "weekly_scoped",
+        "Sonnet",
+        usage.seven_day_sonnet.as_ref(),
+        weekly_reset,
+        168.0,
+        false,
+    );
+    push_legacy_bar(
+        &mut bars,
+        "weekly_scoped",
+        "Opus",
+        usage.seven_day_opus.as_ref(),
+        weekly_reset,
+        168.0,
+        false,
+    );
+
+    bars
+}
+
+fn countdown_signature(usage: &UsageResponse) -> Vec<Option<u64>> {
+    usage_bars(usage)
+        .iter()
+        .map(|bar| {
+            bar.resets_at
+                .as_deref()
+                .and_then(time_until_reset)
+                .map(|duration| duration.as_secs() / 60)
+        })
+        .collect()
 }
 
 /// Calculate elapsed percentage of a window given remaining time
@@ -766,13 +953,9 @@ pub fn run(config: TokenEaterConfig) -> io::Result<()> {
         let pacing_min_x = bar_x + text_columns(title) + title_status_gap;
 
         // Pacing indicator on title row, right-aligned
-        let five_hour = usage
-            .five_hour
-            .as_ref()
-            .map(|b| b.utilization)
-            .unwrap_or(0.0);
-        if let Some(ref bucket) = usage.five_hour {
-            if let Some(ref resets_at) = bucket.resets_at {
+        let bars = usage_bars(&usage);
+        if let Some(session) = bars.iter().find(|bar| bar.kind == "session") {
+            if let Some(ref resets_at) = session.resets_at {
                 if let Some(dur) = time_until_reset(resets_at) {
                     let hours_remaining = dur.as_secs_f64() / 3600.0;
                     let hours_elapsed = 5.0 - hours_remaining;
@@ -782,7 +965,7 @@ pub fn run(config: TokenEaterConfig) -> io::Result<()> {
                         pacing_min_x,
                         (bar_x + bar_width + 1).min(w as usize),
                         y,
-                        five_hour,
+                        session.utilization,
                         hours_elapsed.max(0.0),
                         state.color_scheme(),
                     );
@@ -791,37 +974,29 @@ pub fn run(config: TokenEaterConfig) -> io::Result<()> {
         }
         y += 2;
 
-        // Calculate elapsed percentages for pacing ghost
-        let five_hour_expected = usage
-            .five_hour
-            .as_ref()
-            .and_then(|b| b.resets_at.as_ref())
-            .and_then(|r| time_until_reset(r))
-            .map(|d| elapsed_pct(d, 5.0));
+        for bar in &bars {
+            let expected_pct = bar
+                .resets_at
+                .as_deref()
+                .and_then(time_until_reset)
+                .zip(bar.window_hours)
+                .map(|(remaining, window_hours)| elapsed_pct(remaining, window_hours));
+            draw_usage_bar(
+                &mut term,
+                bar_x,
+                y,
+                bar_width,
+                bar.utilization,
+                expected_pct,
+                &bar.label,
+                &state.colors,
+            );
+            y += 1;
 
-        let seven_day_expected = usage
-            .seven_day
-            .as_ref()
-            .and_then(|b| b.resets_at.as_ref())
-            .and_then(|r| time_until_reset(r))
-            .map(|d| elapsed_pct(d, 168.0)); // 7 days = 168 hours
-
-        // 5-hour session bar with pacing ghost
-        draw_usage_bar(
-            &mut term,
-            bar_x,
-            y,
-            bar_width,
-            five_hour,
-            five_hour_expected,
-            "5-Hour",
-            &state.colors,
-        );
-        y += 1;
-
-        // 5-hour reset time
-        if let Some(ref bucket) = usage.five_hour {
-            if let Some(ref resets_at) = bucket.resets_at {
+            if !bar.show_reset {
+                continue;
+            }
+            if let Some(ref resets_at) = bar.resets_at {
                 if let Some(dur) = time_until_reset(resets_at) {
                     let reset_str = format!("        resets in {}", format_duration(dur));
                     term.set_str(
@@ -833,78 +1008,8 @@ pub fn run(config: TokenEaterConfig) -> io::Result<()> {
                     );
                 }
             }
+            y += 2;
         }
-        y += 2;
-
-        // 7-day bar with pacing ghost
-        let seven_day_pct = usage
-            .seven_day
-            .as_ref()
-            .map(|b| b.utilization)
-            .unwrap_or(0.0);
-        draw_usage_bar(
-            &mut term,
-            bar_x,
-            y,
-            bar_width,
-            seven_day_pct,
-            seven_day_expected,
-            "7-Day",
-            &state.colors,
-        );
-        y += 1;
-
-        // 7-day reset time
-        if let Some(ref bucket) = usage.seven_day {
-            if let Some(ref resets_at) = bucket.resets_at {
-                if let Some(dur) = time_until_reset(resets_at) {
-                    let reset_str = format!("        resets in {}", format_duration(dur));
-                    term.set_str(
-                        bar_x as i32,
-                        y as i32,
-                        &reset_str,
-                        Some(muted_color_scheme(&state.colors)),
-                        false,
-                    );
-                }
-            }
-        }
-        y += 2;
-
-        // Model-specific bars (no pacing ghost - they share the 7-day window)
-        let sonnet_pct = usage
-            .seven_day_sonnet
-            .as_ref()
-            .map(|b| b.utilization)
-            .unwrap_or(0.0);
-        draw_usage_bar(
-            &mut term,
-            bar_x,
-            y,
-            bar_width,
-            sonnet_pct,
-            seven_day_expected,
-            "Sonnet",
-            &state.colors,
-        );
-        y += 1;
-
-        let opus_pct = usage
-            .seven_day_opus
-            .as_ref()
-            .map(|b| b.utilization)
-            .unwrap_or(0.0);
-        draw_usage_bar(
-            &mut term,
-            bar_x,
-            y,
-            bar_width,
-            opus_pct,
-            seven_day_expected,
-            "Opus",
-            &state.colors,
-        );
-        y += 1;
 
         if let Some(ref err) = fetch_error {
             y += 2;
@@ -926,4 +1031,87 @@ pub fn run(config: TokenEaterConfig) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{usage_bars, UsageResponse};
+    use serde_json::json;
+
+    #[test]
+    fn current_limits_include_api_named_scoped_models() {
+        let usage: UsageResponse = serde_json::from_value(json!({
+            "five_hour": {
+                "utilization": 0.0,
+                "resets_at": null
+            },
+            "seven_day": {
+                "utilization": 48.0,
+                "resets_at": "2026-08-03T23:59:59Z"
+            },
+            "limits": [
+                {
+                    "kind": "session",
+                    "percent": 0,
+                    "resets_at": null,
+                    "scope": null
+                },
+                {
+                    "kind": "weekly_all",
+                    "percent": 48,
+                    "resets_at": "2026-08-03T23:59:59Z",
+                    "scope": null
+                },
+                {
+                    "kind": "weekly_scoped",
+                    "percent": 87,
+                    "resets_at": "2026-08-03T23:59:59Z",
+                    "scope": {
+                        "model": {
+                            "display_name": "Fable",
+                            "id": null
+                        },
+                        "surface": null
+                    }
+                }
+            ]
+        }))
+        .expect("usage response should deserialize");
+
+        let bars = usage_bars(&usage);
+        assert_eq!(
+            bars.iter()
+                .map(|bar| (bar.label.as_str(), bar.utilization))
+                .collect::<Vec<_>>(),
+            vec![("5-Hour", 0.0), ("7-Day", 48.0), ("Fable", 87.0)]
+        );
+    }
+
+    #[test]
+    fn legacy_response_only_draws_buckets_the_api_returned() {
+        let usage: UsageResponse = serde_json::from_value(json!({
+            "five_hour": {
+                "utilization": 12.0,
+                "resets_at": null
+            },
+            "seven_day": {
+                "utilization": 34.0,
+                "resets_at": null
+            },
+            "seven_day_sonnet": null,
+            "seven_day_opus": {
+                "utilization": 56.0,
+                "resets_at": null
+            }
+        }))
+        .expect("legacy usage response should deserialize");
+
+        let bars = usage_bars(&usage);
+        assert_eq!(
+            bars.iter()
+                .map(|bar| bar.label.as_str())
+                .collect::<Vec<_>>(),
+            vec!["5-Hour", "7-Day", "Opus"]
+        );
+    }
 }
