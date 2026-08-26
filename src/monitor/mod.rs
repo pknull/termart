@@ -1,6 +1,8 @@
 pub mod cpu;
 pub mod disk;
 pub mod diskio;
+mod diskpanel;
+mod diskstats;
 pub mod docker;
 pub mod gpu;
 pub mod layout;

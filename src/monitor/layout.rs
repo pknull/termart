@@ -96,13 +96,17 @@ const HISTORY_GRAPH_WIDTH: usize = 16;
 /// Blank column separating a graph from the meter to its left.
 const HISTORY_GRAPH_GAP: usize = 1;
 
-/// Meter columns a row keeps before it may spend any width on a graph.
-const MIN_GRAPHED_METER_WIDTH: usize = 8;
+/// Meter columns a row keeps before it may spend any width on a graph. Rows
+/// that stack their graph above their meter rather than beside it reuse this as
+/// the span below which the graph is not worth drawing at all.
+pub const MIN_GRAPHED_METER_WIDTH: usize = 8;
 
-/// Samples retained per graphed metric. Only the newest `HISTORY_GRAPH_WIDTH`
-/// of them reach the screen; the slack bounds memory whilst leaving room for a
-/// wider graph without revisiting the sampling path.
-pub const HISTORY_CAPACITY: usize = 32;
+/// Samples retained per graphed metric. Inline row graphs show only the newest
+/// `HISTORY_GRAPH_WIDTH` of them, but the disk panel's I/O sparkline spans its
+/// meter and so is as wide as the panel; the capacity covers that on a typical
+/// terminal whilst still bounding memory. A graph wider than this renders flush
+/// right with the remainder empty, exactly as a part-filled buffer does.
+pub const HISTORY_CAPACITY: usize = 128;
 
 /// A fixed-capacity ring of recent samples.
 ///
