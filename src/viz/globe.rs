@@ -539,9 +539,7 @@ pub fn run(
         }
 
         for row in &mut braille_dots {
-            for cell in row {
-                *cell = 0;
-            }
+            row.fill(0);
         }
 
         // Calculate solar position for day/night
