@@ -9,30 +9,57 @@ const DISKSTATS_IO_MS: usize = 12;
 
 /// Every active swap area folded into one figure, the way btop++ reports it.
 pub(super) struct SwapInfo {
+    /// What backs the entry, named as /proc/swaps names it: a partition, or the
+    /// path of a swap file.
+    pub device: String,
     pub total: u64,
     pub used: u64,
+}
+
+/// Name what a swap entry stands for. One area names itself; several report the
+/// first and a count of the rest, because the figures beside the name are their
+/// sum and no single path describes them.
+fn swap_device(areas: &[&str]) -> String {
+    match areas.split_first() {
+        Some((first, [])) => (*first).to_string(),
+        Some((first, rest)) => format!("{} +{}", first, rest.len()),
+        None => String::new(),
+    }
 }
 
 /// Sum the swap areas listed in /proc/swaps, whose Size and Used columns are in
 /// KiB. A machine with no swap has no entry to draw rather than an empty one.
 pub(super) fn parse_swap(content: &str) -> Option<SwapInfo> {
-    let mut swap = SwapInfo { total: 0, used: 0 };
+    let mut total = 0u64;
+    let mut used = 0u64;
+    let mut areas: Vec<&str> = Vec::new();
 
     for line in content.lines() {
         // Filename Type Size Used Priority. The header fails to parse its size
         // and is skipped along with any other malformed row.
         let parts: Vec<&str> = line.split_whitespace().collect();
-        let (Some(size), Some(used)) = (parts.get(2), parts.get(3)) else {
+        let (Some(name), Some(size), Some(in_use)) = (parts.first(), parts.get(2), parts.get(3))
+        else {
             continue;
         };
-        let (Ok(size), Ok(used)) = (size.parse::<u64>(), used.parse::<u64>()) else {
+        let (Ok(size), Ok(in_use)) = (size.parse::<u64>(), in_use.parse::<u64>()) else {
             continue;
         };
-        swap.total = swap.total.saturating_add(size.saturating_mul(1024));
-        swap.used = swap.used.saturating_add(used.saturating_mul(1024));
+        // An area the kernel reports as empty contributes nothing to the
+        // figures and so has no claim on naming them either.
+        if size == 0 {
+            continue;
+        }
+        total = total.saturating_add(size.saturating_mul(1024));
+        used = used.saturating_add(in_use.saturating_mul(1024));
+        areas.push(name);
     }
 
-    (swap.total > 0).then_some(swap)
+    (total > 0).then(|| SwapInfo {
+        device: swap_device(&areas),
+        total,
+        used,
+    })
 }
 
 /// Milliseconds each device has spent doing I/Os, keyed by its /proc/diskstats
@@ -117,7 +144,7 @@ impl DeviceIo {
 
 #[cfg(test)]
 mod tests {
-    use super::{io_utilization, parse_diskstats_io_ms, parse_swap, DeviceIo};
+    use super::{io_utilization, parse_diskstats_io_ms, parse_swap, swap_device, DeviceIo};
 
     /// A /proc/diskstats row carrying `io_ms` in the field the panel reads.
     fn diskstats_row(name: &str, io_ms: u64) -> String {
@@ -135,6 +162,28 @@ mod tests {
         let swap = parse_swap(content).expect("two areas");
         assert_eq!(swap.total, (20_971_516 + 1_048_576) * 1024);
         assert_eq!(swap.used, (3_458_424 + 1024) * 1024);
+        // One line carries both areas, so it names the first and counts the
+        // rest rather than claiming the figures belong to /swapfile alone.
+        assert_eq!(swap.device, "/swapfile +1");
+    }
+
+    #[test]
+    fn a_swap_entry_is_named_by_the_area_backing_it() {
+        let one = parse_swap("/dev/sdc3 partition 1048576 1024 -3\n").expect("one area");
+        assert_eq!(one.device, "/dev/sdc3");
+
+        // A row the kernel reports as empty is not an area, so it neither adds
+        // to the figures nor takes the name.
+        let with_empty = parse_swap(concat!(
+            "/empty file 0 0 -2\n",
+            "/swapfile file 1048576 1024 -3\n",
+        ))
+        .expect("one live area");
+        assert_eq!(with_empty.device, "/swapfile");
+        assert_eq!(with_empty.total, 1_048_576 * 1024);
+
+        assert_eq!(swap_device(&[]), "");
+        assert_eq!(swap_device(&["/a", "/b", "/c"]), "/a +2");
     }
 
     #[test]
