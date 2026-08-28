@@ -354,6 +354,13 @@ enum Commands {
         time: f32,
     },
 
+    /// Snake - classic single-player game
+    Snake {
+        /// Game speed (seconds per frame)
+        #[arg(short, long, default_value = "0.016", value_parser = parse_positive_f32)]
+        time: f32,
+    },
+
     /// CPU usage monitor
     Cpu {
         #[command(flatten)]
@@ -674,6 +681,9 @@ fn main() -> io::Result<()> {
         }
         Commands::Pong { time } => {
             viz::pong::run(time)?;
+        }
+        Commands::Snake { time } => {
+            viz::snake::run(time)?;
         }
         Commands::Cpu { opts } => run_monitor(MonitorType::Cpu, opts)?,
         Commands::Mem { opts } => run_monitor(MonitorType::Mem, opts)?,

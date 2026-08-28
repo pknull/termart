@@ -22,6 +22,7 @@ pub mod pipes;
 pub mod plasma;
 pub mod pong;
 pub mod rain;
+pub mod snake;
 pub mod sunlight;
 pub mod tokeneater;
 pub mod tui_control;
