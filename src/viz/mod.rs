@@ -3,6 +3,7 @@
 //! Each visualization is its own module with a `run()` function.
 
 pub mod audio;
+pub mod breakout;
 pub mod clock;
 pub mod codex_tokens;
 pub mod cube;

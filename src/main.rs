@@ -361,6 +361,13 @@ enum Commands {
         time: f32,
     },
 
+    /// Breakout - classic single-player brick-breaking game
+    Breakout {
+        /// Game speed (seconds per frame)
+        #[arg(short, long, default_value = "0.016", value_parser = parse_positive_f32)]
+        time: f32,
+    },
+
     /// CPU usage monitor
     Cpu {
         #[command(flatten)]
@@ -684,6 +691,9 @@ fn main() -> io::Result<()> {
         }
         Commands::Snake { time } => {
             viz::snake::run(time)?;
+        }
+        Commands::Breakout { time } => {
+            viz::breakout::run(time)?;
         }
         Commands::Cpu { opts } => run_monitor(MonitorType::Cpu, opts)?,
         Commands::Mem { opts } => run_monitor(MonitorType::Mem, opts)?,
