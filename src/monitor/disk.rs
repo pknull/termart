@@ -1,15 +1,12 @@
 use crate::colors::ColorState;
 use crate::help::HelpSpec;
-use crate::monitor::diskpanel::{draw_entry, entry_name, plan_render, Entry};
+use crate::monitor::diskpanel::{draw_entry, plan_render, Entry};
 use crate::monitor::diskstats::{parse_swap, DeviceIo, SwapInfo};
-use crate::monitor::layout::{
-    format_bytes, muted_color_scheme, text_color_scheme, Rect, SampleHistory, HISTORY_CAPACITY,
-};
+use crate::monitor::layout::{format_bytes, muted_color_scheme, text_color_scheme, Rect};
 use crate::monitor::{MonitorAction, MonitorConfig, MonitorState};
 use crate::terminal::Terminal;
 use crossterm::style::Color;
 use crossterm::terminal::size;
-use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::time::Instant;
@@ -54,28 +51,10 @@ pub struct DiskInfo {
     pub available: u64,
 }
 
-/// A mount point's I/O history plus the device it was recorded from, so a
-/// different filesystem mounted at the same path starts a fresh graph instead
-/// of inheriting samples that described the old one.
-struct MountHistory {
-    device: String,
-    samples: SampleHistory,
-}
-
-impl MountHistory {
-    fn new(device: &str) -> Self {
-        Self {
-            device: device.to_string(),
-            samples: SampleHistory::new(HISTORY_CAPACITY),
-        }
-    }
-}
-
 pub struct DiskMonitor {
     pub disks: Vec<DiskInfo>,
     swap: Option<SwapInfo>,
     io: DeviceIo,
-    histories: HashMap<String, MountHistory>,
     last_io_sample: Option<Instant>,
 }
 
@@ -85,7 +64,6 @@ impl DiskMonitor {
             disks: Vec::new(),
             swap: None,
             io: DeviceIo::new(),
-            histories: HashMap::new(),
             last_io_sample: None,
         }
     }
@@ -134,7 +112,6 @@ impl DiskMonitor {
             .as_deref()
             .and_then(parse_swap);
         self.sample_io();
-        self.record_history();
         Ok(())
     }
 
@@ -154,57 +131,25 @@ impl DiskMonitor {
         }
     }
 
-    /// Record each mount point's current I/O utilization exactly once per
-    /// refresh, first forgetting mounts that have gone away so the map cannot
-    /// grow without bound across remounts.
-    ///
-    /// When /proc/mounts lists a mount point more than once (an overmount or a
-    /// bind remount) the last row wins, matching the filesystem statvfs sees;
-    /// pushing every row would scroll that graph at double speed. A history
-    /// whose device changes is restarted rather than continued: its samples
-    /// described a device that is no longer there.
-    fn record_history(&mut self) {
-        let disks = &self.disks;
-        let io = &self.io;
-        let histories = &mut self.histories;
-
-        histories.retain(|mount, _| disks.iter().any(|disk| &disk.mount_point == mount));
-
-        let mut visible: HashMap<&str, &DiskInfo> = HashMap::new();
-        for disk in disks {
-            visible.insert(disk.mount_point.as_str(), disk);
-        }
-
-        for disk in visible.into_values() {
-            let Some(percent) = io.percent(&disk.device) else {
-                continue;
-            };
-            let entry = histories
-                .entry(disk.mount_point.clone())
-                .or_insert_with(|| MountHistory::new(&disk.device));
-            if entry.device != disk.device {
-                *entry = MountHistory::new(&disk.device);
-            }
-            entry.samples.push(percent);
-        }
-    }
-
     /// The panel's entries in render order: every mount point, with swap folded
     /// in after the first of them, which is where btop++ puts it.
-    fn entries(&self) -> Vec<Entry<'_>> {
-        let mut entries: Vec<Entry<'_>> = self
+    fn entries(&self) -> Vec<Entry> {
+        let mut entries: Vec<Entry> = self
             .disks
             .iter()
             .map(|disk| Entry {
-                name: entry_name(&disk.mount_point).to_string(),
+                name: disk.mount_point.clone(),
                 total: disk.total,
                 used: disk.used,
                 available: disk.available,
-                io: self.mount_io(disk),
+                io: self.io.percent(&disk.device),
             })
             .collect();
 
         if let Some(swap) = &self.swap {
+            // Swap has no diskstats row of its own — a swap file's I/O is
+            // already counted against the filesystem holding it — so the entry
+            // reports its capacity alone.
             let entry = Entry {
                 name: "swap".to_string(),
                 total: swap.total,
@@ -216,14 +161,6 @@ impl DiskMonitor {
         }
 
         entries
-    }
-
-    /// A mount's utilization and its history, present only once its device has
-    /// a diskstats row and a sample has been recorded against it.
-    fn mount_io(&self, disk: &DiskInfo) -> Option<(f32, &SampleHistory)> {
-        let percent = self.io.percent(&disk.device)?;
-        let history = self.histories.get(&disk.mount_point)?;
-        Some((percent, &history.samples))
     }
 
     fn statvfs(path: &str) -> io::Result<StatVfs> {
@@ -394,6 +331,10 @@ mod tests {
         }
     }
 
+    fn swap(total: u64, used: u64) -> SwapInfo {
+        SwapInfo { total, used }
+    }
+
     #[test]
     fn mount_fields_decode_proc_octal_escapes() {
         assert_eq!(decode_mount_field(r"/media/My\040Disk"), "/media/My Disk");
@@ -417,34 +358,60 @@ mod tests {
     }
 
     #[test]
+    fn an_entry_is_headed_by_its_full_mount_point() {
+        let mut monitor = DiskMonitor::new();
+        monitor.disks = vec![
+            disk("/dev/sdb2", "/", 750, 250),
+            disk("/dev/sdb1", "/boot/efi", 100, 900),
+        ];
+
+        let entries = monitor.entries();
+        let headers: Vec<&str> = entries.iter().map(|entry| entry.name.as_str()).collect();
+
+        // The whole mount point, not its last component: /boot/efi and a
+        // /mnt/efi would otherwise both read as "efi".
+        assert_eq!(headers, vec!["/", "/boot/efi"]);
+    }
+
+    #[test]
     fn swap_renders_after_the_first_mount_with_its_own_free_space() {
         let mut monitor = DiskMonitor::new();
         monitor.disks = vec![
             disk("/dev/sdb2", "/", 750, 250),
             disk("/dev/sdb3", "/home", 100, 900),
         ];
-        monitor.swap = Some(SwapInfo {
-            total: 2048,
-            used: 512,
-        });
+        monitor.swap = Some(swap(2048, 512));
 
         let entries = monitor.entries();
         let names: Vec<&str> = entries.iter().map(|entry| entry.name.as_str()).collect();
-        assert_eq!(names, vec!["root", "swap", "home"]);
+        assert_eq!(names, vec!["/", "swap", "/home"]);
 
-        let swap = &entries[1];
-        assert_eq!(swap.available, 1536);
-        assert!((swap.percent() - 25.0).abs() < 0.001);
-        assert!(swap.io.is_none(), "swap has no backing diskstats device");
+        let area = &entries[1];
+        assert_eq!(area.available, 1536);
+        assert!((area.percent() - 25.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn swap_renders_a_used_row_alone() {
+        let mut monitor = DiskMonitor::new();
+        monitor.disks = vec![disk("/dev/sdb2", "/", 750, 250)];
+        monitor.io.sample(&diskstats_row("sdb2", 100), 1000.0);
+        monitor.io.sample(&diskstats_row("sdb2", 500), 1000.0);
+        monitor.swap = Some(swap(2048, 512));
+
+        let entries = monitor.entries();
+        let area = &entries[1];
+        assert_eq!(area.name, "swap");
+        // No diskstats row of its own, so no IO row — the mount beside it has
+        // one, so this is the entry's own answer and not an empty sample.
+        assert!(area.io.is_none());
+        assert!(entries[0].io.is_some());
     }
 
     #[test]
     fn swap_is_the_only_entry_when_nothing_is_mounted() {
         let mut monitor = DiskMonitor::new();
-        monitor.swap = Some(SwapInfo {
-            total: 2048,
-            used: 512,
-        });
+        monitor.swap = Some(swap(2048, 512));
 
         let entries = monitor.entries();
         assert_eq!(entries.len(), 1);
@@ -452,7 +419,7 @@ mod tests {
     }
 
     #[test]
-    fn only_mounts_with_a_diskstats_row_get_an_io_line() {
+    fn only_mounts_with_a_diskstats_row_get_an_io_row() {
         let mut monitor = DiskMonitor::new();
         monitor.disks = vec![
             disk("/dev/sdb2", "/", 750, 250),
@@ -460,76 +427,34 @@ mod tests {
         ];
         monitor.io.sample(&diskstats_row("sdb2", 100), 1000.0);
         monitor.io.sample(&diskstats_row("sdb2", 500), 1000.0);
-        monitor.record_history();
 
         let entries = monitor.entries();
-        let root = entries.iter().find(|e| e.name == "root").expect("root");
-        let net = entries.iter().find(|e| e.name == "net").expect("net");
+        let root = entries.iter().find(|e| e.name == "/").expect("root");
+        let net = entries.iter().find(|e| e.name == "/net").expect("net");
 
-        let (percent, history) = root.io.expect("sdb2 has a diskstats row");
+        let percent = root.io.expect("sdb2 has a diskstats row");
         assert!((percent - 40.0).abs() < 0.001);
-        assert_eq!(history.len(), 1);
-        assert!(net.io.is_none(), "no diskstats row means no IO line");
+        assert!(net.io.is_none(), "no diskstats row means no IO row");
     }
 
     #[test]
-    fn history_records_utilization_and_forgets_removed_mounts() {
-        let mut monitor = DiskMonitor::new();
-        monitor.disks = vec![
-            disk("/dev/sdb2", "/", 750, 250),
-            disk("/dev/sdb3", "/data", 100, 900),
-        ];
-        let stats = format!("{}{}", diskstats_row("sdb2", 0), diskstats_row("sdb3", 0));
-        monitor.io.sample(&stats, 1000.0);
-        monitor.record_history();
-
-        let stats = format!("{}{}", diskstats_row("sdb2", 250), diskstats_row("sdb3", 0));
-        monitor.io.sample(&stats, 1000.0);
-        monitor.record_history();
-
-        assert_eq!(monitor.histories.len(), 2);
-        let root = &monitor.histories["/"].samples;
-        assert_eq!(root.len(), 2);
-        assert!((root.iter().last().unwrap() - 25.0).abs() < 0.001);
-
-        monitor.disks.remove(1);
-        monitor.record_history();
-
-        assert_eq!(monitor.histories.len(), 1);
-        assert!(monitor.histories.contains_key("/"));
-    }
-
-    #[test]
-    fn duplicate_mount_rows_push_one_sample_from_the_last_row() {
-        let mut monitor = DiskMonitor::new();
-        monitor.disks = vec![
-            disk("/dev/sda1", "/mnt", 900, 100),
-            disk("/dev/sdb1", "/mnt", 250, 750),
-        ];
+    fn utilization_follows_the_device_a_mount_point_currently_holds() {
+        // Two devices busy by different amounts, and a mount point moved from
+        // one to the other: the row reports the device it is on now.
         let stats = format!("{}{}", diskstats_row("sda1", 0), diskstats_row("sdb1", 0));
-        monitor.io.sample(&stats, 1000.0);
-        monitor.record_history();
+        let busier = format!(
+            "{}{}",
+            diskstats_row("sda1", 100),
+            diskstats_row("sdb1", 750)
+        );
 
-        let history = &monitor.histories["/mnt"];
-        assert_eq!(history.samples.len(), 1);
-        assert_eq!(history.device, "/dev/sdb1");
-    }
-
-    #[test]
-    fn swapping_the_device_at_a_mount_point_restarts_its_history() {
         let mut monitor = DiskMonitor::new();
         monitor.disks = vec![disk("/dev/sda1", "/mnt", 900, 100)];
-        let stats = format!("{}{}", diskstats_row("sda1", 0), diskstats_row("sdb1", 0));
         monitor.io.sample(&stats, 1000.0);
-        monitor.record_history();
-        monitor.record_history();
-        assert_eq!(monitor.histories["/mnt"].samples.len(), 2);
+        monitor.io.sample(&busier, 1000.0);
+        assert!((monitor.entries()[0].io.expect("sda1") - 10.0).abs() < 0.001);
 
         monitor.disks = vec![disk("/dev/sdb1", "/mnt", 500, 500)];
-        monitor.record_history();
-
-        let history = &monitor.histories["/mnt"];
-        assert_eq!(history.device, "/dev/sdb1");
-        assert_eq!(history.samples.len(), 1);
+        assert!((monitor.entries()[0].io.expect("sdb1") - 75.0).abs() < 0.001);
     }
 }

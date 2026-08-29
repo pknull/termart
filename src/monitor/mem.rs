@@ -11,12 +11,6 @@ use crossterm::terminal::size;
 use std::fs;
 use std::io;
 
-// Removing this panel's Available row must not make the shared layout entry
-// points dead in non-test builds; their definitions remain for other panels.
-const _: fn(&mut Terminal, i32, i32, usize, f32, &ColorState) =
-    crate::monitor::layout::draw_meter_headroom_scheme;
-const _: fn(usize) -> (usize, usize) = crate::monitor::layout::split_row_for_graph;
-
 pub struct MemInfo {
     pub mem_total: u64,
     pub mem_available: u64,
