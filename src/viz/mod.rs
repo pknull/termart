@@ -2,6 +2,7 @@
 //!
 //! Each visualization is its own module with a `run()` function.
 
+pub mod asteroids;
 pub mod audio;
 pub mod breakout;
 pub mod clock;

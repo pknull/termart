@@ -368,6 +368,13 @@ enum Commands {
         time: f32,
     },
 
+    /// Asteroids - classic single-player game
+    Asteroids {
+        /// Game speed (seconds per frame)
+        #[arg(short, long, default_value = "0.016", value_parser = parse_positive_f32)]
+        time: f32,
+    },
+
     /// CPU usage monitor
     Cpu {
         #[command(flatten)]
@@ -694,6 +701,9 @@ fn main() -> io::Result<()> {
         }
         Commands::Breakout { time } => {
             viz::breakout::run(time)?;
+        }
+        Commands::Asteroids { time } => {
+            viz::asteroids::run(time)?;
         }
         Commands::Cpu { opts } => run_monitor(MonitorType::Cpu, opts)?,
         Commands::Mem { opts } => run_monitor(MonitorType::Mem, opts)?,
