@@ -1,7 +1,67 @@
+use dbus::ffidisp::Connection;
 use mpris::{LoopStatus, Metadata, PlaybackStatus, Player, PlayerFinder};
+use std::env;
+use std::ffi::OsStr;
+use std::fs;
+use std::os::unix::fs::FileTypeExt;
+use std::path::PathBuf;
 use std::time::Duration;
 
 pub type MprisResult<T> = Result<T, String>;
+
+#[derive(Debug, PartialEq, Eq)]
+enum SessionBusTarget {
+    Environment,
+    Explicit(PathBuf),
+}
+
+fn fallback_session_bus_path(effective_uid: u32) -> PathBuf {
+    PathBuf::from(format!("/run/user/{effective_uid}/bus"))
+}
+
+fn select_session_bus_target(
+    dbus_session_bus_address: Option<&OsStr>,
+    xdg_runtime_dir: Option<&OsStr>,
+    effective_uid: u32,
+    fallback_is_socket: bool,
+) -> SessionBusTarget {
+    if dbus_session_bus_address.is_some() || xdg_runtime_dir.is_some() || !fallback_is_socket {
+        SessionBusTarget::Environment
+    } else {
+        SessionBusTarget::Explicit(fallback_session_bus_path(effective_uid))
+    }
+}
+
+fn current_session_bus_target() -> SessionBusTarget {
+    let effective_uid = unsafe { libc::geteuid() };
+    let fallback_path = fallback_session_bus_path(effective_uid);
+    let fallback_is_socket = fs::metadata(&fallback_path)
+        .map(|metadata| metadata.file_type().is_socket())
+        .unwrap_or(false);
+
+    select_session_bus_target(
+        env::var_os("DBUS_SESSION_BUS_ADDRESS").as_deref(),
+        env::var_os("XDG_RUNTIME_DIR").as_deref(),
+        effective_uid,
+        fallback_is_socket,
+    )
+}
+
+fn create_player_finder() -> MprisResult<PlayerFinder> {
+    match current_session_bus_target() {
+        SessionBusTarget::Environment => PlayerFinder::new().map_err(|error| error.to_string()),
+        SessionBusTarget::Explicit(path) => {
+            let address = format!("unix:path={}", path.display());
+            let connection = Connection::open_private(&address).map_err(|error| {
+                format!("failed to connect to fallback session bus {address}: {error}")
+            })?;
+            connection.register().map_err(|error| {
+                format!("failed to register with fallback session bus {address}: {error}")
+            })?;
+            Ok(PlayerFinder::for_connection(connection))
+        }
+    }
+}
 
 /// Current player state
 #[derive(Debug, Clone, Default)]
@@ -93,7 +153,7 @@ impl MprisClient {
 
     /// Try to connect to a media player
     pub fn connect(&mut self) -> MprisResult<bool> {
-        let finder = PlayerFinder::new().map_err(|e| e.to_string())?;
+        let finder = create_player_finder()?;
 
         // Try preferred players first
         for preferred in &self.preferred_players {
@@ -296,6 +356,65 @@ pub fn format_duration(d: Duration) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsStr;
+    use std::path::PathBuf;
+
+    #[test]
+    fn session_bus_selection_uses_fallback_socket_when_environment_is_absent() {
+        assert_eq!(
+            select_session_bus_target(None, None, 1000, true),
+            SessionBusTarget::Explicit(PathBuf::from("/run/user/1000/bus"))
+        );
+    }
+
+    #[test]
+    fn session_bus_selection_keeps_explicit_dbus_address() {
+        assert_eq!(
+            select_session_bus_target(
+                Some(OsStr::new("unix:path=/custom/session-bus")),
+                None,
+                1000,
+                true,
+            ),
+            SessionBusTarget::Environment
+        );
+    }
+
+    #[test]
+    fn session_bus_selection_keeps_explicit_runtime_directory() {
+        assert_eq!(
+            select_session_bus_target(None, Some(OsStr::new("/custom/runtime")), 1000, true),
+            SessionBusTarget::Environment
+        );
+    }
+
+    #[test]
+    fn session_bus_selection_treats_empty_environment_values_as_present() {
+        assert_eq!(
+            select_session_bus_target(Some(OsStr::new("")), None, 1000, true),
+            SessionBusTarget::Environment
+        );
+        assert_eq!(
+            select_session_bus_target(None, Some(OsStr::new("")), 1000, true),
+            SessionBusTarget::Environment
+        );
+    }
+
+    #[test]
+    fn session_bus_selection_does_not_use_non_socket_fallback() {
+        assert_eq!(
+            select_session_bus_target(None, None, 1000, false),
+            SessionBusTarget::Environment
+        );
+    }
+
+    #[test]
+    fn session_bus_selection_uses_effective_user_id_in_fallback_path() {
+        assert_eq!(
+            select_session_bus_target(None, None, 4242, true),
+            SessionBusTarget::Explicit(PathBuf::from("/run/user/4242/bus"))
+        );
+    }
 
     #[test]
     fn test_format_duration_zero() {

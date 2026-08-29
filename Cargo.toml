@@ -33,6 +33,7 @@ sunrise-sunset-calculator = "1.0"
 cpal = "0.15"
 spectrum-analyzer = "1.6"
 mpris = "2.0"
+dbus = "0.9"
 image = "0.25"
 
 [profile.release]

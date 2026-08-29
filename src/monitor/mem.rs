@@ -163,9 +163,9 @@ impl MemMonitor {
         let panel_x = x;
 
         // Calculate info panel height
-        // Title(1) + Used(1) + Cached(1) + Buffers(1) + Free(1) + blank(1) + Swap title(1) + Swap(1) = 8
-        let has_swap = self.info.swap_total > 0 && h >= 8;
-        let info_height = if has_swap { 8 } else { 5 };
+        // Title(1) + Used(1) + Cached(1) + Buffers(1) + Available(1) + Swap(1) = 6
+        let has_swap = self.info.swap_total > 0 && h >= 6;
+        let info_height = if has_swap { 6 } else { 5 };
 
         // Position info panel vertically centered
         let info_y = y + ((h as i32 - info_height) / 2).max(0);
@@ -249,29 +249,16 @@ impl MemMonitor {
         );
         cy += 1;
 
-        // Swap section (if present)
+        // Swap (if present)
         if has_swap {
-            cy += 1; // Blank line
-
-            term.set_str(panel_x, cy, "Swap", Some(text_color_scheme(colors)), true);
-            let swap_total_str = format_bytes(self.info.swap_total);
-            term.set_str(
-                panel_x + panel_w as i32 - swap_total_str.len() as i32,
-                cy,
-                &swap_total_str,
-                Some(muted_color_scheme(colors)),
-                false,
-            );
-            cy += 1;
-
             let swap_pct = self.info.swap_percent();
             self.draw_mem_row(
                 term,
                 panel_x,
                 cy,
                 panel_w,
-                "Used",
-                self.info.swap_used(),
+                "Swap",
+                self.info.swap_total,
                 swap_pct,
                 colors,
                 MeterStyle::Usage,
