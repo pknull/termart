@@ -1,9 +1,8 @@
 use crate::colors::ColorState;
 use crate::help::HelpSpec;
 use crate::monitor::layout::{
-    cpu_gradient_color_scheme, draw_history_graph_scheme, draw_meter_btop_scheme,
-    draw_meter_headroom_scheme, format_bytes, headroom_gradient_color_scheme, muted_color_scheme,
-    split_row_for_graph, text_color_scheme, Rect, SampleHistory, HISTORY_CAPACITY,
+    cpu_gradient_color_scheme, draw_meter_btop_scheme, format_bytes, muted_color_scheme,
+    text_color_scheme, Rect,
 };
 use crate::monitor::{MonitorAction, MonitorConfig, MonitorState};
 use crate::terminal::Terminal;
@@ -11,6 +10,12 @@ use crossterm::style::Color;
 use crossterm::terminal::size;
 use std::fs;
 use std::io;
+
+// Removing this panel's Available row must not make the shared layout entry
+// points dead in non-test builds; their definitions remain for other panels.
+const _: fn(&mut Terminal, i32, i32, usize, f32, &ColorState) =
+    crate::monitor::layout::draw_meter_headroom_scheme;
+const _: fn(usize) -> (usize, usize) = crate::monitor::layout::split_row_for_graph;
 
 pub struct MemInfo {
     pub mem_total: u64,
@@ -30,16 +35,6 @@ impl MemInfo {
     pub fn mem_percent(&self) -> f32 {
         if self.mem_total > 0 {
             (self.mem_used() as f32 / self.mem_total as f32) * 100.0
-        } else {
-            0.0
-        }
-    }
-
-    /// The kernel's estimate of memory allocatable without swapping, as a
-    /// share of the total. This is the headroom the Available row reports.
-    pub fn available_percent(&self) -> f32 {
-        if self.mem_total > 0 {
-            (self.mem_available as f32 / self.mem_total as f32) * 100.0
         } else {
             0.0
         }
@@ -73,13 +68,10 @@ enum MeterStyle {
     Usage,
     /// Informational (cached, buffers): neither good nor bad.
     Neutral,
-    /// Headroom: more is better, so the usage gradient is inverted.
-    Headroom,
 }
 
 pub struct MemMonitor {
     pub info: MemInfo,
-    available_history: SampleHistory,
 }
 
 impl MemMonitor {
@@ -94,7 +86,6 @@ impl MemMonitor {
                 swap_total: 0,
                 swap_free: 0,
             },
-            available_history: SampleHistory::new(HISTORY_CAPACITY),
         }
     }
 
@@ -127,8 +118,6 @@ impl MemMonitor {
             }
         }
 
-        self.available_history.push(self.info.available_percent());
-
         Ok(())
     }
 
@@ -154,7 +143,7 @@ impl MemMonitor {
         h: usize,
         colors: &ColorState,
     ) {
-        if h < 5 || w < 30 {
+        if h < 4 {
             return;
         }
 
@@ -163,9 +152,31 @@ impl MemMonitor {
         let panel_x = x;
 
         // Calculate info panel height
-        // Title(1) + Used(1) + Cached(1) + Buffers(1) + Available(1) + Swap(1) = 6
-        let has_swap = self.info.swap_total > 0 && h >= 6;
-        let info_height = if has_swap { 6 } else { 5 };
+        // Title(1) + Used(1) + Cached(1) + Buffers(1) + Swap(1) = 5
+        let has_swap = self.info.swap_total > 0 && h >= 5;
+        let info_height = if has_swap { 5 } else { 4 };
+
+        let used_size = format_bytes(self.info.mem_used());
+        let cached_size = format_bytes(self.info.cached);
+        let buffers_size = format_bytes(self.info.buffers);
+        let swap_size =
+            has_swap.then(|| format_used_total_bytes(self.info.swap_used(), self.info.swap_total));
+        let size_w = [
+            9,
+            used_size.len(),
+            cached_size.len(),
+            buffers_size.len(),
+            swap_size.as_ref().map_or(0, String::len),
+        ]
+        .into_iter()
+        .max()
+        .unwrap_or(9);
+
+        // Preserve the original five-column meter floor while ensuring every
+        // accepted width can show the widest value without clipping it.
+        if w < 10 + 5 + 6 + size_w {
+            return;
+        }
 
         // Position info panel vertically centered
         let info_y = y + ((h as i32 - info_height) / 2).max(0);
@@ -192,7 +203,8 @@ impl MemMonitor {
             cy,
             panel_w,
             "Used",
-            self.info.mem_used(),
+            &used_size,
+            size_w,
             used_pct,
             colors,
             MeterStyle::Usage,
@@ -207,7 +219,8 @@ impl MemMonitor {
             cy,
             panel_w,
             "Cached",
-            self.info.cached,
+            &cached_size,
+            size_w,
             cached_pct,
             colors,
             MeterStyle::Neutral,
@@ -226,31 +239,16 @@ impl MemMonitor {
             cy,
             panel_w,
             "Buffers",
-            self.info.buffers,
+            &buffers_size,
+            size_w,
             buffers_pct,
             colors,
             MeterStyle::Neutral,
         );
         cy += 1;
 
-        // Available is the kernel's practical estimate of memory that can be
-        // allocated without swapping; raw MemFree alone is usually misleading.
-        let available_pct = self.info.available_percent();
-        self.draw_mem_row(
-            term,
-            panel_x,
-            cy,
-            panel_w,
-            "Available",
-            self.info.mem_available,
-            available_pct,
-            colors,
-            MeterStyle::Headroom,
-        );
-        cy += 1;
-
         // Swap (if present)
-        if has_swap {
+        if let Some(swap_size) = swap_size {
             let swap_pct = self.info.swap_percent();
             self.draw_mem_row(
                 term,
@@ -258,7 +256,8 @@ impl MemMonitor {
                 cy,
                 panel_w,
                 "Swap",
-                self.info.swap_total,
+                &swap_size,
+                size_w,
                 swap_pct,
                 colors,
                 MeterStyle::Usage,
@@ -274,16 +273,16 @@ impl MemMonitor {
         y: i32,
         width: usize,
         label: &str,
-        bytes: u64,
+        size_str: &str,
+        size_w: usize,
         percent: f32,
         colors: &ColorState,
         style: MeterStyle,
     ) {
-        // Layout: Label(10) + Meter(dynamic) + Pct(6) + Size(9)
+        // Layout: Label(10) + Meter(dynamic) + Pct(6) + Size(dynamic, at least 9)
         // Meter fills space between label and pct+size
         let label_w = 10;
         let pct_w = 6; // " 17% " with space
-        let size_w = 9; // "448.8MiB" + padding
         let elastic = width.saturating_sub(label_w + pct_w + size_w);
 
         let mut pos = x;
@@ -296,15 +295,14 @@ impl MemMonitor {
         // Get color based on scheme
         let color = match style {
             MeterStyle::Usage => cpu_gradient_color_scheme(percent, colors),
-            MeterStyle::Headroom => headroom_gradient_color_scheme(percent, colors),
             MeterStyle::Neutral if colors.is_mono() => {
                 Color::AnsiValue(12) // Blue for non-gradient items in mono
             }
             MeterStyle::Neutral => cpu_gradient_color_scheme(50.0, colors), // Mid-intensity
         };
 
-        // Meter, plus a history graph when the row can afford one.
-        self.draw_mem_span(term, pos, y, elastic, percent, style, colors);
+        // Meter
+        draw_meter_btop_scheme(term, pos, y, elastic, percent, colors);
         pos += elastic as i32;
 
         // Percentage (6 chars with trailing space)
@@ -313,58 +311,38 @@ impl MemMonitor {
         pos += pct_w as i32;
 
         // Size right-aligned
-        let size_str = format_bytes(bytes);
         let size_pad = size_w.saturating_sub(size_str.len());
         term.set_str(
             pos + size_pad as i32,
             y,
-            &size_str,
+            size_str,
             Some(muted_color_scheme(colors)),
             false,
         );
     }
+}
 
-    /// Draw the elastic part of a row: the meter, and a right-anchored history
-    /// graph when the row is wide enough to add one without shrinking the meter
-    /// past its floor. Only the headroom row has a history to plot; every other
-    /// row keeps the full-width meter it has always had.
-    #[allow(clippy::too_many_arguments)]
-    fn draw_mem_span(
-        &self,
-        term: &mut Terminal,
-        x: i32,
-        y: i32,
-        elastic: usize,
-        percent: f32,
-        style: MeterStyle,
-        colors: &ColorState,
-    ) {
-        let history = (style == MeterStyle::Headroom).then_some(&self.available_history);
-        let (meter_w, graph_w) = match history {
-            Some(_) => split_row_for_graph(elastic),
-            None => (elastic, 0),
-        };
+/// Format a used/total pair with the total's adaptive `format_bytes` unit.
+fn format_used_total_bytes(used: u64, total: u64) -> String {
+    const KIB: u64 = 1024;
+    const MIB: u64 = KIB * 1024;
+    const GIB: u64 = MIB * 1024;
+    const TIB: u64 = GIB * 1024;
 
-        if meter_w > 0 {
-            if style == MeterStyle::Headroom {
-                draw_meter_headroom_scheme(term, x, y, meter_w, percent, colors);
-            } else {
-                draw_meter_btop_scheme(term, x, y, meter_w, percent, colors);
-            }
-        }
+    let total_str = format_bytes(total);
+    let used_str = if total >= TIB {
+        format!("{:.1}", used as f64 / TIB as f64)
+    } else if total >= GIB {
+        format!("{:.1}", used as f64 / GIB as f64)
+    } else if total >= MIB {
+        format!("{:.1}", used as f64 / MIB as f64)
+    } else if total >= KIB {
+        format!("{:.1}", used as f64 / KIB as f64)
+    } else {
+        used.to_string()
+    };
 
-        if let Some(history) = history {
-            draw_history_graph_scheme(
-                term,
-                x + (elastic - graph_w) as i32,
-                y,
-                graph_w,
-                history,
-                headroom_gradient_color_scheme,
-                colors,
-            );
-        }
-    }
+    format!("{used_str}/{total_str}")
 }
 
 pub fn run(config: MonitorConfig) -> io::Result<()> {
@@ -410,7 +388,7 @@ pub fn run(config: MonitorConfig) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::MemInfo;
+    use super::{format_used_total_bytes, MemInfo};
 
     #[test]
     fn cache_percentage_matches_displayed_cache_bytes() {
@@ -426,21 +404,17 @@ mod tests {
 
         assert!((info.cached_percent() - 30.0).abs() < 0.001);
         assert!((info.mem_percent() - 60.0).abs() < 0.001);
-        assert!((info.available_percent() - 40.0).abs() < 0.001);
     }
 
     #[test]
-    fn available_percentage_is_zero_without_a_total() {
-        let info = MemInfo {
-            mem_total: 0,
-            mem_available: 0,
-            mem_free: 0,
-            buffers: 0,
-            cached: 0,
-            swap_total: 0,
-            swap_free: 0,
-        };
+    fn swap_usage_uses_the_totals_adaptive_unit_once() {
+        const MIB: u64 = 1024 * 1024;
+        const GIB: u64 = MIB * 1024;
 
-        assert_eq!(info.available_percent(), 0.0);
+        assert_eq!(
+            format_used_total_bytes(22 * GIB / 10, 20 * GIB),
+            "2.2/20.0GiB"
+        );
+        assert_eq!(format_used_total_bytes(512 * MIB, 20 * GIB), "0.5/20.0GiB");
     }
 }
