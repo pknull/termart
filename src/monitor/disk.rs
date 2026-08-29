@@ -139,6 +139,7 @@ impl DiskMonitor {
             .iter()
             .map(|disk| Entry {
                 name: disk.mount_point.clone(),
+                device: Some(disk.device.clone()),
                 total: disk.total,
                 used: disk.used,
                 available: disk.available,
@@ -152,6 +153,7 @@ impl DiskMonitor {
             // reports its capacity alone.
             let entry = Entry {
                 name: "swap".to_string(),
+                device: None,
                 total: swap.total,
                 used: swap.used,
                 available: swap.total.saturating_sub(swap.used),
@@ -227,10 +229,7 @@ impl DiskMonitor {
         self.draw_title(term, x, cy, w, colors);
         cy += 1;
 
-        for (index, entry) in entries.iter().take(plan.entries).enumerate() {
-            if index > 0 && plan.spacers {
-                cy += 1;
-            }
+        for entry in entries.iter().take(plan.entries) {
             cy = draw_entry(term, x, cy, entry, geom, colors);
         }
 
@@ -358,7 +357,7 @@ mod tests {
     }
 
     #[test]
-    fn an_entry_is_headed_by_its_full_mount_point() {
+    fn a_mounted_entry_carries_its_full_mount_point_and_device() {
         let mut monitor = DiskMonitor::new();
         monitor.disks = vec![
             disk("/dev/sdb2", "/", 750, 250),
@@ -367,10 +366,15 @@ mod tests {
 
         let entries = monitor.entries();
         let headers: Vec<&str> = entries.iter().map(|entry| entry.name.as_str()).collect();
+        let devices: Vec<Option<&str>> = entries
+            .iter()
+            .map(|entry| entry.device.as_deref())
+            .collect();
 
         // The whole mount point, not its last component: /boot/efi and a
         // /mnt/efi would otherwise both read as "efi".
         assert_eq!(headers, vec!["/", "/boot/efi"]);
+        assert_eq!(devices, vec![Some("/dev/sdb2"), Some("/dev/sdb1")]);
     }
 
     #[test]
@@ -387,6 +391,7 @@ mod tests {
         assert_eq!(names, vec!["/", "swap", "/home"]);
 
         let area = &entries[1];
+        assert_eq!(area.device, None);
         assert_eq!(area.available, 1536);
         assert!((area.percent() - 25.0).abs() < 0.001);
     }

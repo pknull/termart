@@ -60,6 +60,9 @@ fn usage_percent(used: u64, available: u64) -> f32 {
 pub(super) struct Entry {
     /// The mount point the entry reports on, or "swap" for the swap area.
     pub name: String,
+    /// The block device carrying a mounted filesystem. Swap has no device of
+    /// its own because a swap file's IO belongs to its containing filesystem.
+    pub device: Option<String>,
     pub total: u64,
     pub used: u64,
     pub available: u64,
@@ -139,30 +142,67 @@ fn row_percent(percent: f32) -> String {
     format!(" {:>3.0}%", percent)
 }
 
-/// A header line's fields, already fitted to the panel width. An empty
-/// capacity is one the width could not afford.
+/// A header line's fields, already fitted to the panel width. An absent device
+/// or empty capacity is one the width could not afford (or swap never had).
 #[derive(Debug, PartialEq, Eq)]
 struct HeaderFields {
     mount: String,
+    device: Option<PositionedField>,
     total: String,
 }
 
-/// Fit an entry's header to `width`. The fields give way in order of what they
-/// tell an operator who is running out of columns: capacity first, while the
-/// mount point that names the entry is truncated only once it has the line to
-/// itself.
+/// A header field whose horizontal position depends on both of its neighbours.
+#[derive(Debug, PartialEq, Eq)]
+struct PositionedField {
+    text: String,
+    column: usize,
+}
+
+/// Fit an entry's header to `width`. A mounted filesystem keeps its full mount
+/// and total while both fit, sheds the device if the middle cannot hold it,
+/// then sheds the total before truncating the mount on a line of its own.
+/// Swap has no device and retains the previous two-field fitting behaviour.
 fn header_fields(entry: &Entry, width: usize) -> HeaderFields {
     let total = format_bytes(entry.total);
-    let before_total = width.saturating_sub(total.chars().count() + FIELD_GAP);
-    if before_total == 0 {
+    let Some(device) = entry.device.as_deref().filter(|device| !device.is_empty()) else {
+        let before_total = width.saturating_sub(total.chars().count() + FIELD_GAP);
+        if before_total == 0 {
+            return HeaderFields {
+                mount: truncate_chars(&entry.name, width),
+                device: None,
+                total: String::new(),
+            };
+        }
+
+        return HeaderFields {
+            mount: truncate_chars(&entry.name, before_total),
+            device: None,
+            total,
+        };
+    };
+
+    let mount_w = entry.name.chars().count();
+    let total_w = total.chars().count();
+    if mount_w + FIELD_GAP + total_w > width {
         return HeaderFields {
             mount: truncate_chars(&entry.name, width),
+            device: None,
             total: String::new(),
         };
     }
 
+    let middle_start = mount_w + FIELD_GAP;
+    let middle_end = width - total_w - FIELD_GAP;
+    let middle_w = middle_end.saturating_sub(middle_start);
+    let device_w = device.chars().count();
+    let device = (device_w <= middle_w).then(|| PositionedField {
+        text: device.to_string(),
+        column: middle_start + (middle_w - device_w) / 2,
+    });
+
     HeaderFields {
-        mount: truncate_chars(&entry.name, before_total),
+        mount: entry.name.clone(),
+        device,
         total,
     }
 }
@@ -173,40 +213,35 @@ fn entry_rows(has_io: bool, io_rows: bool) -> usize {
     2 + usize::from(has_io && io_rows)
 }
 
-/// Rows `count` entries cost together, including the blank spacers between
-/// them when the panel can still afford those.
-fn panel_rows(has_io: &[bool], count: usize, spacers: bool, io_rows: bool) -> usize {
-    let entries: usize = has_io
+/// Rows `count` contiguous entries cost together.
+fn panel_rows(has_io: &[bool], count: usize, io_rows: bool) -> usize {
+    has_io
         .iter()
         .take(count)
         .map(|io| entry_rows(*io, io_rows))
-        .sum();
-    entries + if spacers { count.saturating_sub(1) } else { 0 }
+        .sum()
 }
 
 /// How a row budget is spent: how many entries fit, whether they keep their
-/// spacers and their IO rows, and whether a row was kept back to report the
-/// ones left out.
+/// IO rows, and whether a row was kept back to report the ones left out.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) struct PanelPlan {
     pub entries: usize,
-    pub spacers: bool,
     pub io_rows: bool,
     pub affordance: bool,
     pub rows: usize,
 }
 
-/// Degrade a full panel to fit `budget` rows, in order: blank spacers first,
-/// then the IO rows, then whole entries from the end. Dropping entries keeps a
-/// row back for the "+N more" affordance, and an entry is only ever dropped
-/// whole, so a header is never left without the rows it introduces.
+/// Degrade a full panel to fit `budget` rows, in order: IO rows first, then
+/// whole entries from the end. Dropping entries keeps a row back for the "+N
+/// more" affordance, and an entry is only ever dropped whole, so a header is
+/// never left without the rows it introduces.
 fn plan_panel(budget: usize, has_io: &[bool]) -> PanelPlan {
-    for (spacers, io_rows) in [(true, true), (false, true), (false, false)] {
-        let rows = panel_rows(has_io, has_io.len(), spacers, io_rows);
+    for io_rows in [true, false] {
+        let rows = panel_rows(has_io, has_io.len(), io_rows);
         if rows <= budget {
             return PanelPlan {
                 entries: has_io.len(),
-                spacers,
                 io_rows,
                 affordance: false,
                 rows,
@@ -220,7 +255,6 @@ fn plan_panel(budget: usize, has_io: &[bool]) -> PanelPlan {
     let entries = budget.saturating_sub(usize::from(affordance)) / entry_rows(false, false);
     PanelPlan {
         entries,
-        spacers: false,
         io_rows: false,
         affordance,
         rows: entries * entry_rows(false, false) + usize::from(affordance),
@@ -267,6 +301,15 @@ fn draw_header(
         Some(header_color_scheme(colors)),
         false,
     );
+    if let Some(device) = fields.device {
+        term.set_str(
+            x + device.column as i32,
+            y,
+            &device.text,
+            Some(muted),
+            false,
+        );
+    }
     if !fields.total.is_empty() {
         let at = width - fields.total.chars().count();
         term.set_str(x + at as i32, y, &fields.total, Some(muted), false);
@@ -349,12 +392,13 @@ mod tests {
     use super::{
         bar_geometry, entry_rows, header_fields, panel_rows, plan_panel, plan_render, row_label,
         row_percent, truncate_chars, usage_percent, value_field_width, Entry, EntryGeometry,
-        HeaderFields, PanelPlan, BAR_X, ENTRY_PCT_W, FREE_FIELD_W, MIN_BAR_W,
+        HeaderFields, PanelPlan, PositionedField, BAR_X, ENTRY_PCT_W, FREE_FIELD_W, MIN_BAR_W,
     };
 
     fn entry(name: &str, available: u64) -> Entry {
         Entry {
             name: name.to_string(),
+            device: Some("/dev/sda1".to_string()),
             total: available * 2,
             used: available,
             available,
@@ -479,58 +523,79 @@ mod tests {
     }
 
     #[test]
-    fn a_header_carries_the_full_mount_point_and_its_capacity() {
+    fn a_header_carries_and_centers_the_mount_device_and_capacity() {
         let disk = entry("/home", 512 * 1024 * 1024);
         assert_eq!(
             header_fields(&disk, 60),
             HeaderFields {
                 mount: "/home".to_string(),
+                device: Some(PositionedField {
+                    text: "/dev/sda1".to_string(),
+                    column: 25,
+                }),
                 total: "1.0GiB".to_string(),
             }
         );
+
+        let fields = header_fields(&disk, 60);
+        let device = fields.device.expect("device fits");
+        let total_column = 60 - fields.total.chars().count();
+        let left_gap = device.column - fields.mount.chars().count();
+        let right_gap = total_column - (device.column + device.text.chars().count());
+        assert_eq!(left_gap, right_gap);
     }
 
     #[test]
-    fn a_narrow_header_sheds_fields_instead_of_colliding_them() {
+    fn a_narrow_header_sheds_the_device_then_total_before_truncating_the_mount() {
         let disk = entry("/var/lib/containers", 512 * 1024 * 1024);
 
-        // The capacity stays flush right while the mount point gives up only
-        // the columns needed to prevent the two fields from colliding.
-        let fitted = header_fields(&disk, 25);
-        assert_eq!(fitted.mount, "/var/lib/container");
-        assert_eq!(fitted.total, "1.0GiB");
-        assert!(fitted.mount.chars().count() + 1 + fitted.total.chars().count() <= 25);
+        // One column below the width all three fields need, the device goes
+        // whole while the full mount and right-aligned total remain.
+        let without_device = header_fields(&disk, 35);
+        assert_eq!(without_device.mount, "/var/lib/containers");
+        assert_eq!(without_device.device, None);
+        assert_eq!(without_device.total, "1.0GiB");
 
-        // Once the capacity no longer fits, the mount point has the line to
-        // itself and is truncated to it.
-        let alone = header_fields(&disk, 6);
-        assert_eq!(alone.mount, "/var/l");
+        // The total gives way before any part of the mount does.
+        let mount_alone = header_fields(&disk, 25);
+        assert_eq!(mount_alone.mount, "/var/lib/containers");
+        assert_eq!(mount_alone.device, None);
+        assert_eq!(mount_alone.total, "");
+
+        // Only once it has the line to itself does the mount truncate.
+        let truncated = header_fields(&disk, 18);
+        assert_eq!(truncated.mount, "/var/lib/container");
+        assert_eq!(truncated.device, None);
+        assert_eq!(truncated.total, "");
+    }
+
+    #[test]
+    fn swap_keeps_its_existing_two_field_header_fitting() {
+        let mut area = entry("swap-area-with-a-long-name", 512 * 1024 * 1024);
+        area.device = None;
+
+        let fitted = header_fields(&area, 25);
+        assert_eq!(fitted.mount, "swap-area-with-a-l");
+        assert_eq!(fitted.device, None);
+        assert_eq!(fitted.total, "1.0GiB");
+
+        let alone = header_fields(&area, 6);
+        assert_eq!(alone.mount, "swap-a");
+        assert_eq!(alone.device, None);
         assert_eq!(alone.total, "");
     }
 
-    /// Three entries, the middle one without an IO row: 8 rows of entries plus
-    /// 2 spacers when the panel can afford everything.
+    /// Three contiguous entries, the middle one without an IO row: 8 rows.
     const MIXED: [bool; 3] = [true, false, true];
 
     #[test]
-    fn compaction_drops_spacers_then_io_rows_before_any_entry() {
+    fn compaction_drops_io_rows_before_any_entry() {
         let has_io = MIXED;
 
         assert_eq!(
-            plan_panel(10, &has_io),
+            plan_panel(8, &has_io),
             PanelPlan {
                 entries: 3,
-                spacers: true,
-                io_rows: true,
-                affordance: false,
-                rows: 10
-            }
-        );
-        assert_eq!(
-            plan_panel(9, &has_io),
-            PanelPlan {
-                entries: 3,
-                spacers: false,
                 io_rows: true,
                 affordance: false,
                 rows: 8
@@ -540,7 +605,6 @@ mod tests {
             plan_panel(7, &has_io),
             PanelPlan {
                 entries: 3,
-                spacers: false,
                 io_rows: false,
                 affordance: false,
                 rows: 6
@@ -552,13 +616,12 @@ mod tests {
     fn compaction_drops_whole_entries_last_and_reports_the_ones_hidden() {
         let has_io = MIXED;
 
-        // Only once spacers and IO rows are gone do entries go, and a row is
-        // kept back for "+N more".
+        // Only once IO rows are gone do entries go, and a row is kept back for
+        // "+N more".
         assert_eq!(
             plan_panel(5, &has_io),
             PanelPlan {
                 entries: 2,
-                spacers: false,
                 io_rows: false,
                 affordance: true,
                 rows: 5
@@ -568,7 +631,6 @@ mod tests {
             plan_panel(1, &has_io),
             PanelPlan {
                 entries: 0,
-                spacers: false,
                 io_rows: false,
                 affordance: true,
                 rows: 1
@@ -579,7 +641,6 @@ mod tests {
             plan_panel(0, &has_io),
             PanelPlan {
                 entries: 0,
-                spacers: false,
                 io_rows: false,
                 affordance: false,
                 rows: 0
@@ -606,9 +667,9 @@ mod tests {
                 );
                 assert!(plan.entries <= has_io.len());
 
-                // Every planned row belongs to a whole entry, a spacer between
-                // two of them, or the affordance for the ones left out.
-                let drawn = panel_rows(&has_io, plan.entries, plan.spacers, plan.io_rows);
+                // Every planned row belongs to a whole entry or the affordance
+                // for the ones left out.
+                let drawn = panel_rows(&has_io, plan.entries, plan.io_rows);
                 assert_eq!(plan.rows, drawn + usize::from(plan.affordance));
                 assert!(!plan.affordance || plan.entries < has_io.len());
                 assert!(
@@ -627,7 +688,9 @@ mod tests {
         // An entry with no utilization to report — swap — costs two rows even
         // where the panel is drawing IO rows.
         assert_eq!(entry_rows(false, true), 2);
-        assert_eq!(panel_rows(&[true, true], 2, true, true), 7);
-        assert_eq!(panel_rows(&[true, true], 0, true, true), 0);
+        // Consecutive entries cost only their own rows: no blank spacer is
+        // inserted between the first Used row and the second header.
+        assert_eq!(panel_rows(&[true, true], 2, true), 6);
+        assert_eq!(panel_rows(&[true, true], 0, true), 0);
     }
 }
