@@ -366,7 +366,7 @@ pub fn run(config: CodexTokenConfig) -> io::Result<()> {
                 status == "LIMIT REACHED",
             );
         }
-        y += 2;
+        y += 1;
 
         let since_fetch = last_fetch.elapsed();
         if let Some(limit) = usage.rate_limit.as_ref() {

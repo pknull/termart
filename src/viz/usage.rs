@@ -151,6 +151,22 @@ fn fitted_countdown(duration: Duration) -> Option<String> {
     (countdown.chars().count() <= COUNTDOWN_TEXT_WIDTH).then_some(countdown)
 }
 
+/// Split a countdown into consecutive runs that share one weight, so the unit
+/// letters can be emphasised without changing the string, its color, or the
+/// column any character lands in. Digits and the right-aligning pad stay in the
+/// countdown's existing weight; the `D`, `H` and `M` units are drawn bold.
+fn countdown_segments(text: &str) -> Vec<(String, bool)> {
+    let mut segments: Vec<(String, bool)> = Vec::new();
+    for ch in text.chars() {
+        let bold = ch.is_ascii_alphabetic();
+        match segments.last_mut() {
+            Some((run, run_bold)) if *run_bold == bold => run.push(ch),
+            _ => segments.push((ch.to_string(), bold)),
+        }
+    }
+    segments
+}
+
 /// Draw a quota bar with an optional pacing underlay and reset countdown.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn draw_usage_bar(
@@ -189,13 +205,18 @@ pub(super) fn draw_usage_bar(
 
     if let Some((offset, countdown)) = countdown_offset(width).zip(countdown) {
         if let Some(countdown) = fitted_countdown(countdown) {
-            term.set_str(
-                x as i32 + offset as i32,
-                y as i32,
-                &format!("{countdown:>COUNTDOWN_TEXT_WIDTH$}"),
-                Some(muted_color_scheme(colors)),
-                false,
-            );
+            let countdown = format!("{countdown:>COUNTDOWN_TEXT_WIDTH$}");
+            let mut column = x as i32 + offset as i32;
+            for (segment, bold) in countdown_segments(&countdown) {
+                term.set_str(
+                    column,
+                    y as i32,
+                    &segment,
+                    Some(muted_color_scheme(colors)),
+                    bold,
+                );
+                column += text_columns(&segment) as i32;
+            }
         }
     }
     pos = x as i32 + percent_offset(width) as i32;
@@ -251,10 +272,10 @@ fn draw_meter_with_pacing(
 #[cfg(test)]
 mod tests {
     use super::{
-        countdown_budget, countdown_offset, elapsed_percent, fitted_countdown, format_countdown,
-        format_window, meter_color_band, meter_width, percent_offset, quota_band_color,
-        quota_color_band, QuotaColorBand, COUNTDOWN_TEXT_WIDTH, COUNTDOWN_WIDTH, LABEL_WIDTH,
-        PERCENT_WIDTH,
+        countdown_budget, countdown_offset, countdown_segments, elapsed_percent, fitted_countdown,
+        format_countdown, format_window, meter_color_band, meter_width, percent_offset,
+        quota_band_color, quota_color_band, QuotaColorBand, COUNTDOWN_TEXT_WIDTH, COUNTDOWN_WIDTH,
+        LABEL_WIDTH, PERCENT_WIDTH,
     };
     use crate::colors::ColorState;
     use crossterm::style::Color;
@@ -393,6 +414,78 @@ mod tests {
             Some("99D00H".to_string())
         );
         assert_eq!(fitted_countdown(Duration::from_secs(100 * DAY)), None);
+    }
+
+    #[test]
+    fn countdown_segments_split_digits_from_bold_unit_letters() {
+        assert_eq!(
+            countdown_segments("06D11H"),
+            vec![
+                ("06".to_string(), false),
+                ("D".to_string(), true),
+                ("11".to_string(), false),
+                ("H".to_string(), true),
+            ]
+        );
+        assert_eq!(
+            countdown_segments("04H37M"),
+            vec![
+                ("04".to_string(), false),
+                ("H".to_string(), true),
+                ("37".to_string(), false),
+                ("M".to_string(), true),
+            ]
+        );
+        // The right-aligning pad shares the digits' weight rather than
+        // starting a run of its own.
+        assert_eq!(
+            countdown_segments("   37M"),
+            vec![("   37".to_string(), false), ("M".to_string(), true)]
+        );
+    }
+
+    /// Replay the segment drawing of `draw_usage_bar` as `(column, text,
+    /// bold)` triples relative to the start of the reserved countdown column.
+    fn drawn_countdown(text: &str) -> Vec<(usize, String, bool)> {
+        let mut column = 0usize;
+        let mut drawn = Vec::new();
+        for (segment, bold) in countdown_segments(&format!("{text:>COUNTDOWN_TEXT_WIDTH$}")) {
+            let columns = segment.chars().count();
+            drawn.push((column, segment, bold));
+            column += columns;
+        }
+        drawn
+    }
+
+    #[test]
+    fn bold_units_do_not_move_the_right_aligned_countdown() {
+        for text in ["06D11H", "6D11H", "04H37M", "37M"] {
+            let drawn = drawn_countdown(text);
+
+            // The segments tile the reserved column in order and spell exactly
+            // the string a single right-aligned write would have drawn.
+            let rebuilt: String = drawn
+                .iter()
+                .map(|(_, segment, _)| segment.as_str())
+                .collect();
+            assert_eq!(rebuilt, format!("{text:>COUNTDOWN_TEXT_WIDTH$}"), "{text}");
+
+            let (column, segment, _) = drawn.last().expect("a countdown draws a segment");
+            assert_eq!(
+                column + segment.chars().count(),
+                COUNTDOWN_TEXT_WIDTH,
+                "{text}"
+            );
+
+            // Bold is carried by the unit letters alone.
+            for (_, segment, bold) in &drawn {
+                assert_eq!(
+                    *bold,
+                    segment.chars().all(|ch| matches!(ch, 'D' | 'H' | 'M')),
+                    "{text} segment {segment:?}"
+                );
+            }
+        }
     }
 
     #[test]

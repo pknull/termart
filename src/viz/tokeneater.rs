@@ -971,7 +971,7 @@ pub fn run(config: TokenEaterConfig) -> io::Result<()> {
                 }
             }
         }
-        y += 2;
+        y += 1;
 
         for bar in &bars {
             let remaining = bar.resets_at.as_deref().and_then(time_until_reset);
