@@ -2,9 +2,7 @@
 
 use crate::monitor::layout::muted_color_scheme;
 use crate::terminal::Terminal;
-use crate::viz::usage::{
-    draw_usage_bar, elapsed_percent, format_duration, format_window, text_columns,
-};
+use crate::viz::usage::{draw_usage_bar, elapsed_percent, format_window, text_columns};
 use crate::viz::VizState;
 use crossterm::event::KeyCode;
 use crossterm::style::Color;
@@ -243,25 +241,12 @@ fn draw_window(
         width,
         window.used_percent.unwrap_or(0.0),
         expected,
+        if show_reset { remaining } else { None },
         &label,
         &state.colors,
     );
 
-    if show_reset {
-        if let Some(remaining) = remaining {
-            let reset = format!("        resets in {}", format_duration(remaining));
-            term.set_str(
-                x as i32,
-                y as i32 + 1,
-                &reset,
-                Some(muted_color_scheme(&state.colors)),
-                false,
-            );
-        }
-        2
-    } else {
-        1
-    }
+    1
 }
 
 pub fn run(config: CodexTokenConfig) -> io::Result<()> {
@@ -395,7 +380,7 @@ pub fn run(config: CodexTokenConfig) -> io::Result<()> {
                     since_fetch,
                     &state,
                     true,
-                ) + 1;
+                );
             }
             if let Some(window) = limit.secondary_window.as_ref() {
                 y += draw_window(
@@ -407,7 +392,7 @@ pub fn run(config: CodexTokenConfig) -> io::Result<()> {
                     since_fetch,
                     &state,
                     true,
-                ) + 1;
+                );
             }
         }
 

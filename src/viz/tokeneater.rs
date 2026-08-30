@@ -4,9 +4,8 @@
 //! Supports OAuth authentication with proper scopes for usage API access.
 
 use crate::colors::scheme_color;
-use crate::monitor::layout::muted_color_scheme;
 use crate::terminal::Terminal;
-use crate::viz::usage::{draw_usage_bar, elapsed_percent, format_duration, text_columns};
+use crate::viz::usage::{draw_usage_bar, elapsed_percent, text_columns};
 use crate::viz::VizState;
 use crossterm::event::KeyCode;
 use crossterm::style::Color;
@@ -975,12 +974,13 @@ pub fn run(config: TokenEaterConfig) -> io::Result<()> {
         y += 2;
 
         for bar in &bars {
-            let expected_pct = bar
-                .resets_at
-                .as_deref()
-                .and_then(time_until_reset)
+            let remaining = bar.resets_at.as_deref().and_then(time_until_reset);
+            let expected_pct = remaining
                 .zip(bar.window_hours)
                 .map(|(remaining, window_hours)| elapsed_pct(remaining, window_hours));
+            // Scoped weekly bars share the all-model weekly reset, so only the
+            // bars that owned a reset line carry the inline countdown.
+            let countdown = if bar.show_reset { remaining } else { None };
             draw_usage_bar(
                 &mut term,
                 bar_x,
@@ -988,27 +988,11 @@ pub fn run(config: TokenEaterConfig) -> io::Result<()> {
                 bar_width,
                 bar.utilization,
                 expected_pct,
+                countdown,
                 &bar.label,
                 &state.colors,
             );
             y += 1;
-
-            if !bar.show_reset {
-                continue;
-            }
-            if let Some(ref resets_at) = bar.resets_at {
-                if let Some(dur) = time_until_reset(resets_at) {
-                    let reset_str = format!("        resets in {}", format_duration(dur));
-                    term.set_str(
-                        bar_x as i32,
-                        y as i32,
-                        &reset_str,
-                        Some(muted_color_scheme(&state.colors)),
-                        false,
-                    );
-                }
-            }
-            y += 2;
         }
 
         if let Some(ref err) = fetch_error {
