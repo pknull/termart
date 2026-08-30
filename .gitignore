@@ -37,3 +37,6 @@ Memory/events/*.log
 # Asha Memory v2 recovery (managed)
 /Work/memory-migration/
 /Work/session-state/
+
+# legacy Memory dirs stay local
+Memory/events/

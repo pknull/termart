@@ -16,3 +16,5 @@
   `headroom_gradient_color_scheme` rather than duplicating thresholds: high
   availability renders green and low renders red, inverting the load ramp.
 
+- Memory/ is exactly the v2 pair (activeContext.md, decisions.md); reference
+  material lives in docs/ and README, machine-local state under ignored Work/.
