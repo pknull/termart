@@ -128,14 +128,27 @@ fn meter_width(width: usize) -> usize {
 
 /// Column offset from the start of the row at which the countdown text begins,
 /// or `None` when the row cannot hold every fixed column. The drawing code and
-/// the tests read the position from this one expression, so the invariant that
-/// matters -- `offset + COUNTDOWN_TEXT_WIDTH == width`, i.e. the row ends on its
-/// last column and never past it -- is proven rather than assumed.
+/// the tests read the position from this one expression. The countdown sits
+/// between the shortened meter and the baseline-aligned percent column.
 fn countdown_offset(width: usize) -> Option<usize> {
     if countdown_budget(width) == 0 {
         return None;
     }
-    Some(LABEL_WIDTH + meter_width(width) + PERCENT_WIDTH + 1)
+    Some(LABEL_WIDTH + meter_width(width) + 1)
+}
+
+/// Baseline column at which the percent text begins. The countdown consumes
+/// meter columns before this point, never moving the percent column.
+fn percent_offset(width: usize) -> usize {
+    LABEL_WIDTH + meter_width(width) + countdown_budget(width)
+}
+
+/// Return only countdowns that fit the complete grammar in the reserved text
+/// column. Omitting an exceptional overlong value is preferable to rendering a
+/// truncated string with a missing unit.
+fn fitted_countdown(duration: Duration) -> Option<String> {
+    let countdown = format_countdown(duration);
+    (countdown.chars().count() <= COUNTDOWN_TEXT_WIDTH).then_some(countdown)
 }
 
 /// Draw a quota bar with an optional pacing underlay and reset countdown.
@@ -173,7 +186,19 @@ pub(super) fn draw_usage_bar(
         expected_pct.map(|value| value.clamp(0.0, 100.0) as f32),
         colors,
     );
-    pos += meter_width as i32;
+
+    if let Some((offset, countdown)) = countdown_offset(width).zip(countdown) {
+        if let Some(countdown) = fitted_countdown(countdown) {
+            term.set_str(
+                x as i32 + offset as i32,
+                y as i32,
+                &format!("{countdown:>COUNTDOWN_TEXT_WIDTH$}"),
+                Some(muted_color_scheme(colors)),
+                false,
+            );
+        }
+    }
+    pos = x as i32 + percent_offset(width) as i32;
 
     let pct = pct.clamp(0.0, 100.0);
     let pct_str = format!("{:5.1}%", pct);
@@ -188,23 +213,6 @@ pub(super) fn draw_usage_bar(
         &pct_str,
         Some(color),
         band == QuotaColorBand::OverBoundary,
-    );
-
-    let Some((offset, countdown)) = countdown_offset(width).zip(countdown) else {
-        return;
-    };
-    // Truncated to the reserved text budget so an implausible countdown can
-    // never push the row past `width`.
-    let countdown: String = format_countdown(countdown)
-        .chars()
-        .take(COUNTDOWN_TEXT_WIDTH)
-        .collect();
-    term.set_str(
-        x as i32 + offset as i32,
-        y as i32,
-        &countdown,
-        Some(muted_color_scheme(colors)),
-        false,
     );
 }
 
@@ -243,9 +251,10 @@ fn draw_meter_with_pacing(
 #[cfg(test)]
 mod tests {
     use super::{
-        countdown_budget, countdown_offset, elapsed_percent, format_countdown, format_window,
-        meter_color_band, meter_width, quota_band_color, quota_color_band, QuotaColorBand,
-        COUNTDOWN_TEXT_WIDTH, COUNTDOWN_WIDTH, LABEL_WIDTH, PERCENT_WIDTH,
+        countdown_budget, countdown_offset, elapsed_percent, fitted_countdown, format_countdown,
+        format_window, meter_color_band, meter_width, percent_offset, quota_band_color,
+        quota_color_band, QuotaColorBand, COUNTDOWN_TEXT_WIDTH, COUNTDOWN_WIDTH, LABEL_WIDTH,
+        PERCENT_WIDTH,
     };
     use crate::colors::ColorState;
     use crossterm::style::Color;
@@ -340,15 +349,10 @@ mod tests {
         }
     }
 
-    /// Exclusive end column of the widest element a row draws, measured from
-    /// the start of the row. Mirrors the order `draw_usage_bar` writes in:
-    /// label, meter, percent, and -- when the budget is claimed and the entry
-    /// has one -- the countdown.
-    fn row_end_column(width: usize, has_countdown: bool) -> usize {
-        match countdown_offset(width) {
-            Some(offset) if has_countdown => offset + COUNTDOWN_TEXT_WIDTH,
-            _ => LABEL_WIDTH + meter_width(width) + PERCENT_WIDTH,
-        }
+    /// Exclusive end column of the row. The percent remains the final fixed
+    /// column whether or not this entry has a countdown.
+    fn row_end_column(width: usize) -> usize {
+        percent_offset(width) + PERCENT_WIDTH
     }
 
     #[test]
@@ -356,31 +360,39 @@ mod tests {
         const RESERVED: usize = LABEL_WIDTH + PERCENT_WIDTH + COUNTDOWN_WIDTH;
 
         for width in 0..=200usize {
-            for has_countdown in [false, true] {
-                let end = row_end_column(width, has_countdown);
-                if width >= LABEL_WIDTH + PERCENT_WIDTH {
-                    assert!(
-                        end <= width,
-                        "width {} with countdown {} ends at column {}",
-                        width,
-                        has_countdown,
-                        end
-                    );
-                } else {
-                    // Below the label-plus-percent minimum the percent column
-                    // already overhung the box before this change; the row is
-                    // byte-for-byte what the baseline drew, not a new overrun.
-                    assert_eq!(end, LABEL_WIDTH + PERCENT_WIDTH, "width {}", width);
-                }
+            let end = row_end_column(width);
+            if width >= LABEL_WIDTH + PERCENT_WIDTH {
+                assert!(end <= width, "width {} ends at column {}", width, end);
+            } else {
+                // Below the label-plus-percent minimum the percent column
+                // already overhung the box before this change; the row is
+                // byte-for-byte what the baseline drew, not a new overrun.
+                assert_eq!(end, LABEL_WIDTH + PERCENT_WIDTH, "width {}", width);
             }
         }
 
-        // Where the countdown is drawn it fills the row exactly to its last
-        // column: one column further would leave the box, one column fewer
-        // would mean the budget carved out of the meter was never used.
+        // The percent remains at the right edge wherever the complete fixed
+        // layout fits.
         for width in RESERVED..=200usize {
-            assert_eq!(row_end_column(width, true), width, "width {}", width);
+            assert_eq!(row_end_column(width), width, "width {}", width);
         }
+    }
+
+    #[test]
+    fn countdown_does_not_move_the_baseline_percent_column() {
+        for width in 0..=200usize {
+            let baseline = LABEL_WIDTH + width.saturating_sub(LABEL_WIDTH + PERCENT_WIDTH);
+            assert_eq!(percent_offset(width), baseline, "width {}", width);
+        }
+    }
+
+    #[test]
+    fn overlong_countdowns_are_omitted_instead_of_losing_a_unit() {
+        assert_eq!(
+            fitted_countdown(Duration::from_secs(99 * DAY)),
+            Some("99D00H".to_string())
+        );
+        assert_eq!(fitted_countdown(Duration::from_secs(100 * DAY)), None);
     }
 
     #[test]
@@ -414,13 +426,9 @@ mod tests {
             );
         }
         // The first width that can hold every fixed column is the first that
-        // draws a countdown, and it starts immediately after the percent
-        // column and its separating space.
+        // draws a countdown, immediately after the meter's separating space.
         assert_eq!(countdown_budget(RESERVED), COUNTDOWN_WIDTH);
-        assert_eq!(
-            countdown_offset(RESERVED),
-            Some(LABEL_WIDTH + PERCENT_WIDTH + 1)
-        );
+        assert_eq!(countdown_offset(RESERVED), Some(LABEL_WIDTH + 1));
     }
 
     #[test]
