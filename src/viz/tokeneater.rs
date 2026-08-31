@@ -958,11 +958,13 @@ pub fn run(config: TokenEaterConfig) -> io::Result<()> {
                 if let Some(dur) = time_until_reset(resets_at) {
                     let hours_remaining = dur.as_secs_f64() / 3600.0;
                     let hours_elapsed = 5.0 - hours_remaining;
-                    // Align so last char falls within terminal width
+                    // Right edge of the bar box, so the indicator ends flush
+                    // with the percent column of every row below it. The Codex
+                    // view aligns its own status line the same way.
                     draw_pacing_inline(
                         &mut term,
                         pacing_min_x,
-                        (bar_x + bar_width + 1).min(w as usize),
+                        (bar_x + bar_width).min(w as usize),
                         y,
                         session.utilization,
                         hours_elapsed.max(0.0),

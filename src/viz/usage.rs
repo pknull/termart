@@ -1,5 +1,5 @@
 use crate::colors::ColorState;
-use crate::monitor::layout::{cpu_gradient_color_scheme, muted_color_scheme};
+use crate::monitor::layout::{cpu_gradient_color_scheme, muted_color_scheme, text_color_scheme};
 use crate::terminal::Terminal;
 use crossterm::style::Color;
 use std::time::Duration;
@@ -151,20 +151,81 @@ fn fitted_countdown(duration: Duration) -> Option<String> {
     (countdown.chars().count() <= COUNTDOWN_TEXT_WIDTH).then_some(countdown)
 }
 
-/// Split a countdown into consecutive runs that share one weight, so the unit
-/// letters can be emphasised without changing the string, its color, or the
-/// column any character lands in. Digits and the right-aligning pad stay in the
-/// countdown's existing weight; the `D`, `H` and `M` units are drawn bold.
-fn countdown_segments(text: &str) -> Vec<(String, bool)> {
-    let mut segments: Vec<(String, bool)> = Vec::new();
+/// Which foreground one run of a countdown is drawn in. The digits carry the
+/// value, so they take the bright neutral data foreground; `D`, `H` and `M` are
+/// scale markers, so they stay in the muted countdown foreground. Separating the
+/// two by hue is what makes `5D21H` legible at terminal size -- the same color
+/// in a heavier weight was not.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CountdownRole {
+    /// Digits, and the right-aligning pad that shares their run.
+    Value,
+    /// A `D`, `H` or `M` unit letter.
+    Unit,
+}
+
+/// Role of a single countdown character. `format_countdown` emits only digits,
+/// the pad, and these three uppercase unit letters.
+fn countdown_role(ch: char) -> CountdownRole {
+    if matches!(ch, 'D' | 'H' | 'M') {
+        CountdownRole::Unit
+    } else {
+        CountdownRole::Value
+    }
+}
+
+/// Foreground for a countdown run. Both roles reuse an existing neutral scheme
+/// color, so the countdown says only "value" or "unit" and never borrows the
+/// quota bands' warning vocabulary.
+fn countdown_role_color(role: CountdownRole, colors: &ColorState) -> Color {
+    match role {
+        CountdownRole::Value => text_color_scheme(colors),
+        CountdownRole::Unit => muted_color_scheme(colors),
+    }
+}
+
+/// Split a countdown into consecutive runs that share one role, so the digits
+/// and their units can be told apart without changing the string, its width, or
+/// the column any character lands in. The runs concatenate back to `text` in
+/// order, so drawing them left to right redraws exactly that string.
+fn countdown_segments(text: &str) -> Vec<(String, CountdownRole)> {
+    let mut segments: Vec<(String, CountdownRole)> = Vec::new();
     for ch in text.chars() {
-        let bold = ch.is_ascii_alphabetic();
+        let role = countdown_role(ch);
         match segments.last_mut() {
-            Some((run, run_bold)) if *run_bold == bold => run.push(ch),
-            _ => segments.push((ch.to_string(), bold)),
+            Some((run, run_role)) if *run_role == role => run.push(ch),
+            _ => segments.push((ch.to_string(), role)),
         }
     }
     segments
+}
+
+/// The countdown draw list for one row as `(column, run, role)`, with columns
+/// measured from the start of the row. Consecutive runs abut, so the list tiles
+/// the reserved column exactly: the first run starts at `countdown_offset` and
+/// the last ends at `percent_offset`. An empty list leaves the reserved column
+/// blank -- the row has no countdown, is too narrow to reserve one, or its
+/// countdown does not fit the reserved width -- and none of those cases touch
+/// the percent column, which `percent_offset` derives from the width alone.
+fn countdown_runs(
+    width: usize,
+    countdown: Option<Duration>,
+) -> Vec<(usize, String, CountdownRole)> {
+    let Some((offset, countdown)) = countdown_offset(width).zip(countdown) else {
+        return Vec::new();
+    };
+    let Some(countdown) = fitted_countdown(countdown) else {
+        return Vec::new();
+    };
+
+    let mut column = offset;
+    let mut runs = Vec::new();
+    for (run, role) in countdown_segments(&format!("{countdown:>COUNTDOWN_TEXT_WIDTH$}")) {
+        let columns = text_columns(&run);
+        runs.push((column, run, role));
+        column += columns;
+    }
+    runs
 }
 
 /// Draw a quota bar with an optional pacing underlay and reset countdown.
@@ -203,21 +264,18 @@ pub(super) fn draw_usage_bar(
         colors,
     );
 
-    if let Some((offset, countdown)) = countdown_offset(width).zip(countdown) {
-        if let Some(countdown) = fitted_countdown(countdown) {
-            let countdown = format!("{countdown:>COUNTDOWN_TEXT_WIDTH$}");
-            let mut column = x as i32 + offset as i32;
-            for (segment, bold) in countdown_segments(&countdown) {
-                term.set_str(
-                    column,
-                    y as i32,
-                    &segment,
-                    Some(muted_color_scheme(colors)),
-                    bold,
-                );
-                column += text_columns(&segment) as i32;
-            }
-        }
+    // Weight is uniform: every run is drawn at normal weight, because the two
+    // color roles already carry the digit/unit distinction and bolding either
+    // run on top of the hue split only smears the contrast it was meant to
+    // create. Bold in the countdown column is now unused, not merely absent.
+    for (column, run, role) in countdown_runs(width, countdown) {
+        term.set_str(
+            x as i32 + column as i32,
+            y as i32,
+            &run,
+            Some(countdown_role_color(role, colors)),
+            false,
+        );
     }
     pos = x as i32 + percent_offset(width) as i32;
 
@@ -272,12 +330,14 @@ fn draw_meter_with_pacing(
 #[cfg(test)]
 mod tests {
     use super::{
-        countdown_budget, countdown_offset, countdown_segments, elapsed_percent, fitted_countdown,
-        format_countdown, format_window, meter_color_band, meter_width, percent_offset,
-        quota_band_color, quota_color_band, QuotaColorBand, COUNTDOWN_TEXT_WIDTH, COUNTDOWN_WIDTH,
-        LABEL_WIDTH, PERCENT_WIDTH,
+        countdown_budget, countdown_offset, countdown_role, countdown_role_color, countdown_runs,
+        countdown_segments, elapsed_percent, fitted_countdown, format_countdown, format_window,
+        meter_color_band, meter_width, percent_offset, quota_band_color, quota_color_band,
+        CountdownRole, QuotaColorBand, COUNTDOWN_TEXT_WIDTH, COUNTDOWN_WIDTH, LABEL_WIDTH,
+        PERCENT_WIDTH,
     };
     use crate::colors::ColorState;
+    use crate::monitor::layout::{muted_color_scheme, text_color_scheme};
     use crossterm::style::Color;
     use std::time::Duration;
 
@@ -417,73 +477,199 @@ mod tests {
     }
 
     #[test]
-    fn countdown_segments_split_digits_from_bold_unit_letters() {
+    fn countdown_segments_split_digit_runs_from_unit_runs() {
         assert_eq!(
             countdown_segments("06D11H"),
             vec![
-                ("06".to_string(), false),
-                ("D".to_string(), true),
-                ("11".to_string(), false),
-                ("H".to_string(), true),
+                ("06".to_string(), CountdownRole::Value),
+                ("D".to_string(), CountdownRole::Unit),
+                ("11".to_string(), CountdownRole::Value),
+                ("H".to_string(), CountdownRole::Unit),
             ]
         );
-        assert_eq!(
-            countdown_segments("04H37M"),
-            vec![
-                ("04".to_string(), false),
-                ("H".to_string(), true),
-                ("37".to_string(), false),
-                ("M".to_string(), true),
-            ]
-        );
-        // The right-aligning pad shares the digits' weight rather than
-        // starting a run of its own.
+        // The right-aligning pad shares the digits' run rather than starting
+        // one of its own, so the pad costs no extra write.
         assert_eq!(
             countdown_segments("   37M"),
-            vec![("   37".to_string(), false), ("M".to_string(), true)]
+            vec![
+                ("   37".to_string(), CountdownRole::Value),
+                ("M".to_string(), CountdownRole::Unit),
+            ]
+        );
+        // Adjacent characters of one kind never split into separate runs.
+        assert_eq!(
+            countdown_segments("123456"),
+            vec![("123456".to_string(), CountdownRole::Value)]
         );
     }
 
-    /// Replay the segment drawing of `draw_usage_bar` as `(column, text,
-    /// bold)` triples relative to the start of the reserved countdown column.
-    fn drawn_countdown(text: &str) -> Vec<(usize, String, bool)> {
-        let mut column = 0usize;
-        let mut drawn = Vec::new();
-        for (segment, bold) in countdown_segments(&format!("{text:>COUNTDOWN_TEXT_WIDTH$}")) {
-            let columns = segment.chars().count();
-            drawn.push((column, segment, bold));
-            column += columns;
-        }
-        drawn
+    /// One countdown shape the color split has to make legible: the duration
+    /// that produces it, the string it produces, and the runs that string must
+    /// break into once right-aligned in the reserved column.
+    struct Shape {
+        duration: Duration,
+        text: &'static str,
+        runs: Vec<(&'static str, CountdownRole)>,
+    }
+
+    fn legibility_shapes() -> Vec<Shape> {
+        use CountdownRole::{Unit, Value};
+        let shape = |duration, text, runs| Shape {
+            duration,
+            text,
+            runs,
+        };
+        vec![
+            shape(
+                Duration::from_secs(5 * DAY + 21 * HOUR),
+                "5D21H",
+                vec![(" 5", Value), ("D", Unit), ("21", Value), ("H", Unit)],
+            ),
+            shape(
+                Duration::from_secs(DAY),
+                "1D00H",
+                vec![(" 1", Value), ("D", Unit), ("00", Value), ("H", Unit)],
+            ),
+            shape(
+                Duration::from_secs(4 * HOUR + 37 * MIN),
+                "04H37M",
+                vec![("04", Value), ("H", Unit), ("37", Value), ("M", Unit)],
+            ),
+            shape(
+                Duration::from_secs(10 * MIN),
+                "10M",
+                vec![("   10", Value), ("M", Unit)],
+            ),
+        ]
     }
 
     #[test]
-    fn bold_units_do_not_move_the_right_aligned_countdown() {
-        for text in ["06D11H", "6D11H", "04H37M", "37M"] {
-            let drawn = drawn_countdown(text);
-
-            // The segments tile the reserved column in order and spell exactly
-            // the string a single right-aligned write would have drawn.
-            let rebuilt: String = drawn
-                .iter()
-                .map(|(_, segment, _)| segment.as_str())
-                .collect();
-            assert_eq!(rebuilt, format!("{text:>COUNTDOWN_TEXT_WIDTH$}"), "{text}");
-
-            let (column, segment, _) = drawn.last().expect("a countdown draws a segment");
+    fn the_named_countdown_shapes_segment_and_fit() {
+        for Shape {
+            duration,
+            text,
+            runs,
+        } in legibility_shapes()
+        {
+            // Each shape is one the grammar really produces and the reserved
+            // column really keeps, not a hand-written string.
+            assert_eq!(format_countdown(duration), text);
+            assert_eq!(fitted_countdown(duration).as_deref(), Some(text));
             assert_eq!(
-                column + segment.chars().count(),
-                COUNTDOWN_TEXT_WIDTH,
+                countdown_segments(&format!("{text:>COUNTDOWN_TEXT_WIDTH$}")),
+                runs.iter()
+                    .map(|(run, role)| ((*run).to_string(), *role))
+                    .collect::<Vec<_>>(),
                 "{text}"
             );
+        }
+    }
 
-            // Bold is carried by the unit letters alone.
-            for (_, segment, bold) in &drawn {
+    #[test]
+    fn countdown_roles_carry_the_two_neutral_foregrounds() {
+        for scheme in 0..=9u8 {
+            let colors = ColorState::new(scheme);
+            let value = countdown_role_color(CountdownRole::Value, &colors);
+            let unit = countdown_role_color(CountdownRole::Unit, &colors);
+
+            // Digits take the bright data foreground; the units keep the muted
+            // foreground the whole countdown used to share.
+            assert_eq!(value, text_color_scheme(&colors), "scheme {scheme}");
+            assert_eq!(unit, muted_color_scheme(&colors), "scheme {scheme}");
+            // The distinction only lands if the two roles actually differ --
+            // this is exactly what same-color bold failed to deliver.
+            assert_ne!(value, unit, "scheme {scheme}");
+        }
+    }
+
+    #[test]
+    fn every_countdown_character_belongs_to_exactly_one_role() {
+        // The grammar emits only digits, the pad and D/H/M, so no character can
+        // fall through to an unintended role.
+        for shape in legibility_shapes() {
+            let text = format_countdown(shape.duration);
+            for ch in format!("{text:>COUNTDOWN_TEXT_WIDTH$}").chars() {
+                let expected = if matches!(ch, 'D' | 'H' | 'M') {
+                    CountdownRole::Unit
+                } else {
+                    CountdownRole::Value
+                };
+                assert_eq!(countdown_role(ch), expected, "{ch:?}");
+                assert!(ch.is_ascii_digit() || ch == ' ' || matches!(ch, 'D' | 'H' | 'M'));
+            }
+        }
+    }
+
+    #[test]
+    fn countdown_runs_tile_the_reserved_column_exactly() {
+        const RESERVED: usize = LABEL_WIDTH + PERCENT_WIDTH + COUNTDOWN_WIDTH;
+
+        for width in [RESERVED, 30, 40, 60, 80, 200] {
+            for Shape { duration, text, .. } in legibility_shapes() {
+                let runs = countdown_runs(width, Some(duration));
+                let offset = countdown_offset(width).expect("this width reserves a countdown");
+
+                // Each run starts where the previous one ended: no gap, no
+                // overlap, and the first run starts at the reserved column.
+                let mut column = offset;
+                for (run_column, run, _) in &runs {
+                    assert_eq!(*run_column, column, "width {width} {text}");
+                    column += run.chars().count();
+                }
+
+                // The runs consume the reserved width exactly and stop where
+                // the percent column begins, so neither column moves.
                 assert_eq!(
-                    *bold,
-                    segment.chars().all(|ch| matches!(ch, 'D' | 'H' | 'M')),
-                    "{text} segment {segment:?}"
+                    column - offset,
+                    COUNTDOWN_TEXT_WIDTH,
+                    "width {width} {text}"
                 );
+                assert_eq!(column, percent_offset(width), "width {width} {text}");
+
+                // Together they spell exactly the string a single right-aligned
+                // write would have drawn: no character added, dropped or moved.
+                let rebuilt: String = runs.iter().map(|(_, run, _)| run.as_str()).collect();
+                assert_eq!(
+                    rebuilt,
+                    format!("{text:>COUNTDOWN_TEXT_WIDTH$}"),
+                    "width {width}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn an_absent_or_oversized_countdown_leaves_the_reserved_column_empty() {
+        let present = Duration::from_secs(4 * HOUR + 37 * MIN);
+        // Wider than the reserved column, so `fitted_countdown` drops it rather
+        // than draw a truncated value.
+        let oversized = Duration::from_secs(100 * DAY);
+        assert_eq!(fitted_countdown(oversized), None);
+
+        for width in 0..=200usize {
+            assert!(countdown_runs(width, None).is_empty(), "width {width}");
+            assert!(
+                countdown_runs(width, Some(oversized)).is_empty(),
+                "width {width}"
+            );
+
+            // A row that does draw one stops exactly at the percent column, so
+            // the percent text of every row in the pane starts at the same
+            // offset whether or not that row had a countdown to show.
+            let drawn = countdown_runs(width, Some(present));
+            match countdown_offset(width) {
+                Some(offset) => {
+                    let (first_column, _, _) = drawn.first().expect("a reserved column is drawn");
+                    let (last_column, last_run, _) =
+                        drawn.last().expect("a reserved column is drawn");
+                    assert_eq!(*first_column, offset, "width {width}");
+                    assert_eq!(
+                        last_column + last_run.chars().count(),
+                        percent_offset(width),
+                        "width {width}"
+                    );
+                }
+                None => assert!(drawn.is_empty(), "width {width}"),
             }
         }
     }
