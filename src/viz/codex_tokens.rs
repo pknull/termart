@@ -34,9 +34,20 @@ struct AuthTokens {
 struct UsageResponse {
     plan_type: Option<String>,
     rate_limit: Option<RateLimit>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_additional_rate_limits")]
     additional_rate_limits: Vec<AdditionalRateLimit>,
     credits: Option<Credits>,
+}
+
+fn deserialize_additional_rate_limits<'de, D>(
+    deserializer: D,
+) -> Result<Vec<AdditionalRateLimit>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // The usage API also sends null when there are no model-specific quotas.
+    // serde(default) handles an absent field, but not an explicit null.
+    Ok(Option::<Vec<AdditionalRateLimit>>::deserialize(deserializer)?.unwrap_or_default())
 }
 
 #[derive(Clone, Default, Deserialize)]
@@ -483,4 +494,110 @@ pub fn run(config: CodexTokenConfig) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse_usage(body: &str) -> io::Result<UsageResponse> {
+        ureq::Response::new(200, "OK", body).unwrap().into_json()
+    }
+
+    #[test]
+    fn usage_accepts_current_null_additional_limits() {
+        let usage = parse_usage(include_str!(
+            "../../tests/fixtures/codex_usage_null_limits.json"
+        ))
+        .unwrap();
+
+        assert_eq!(usage.plan_type.as_deref(), Some("pro"));
+        assert!(usage.additional_rate_limits.is_empty());
+        let limit = usage.rate_limit.unwrap();
+        assert!(limit.allowed);
+        assert!(!limit.limit_reached);
+        assert!(limit.secondary_window.is_none());
+        let window = limit.primary_window.unwrap();
+        assert_eq!(window.used_percent, Some(37.0));
+        assert_eq!(window.limit_window_seconds, Some(18000));
+        assert_eq!(window.reset_after_seconds, Some(7200));
+        assert_eq!(window.reset_at, Some(2000000000));
+        let credits = usage.credits.unwrap();
+        assert!(!credits.has_credits);
+        assert!(!credits.unlimited);
+        assert_eq!(credits.balance.as_deref(), Some("0"));
+    }
+
+    #[test]
+    fn usage_accepts_omitted_additional_limits() {
+        assert!(parse_usage("{}").unwrap().additional_rate_limits.is_empty());
+    }
+
+    #[test]
+    fn usage_accepts_empty_additional_limits() {
+        assert!(parse_usage(r#"{"additional_rate_limits": []}"#)
+            .unwrap()
+            .additional_rate_limits
+            .is_empty());
+    }
+
+    #[test]
+    fn usage_preserves_legacy_additional_limits() {
+        let usage = parse_usage(
+            r#"{
+                "additional_rate_limits": [
+                    {
+                        "limit_name": "Legacy model",
+                        "rate_limit": {
+                            "allowed": true,
+                            "limit_reached": false,
+                            "primary_window": {
+                                "used_percent": 12.5,
+                                "limit_window_seconds": 18000,
+                                "reset_after_seconds": 3600,
+                                "reset_at": 2000000000
+                            },
+                            "secondary_window": {
+                                "used_percent": 75,
+                                "limit_window_seconds": 604800,
+                                "reset_after_seconds": 86400
+                            }
+                        }
+                    },
+                    {"limit_name": "Another model", "rate_limit": null}
+                ]
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(usage.additional_rate_limits.len(), 2);
+        let additional = &usage.additional_rate_limits[0];
+        assert_eq!(additional.limit_name.as_deref(), Some("Legacy model"));
+        let limit = additional.rate_limit.as_ref().unwrap();
+        assert!(limit.allowed);
+        assert!(!limit.limit_reached);
+        let primary = limit.primary_window.as_ref().unwrap();
+        assert_eq!(primary.used_percent, Some(12.5));
+        assert_eq!(primary.limit_window_seconds, Some(18000));
+        assert_eq!(primary.reset_after_seconds, Some(3600));
+        assert_eq!(primary.reset_at, Some(2000000000));
+        let secondary = limit.secondary_window.as_ref().unwrap();
+        assert_eq!(secondary.used_percent, Some(75.0));
+        assert_eq!(secondary.limit_window_seconds, Some(604800));
+        assert_eq!(secondary.reset_after_seconds, Some(86400));
+        assert!(secondary.reset_at.is_none());
+        assert_eq!(
+            usage.additional_rate_limits[1].limit_name.as_deref(),
+            Some("Another model")
+        );
+        assert!(usage.additional_rate_limits[1].rate_limit.is_none());
+    }
+
+    #[test]
+    fn usage_rejects_malformed_additional_limits() {
+        for value in ["{}", "false", "42", r#""invalid""#, "[null]", "[42]"] {
+            let body = format!(r#"{{"additional_rate_limits": {value}}}"#);
+            assert!(parse_usage(&body).is_err(), "accepted {body}");
+        }
+    }
 }
